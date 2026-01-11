@@ -11,8 +11,14 @@ export default function Home() {
             <p className="text-xs text-gray-600">Vision-Language-Action for Robotics</p>
           </div>
           <nav className="flex gap-6">
-            <Link href="/textbook/introduction" className="text-sm text-gray-700 hover:text-blue-600">
+            <Link href="/textbook/foundations" className="text-sm text-gray-700 hover:text-blue-600">
               Textbook
+            </Link>
+            <Link href="/course" className="text-sm text-gray-700 hover:text-blue-600">
+              Course
+            </Link>
+            <Link href="/contributors" className="text-sm text-gray-700 hover:text-blue-600">
+              Contributors
             </Link>
             <Link href="/reference" className="text-sm text-gray-700 hover:text-blue-600">
               Reference
@@ -32,17 +38,17 @@ export default function Home() {
             and deploying robot foundation models.
           </p>
           <div className="flex gap-4 justify-center">
-            <Link 
-              href="/textbook/introduction"
+            <Link
+              href="/textbook/foundations"
               className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
             >
               Read the Living Textbook
             </Link>
-            <Link 
-              href="/reference"
+            <Link
+              href="/course"
               className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
             >
-              View Reference Implementations
+              View Course Materials
             </Link>
           </div>
         </div>
@@ -118,42 +124,102 @@ export default function Home() {
       {/* Textbook Structure */}
       <section className="max-w-7xl mx-auto px-6 py-24 bg-white">
         <h3 className="text-3xl font-bold text-gray-900 mb-12 text-center">
-          Foundational Pillars
+          8-Chapter Living Textbook
         </h3>
-        
-        <div className="grid md:grid-cols-3 gap-8">
-          <Link href="/textbook/representation" className="group">
-            <div className="border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
-              <div className="text-blue-600 font-bold text-sm mb-2">CHAPTER 1</div>
-              <h4 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
-                Representation
+
+        <div className="grid md:grid-cols-4 gap-6">
+          <Link href="/textbook/foundations" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-gray-600 font-bold text-xs mb-2">CHAPTER 0</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                Foundations
               </h4>
-              <p className="text-gray-600">
-                Latent spaces for robotics, multi-modal alignment, and scene tokenization.
+              <p className="text-sm text-gray-600">
+                Core concepts and problem formulation
               </p>
             </div>
           </Link>
 
-          <Link href="/textbook/reasoning" className="group">
-            <div className="border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
-              <div className="text-purple-600 font-bold text-sm mb-2">CHAPTER 2</div>
-              <h4 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-purple-600 transition-colors">
-                Reasoning
+          <Link href="/textbook/architectures" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-blue-600 font-bold text-xs mb-2">CHAPTER 1</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                Architectures
               </h4>
-              <p className="text-gray-600">
-                Foundation models as world models, planning vs. execution, chain-of-thought.
+              <p className="text-sm text-gray-600">
+                Model designs and network topologies
               </p>
             </div>
           </Link>
 
-          <Link href="/textbook/scaling" className="group">
-            <div className="border border-gray-200 rounded-xl p-8 hover:shadow-lg transition-shadow">
-              <div className="text-green-600 font-bold text-sm mb-2">CHAPTER 3</div>
-              <h4 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-green-600 transition-colors">
-                Scaling
+          <Link href="/textbook/data" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-purple-600 font-bold text-xs mb-2">CHAPTER 2</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-purple-600 transition-colors">
+                Data
               </h4>
-              <p className="text-gray-600">
-                Data pipelines, semantic supervision, policy distillation, and safety-critical validation.
+              <p className="text-sm text-gray-600">
+                Dataset construction and curation
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/textbook/training" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-green-600 font-bold text-xs mb-2">CHAPTER 3</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-green-600 transition-colors">
+                Training
+              </h4>
+              <p className="text-sm text-gray-600">
+                Optimization and learning methods
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/textbook/evaluation" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-orange-600 font-bold text-xs mb-2">CHAPTER 4</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-orange-600 transition-colors">
+                Evaluation
+              </h4>
+              <p className="text-sm text-gray-600">
+                Metrics and benchmarking protocols
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/textbook/deployment" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-red-600 font-bold text-xs mb-2">CHAPTER 5</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors">
+                Deployment
+              </h4>
+              <p className="text-sm text-gray-600">
+                Production systems and scaling
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/textbook/applications" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-indigo-600 font-bold text-xs mb-2">CHAPTER 6</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">
+                Applications
+              </h4>
+              <p className="text-sm text-gray-600">
+                Real-world use cases
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/textbook/future" className="group">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+              <div className="text-pink-600 font-bold text-xs mb-2">CHAPTER 7</div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-pink-600 transition-colors">
+                Future Directions
+              </h4>
+              <p className="text-sm text-gray-600">
+                Open problems and frontiers
               </p>
             </div>
           </Link>
