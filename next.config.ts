@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true, // Required for static export
   },
-  turbopack: {}, // Silence the Turbopack warning
+  experimental: {
+    turbo: {
+      disabled: true,
+    },
+  },
 };
 
 export default nextConfig;
