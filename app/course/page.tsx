@@ -70,12 +70,7 @@ export default function CoursePage() {
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">Capstone Project</h3>
-                  <span className="text-xs font-medium text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
-                    300 points
-                  </span>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Capstone Project</h3>
                 <p className="text-gray-600 mb-4">
                   Textbook contribution with implementation (research or engineering track).
                 </p>
