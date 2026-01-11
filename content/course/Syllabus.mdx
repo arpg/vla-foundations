@@ -119,6 +119,27 @@ All tracks must include:
 - Paper Audits: 10% penalty per day late (max 3 days)
 - Capstone: No late submissions accepted (present on final day)
 
+### Submission Workflow
+
+**All assignments must be submitted via Pull Request (PR) to the course repository.**
+
+**Required Process**:
+1. Create your own branch: `git checkout -b assignment-name-yourname`
+2. Complete your work and commit changes
+3. Push your branch: `git push origin assignment-name-yourname`
+4. Open a Pull Request to the `staging` branch (NOT `main`)
+5. Wait for CI checks to pass
+6. Wait for instructor review and approval
+
+**Important Rules**:
+- **You do NOT have permission to merge your own PRs**
+- **Only the instructor can merge pull requests**
+- PRs must target the `staging` branch, not `main`
+- All CI checks must pass before review
+- You may be asked to make changes before approval
+
+Attempting to merge your own PR or push directly to `main` or `staging` is a violation of course policy.
+
 ### Academic Integrity
 
 - All code must be original or properly attributed

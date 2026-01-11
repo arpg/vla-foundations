@@ -142,17 +142,51 @@ This will:
 
 ### For Students
 
-1. **Fork the repository** (or create a branch if you have write access)
-2. **Create your contributor profile**: `content/contributors/your-github-username.mdx`
-3. **Submit assignments** via pull requests to the `staging` branch
-4. **Wait for CI checks** to pass (GitHub Actions validates MDX syntax and builds)
-5. **Instructor review** and merge
+**IMPORTANT**: All students must follow this workflow for assignment submissions.
 
-### For Instructors
+1. **Create your own branch**:
+   ```bash
+   git checkout -b assignment-name-yourname
+   ```
+   Example: `git checkout -b scratch-1-johndoe`
+
+2. **Make your changes**:
+   - Add your code to `src/assignments/`
+   - Create your submission report in `content/course/submissions/`
+   - Update your contributor profile if needed
+
+3. **Commit your work**:
+   ```bash
+   git add .
+   git commit -m "Complete Assignment X: Your Name"
+   git push origin assignment-name-yourname
+   ```
+
+4. **Open a Pull Request**:
+   - Go to https://github.com/arpg/vla-foundations
+   - Click "Pull requests" → "New pull request"
+   - **Base branch**: `staging` (NOT `main`)
+   - **Compare branch**: your branch name
+   - Title: `Assignment X: Your Name`
+   - Add a description of your work
+
+5. **Wait for CI checks** to pass (GitHub Actions will validate your submission)
+
+6. **Wait for instructor review**:
+   - **ONLY the instructor can merge pull requests**
+   - The instructor will review your code and report
+   - You may be asked to make changes
+   - Once approved, the instructor will merge to `staging`, then to `main`
+
+**You do NOT have permission to merge your own PRs. All merges are done by the instructor.**
+
+### For the Instructor
 
 1. **Review student PRs** on the `staging` branch
-2. **Merge to `main`** when approved
-3. **Deploy to production** using `./scripts/deploy.sh`
+2. **Provide feedback** and request changes if needed
+3. **Merge to `staging`** when approved
+4. **Periodically merge `staging` to `main`**
+5. **Deploy to production** using `./scripts/deploy.sh`
 
 ## CI/CD Automation
 

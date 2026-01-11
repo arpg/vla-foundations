@@ -96,12 +96,15 @@ I'm a PhD student in Computer Science at CU Boulder, focusing on robotic manipul
 
 ### 4. Submit a Pull Request
 
+**IMPORTANT**: You must create your own branch and submit a pull request. You do NOT have permission to merge your own PRs—only the instructor can merge.
+
 **Steps**:
 
-1. **Create a new branch**:
+1. **Create a new branch** from your local repository:
    ```bash
    git checkout -b add-contributor-yourname
    ```
+   Example: `git checkout -b add-contributor-johndoe`
 
 2. **Add your contributor file**:
    ```bash
@@ -109,22 +112,33 @@ I'm a PhD student in Computer Science at CU Boulder, focusing on robotic manipul
    git commit -m "Add contributor profile: Your Name"
    ```
 
-3. **Push to your fork** (or the staging branch if you have write access):
+3. **Push your branch** to the remote repository:
    ```bash
    git push origin add-contributor-yourname
    ```
 
 4. **Open a Pull Request** on GitHub:
-   - Base branch: `staging`
-   - Compare branch: `add-contributor-yourname`
-   - Title: `Add contributor: Your Name`
-   - Description: "Scratch-0 submission for Week 1"
+   - Go to https://github.com/arpg/vla-foundations
+   - Click "Pull requests" → "New pull request"
+   - **Base branch**: `staging` (NOT `main`)
+   - **Compare branch**: `add-contributor-yourname` (your branch)
+   - **Title**: `Add contributor: Your Name`
+   - **Description**: "Scratch-0 submission for Week 1"
+   - Click "Create pull request"
 
 5. **Wait for CI checks** to pass (GitHub Actions will validate your MDX syntax)
 
+6. **Wait for instructor approval**:
+   - The instructor will review your submission
+   - You may be asked to make changes
+   - **Only the instructor can merge your PR**
+   - Once approved, the instructor will merge to `staging`, then deploy to production
+
+**Do NOT attempt to merge your own pull request. You do not have merge permissions.**
+
 ### 5. Verify Build
 
-Once your PR is merged, verify your profile appears on the site:
+Once your PR is merged by the instructor, verify your profile appears on the site:
 
 - **Local**: Run `pnpm dev` and navigate to `/contributors`
 - **Production**: Check https://vlm-robotics.dev/contributors
