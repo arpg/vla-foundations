@@ -300,6 +300,30 @@ cp -r out/* public_html/
 - [Open-X Embodiment](https://robotics-transformer-x.github.io/)
 - [DROID Dataset](https://droid-dataset.github.io/)
 
+## Instructor TODO List
+
+**Course Content Completion Tasks**:
+
+- [ ] **Scratch-0 Assignment**: Create full assignment specification in `content/course/assignments/scratch-0.mdx`
+- [ ] **Scratch-1 Assignment**: Create full assignment specification in `content/course/assignments/scratch-1.mdx`
+- [ ] **Paper Audit Assignment**: Create full assignment specification in `content/course/assignments/paper-audit.mdx`
+- [ ] **Capstone Assignment**: Create full assignment specification in `content/course/assignments/capstone.mdx`
+- [ ] **Update /course page**: Link assignments once content is ready (remove "Coming soon" placeholders)
+- [ ] **Syllabus**: Upload current syllabus to Canvas and verify link works
+- [ ] **Textbook Chapters**: Begin writing content for 8 chapters
+- [ ] **Example Paper Audit**: Create sample audit for students to reference
+- [ ] **Setup Branch Protection**: Configure GitHub branch protection rules (students require PRs, instructor can bypass)
+
+**Deployment**:
+- [ ] Test assignment submission workflow end-to-end
+- [ ] Verify CI/CD pipeline catches common errors
+- [ ] Create assignment grading rubric
+
+**Notes**:
+- Syllabus is currently linked to Canvas: https://canvas.colorado.edu/courses/134529/files/82424359/download?download_frd=1
+- Students must submit 1 paper audit (not 4)
+- Capstone tracks: Research or Engineering (no survey track)
+
 ## Contact
 
 - **Instructor**: Christoffer Heckman

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 export default function CoursePage() {
@@ -24,9 +26,14 @@ export default function CoursePage() {
               <p className="text-gray-600 mb-4">
                 Complete course information, grading policy, and schedule.
               </p>
-              <Link href="/course/syllabus" className="text-blue-600 hover:text-blue-800 font-medium">
-                View Syllabus →
-              </Link>
+              <a
+                href="https://canvas.colorado.edu/courses/134529/files/82424359/download?download_frd=1"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 font-medium"
+              >
+                View Syllabus on Canvas →
+              </a>
             </div>
           </section>
 
@@ -35,48 +42,42 @@ export default function CoursePage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Assignments</h2>
             <div className="grid gap-4">
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">Scratch-0: Environment Setup</h3>
-                  <span className="text-xs font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                    50 points
-                  </span>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Scratch-0: Environment Setup</h3>
                 <p className="text-gray-600 mb-4">
                   Set up your development environment and submit your first PR.
                 </p>
-                <Link href="/course/assignments/scratch-0" className="text-blue-600 hover:text-blue-800 font-medium">
-                  View Assignment →
-                </Link>
+                <button
+                  onClick={() => alert('Coming soon')}
+                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
+                >
+                  Coming soon
+                </button>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">Scratch-1: Transformer Backbone</h3>
-                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                    100 points
-                  </span>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Scratch-1: Transformer Backbone</h3>
                 <p className="text-gray-600 mb-4">
                   Implement a decoder-only Transformer from scratch for robotic trajectories.
                 </p>
-                <Link href="/course/assignments/scratch-1" className="text-blue-600 hover:text-blue-800 font-medium">
-                  View Assignment →
-                </Link>
+                <button
+                  onClick={() => alert('Coming soon')}
+                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
+                >
+                  Coming soon
+                </button>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">Paper Audit</h3>
-                  <span className="text-xs font-medium text-purple-600 bg-purple-50 px-3 py-1 rounded-full">
-                    200 points
-                  </span>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Paper Audit</h3>
                 <p className="text-gray-600 mb-4">
-                  Critical analysis of VLA research papers (4 audits total).
+                  Critical analysis of VLA research papers (1 required).
                 </p>
-                <Link href="/course/assignments/paper-audit" className="text-blue-600 hover:text-blue-800 font-medium">
-                  View Assignment →
-                </Link>
+                <button
+                  onClick={() => alert('Coming soon')}
+                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
+                >
+                  Coming soon
+                </button>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -87,11 +88,14 @@ export default function CoursePage() {
                   </span>
                 </div>
                 <p className="text-gray-600 mb-4">
-                  Textbook contribution with implementation or comprehensive survey.
+                  Textbook contribution with implementation (research or engineering track).
                 </p>
-                <Link href="/course/assignments/capstone" className="text-blue-600 hover:text-blue-800 font-medium">
-                  View Assignment →
-                </Link>
+                <button
+                  onClick={() => alert('Coming soon')}
+                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
+                >
+                  Coming soon
+                </button>
               </div>
             </div>
           </section>
