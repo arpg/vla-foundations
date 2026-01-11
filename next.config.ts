@@ -5,10 +5,8 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true, // Required for static export
   },
-  experimental: {
-    turbo: {
-      disabled: true,
-    },
+  webpack: (config) => {
+    return config;
   },
 };
 
