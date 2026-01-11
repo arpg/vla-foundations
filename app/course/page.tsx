@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 
 export default function CoursePage() {
@@ -46,12 +44,9 @@ export default function CoursePage() {
                 <p className="text-gray-600 mb-4">
                   Set up your development environment and submit your first PR.
                 </p>
-                <button
-                  onClick={() => alert('Coming soon')}
-                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
-                >
-                  Coming soon
-                </button>
+                <Link href="/course/assignments/scratch-0" className="text-blue-600 hover:text-blue-800 font-medium">
+                  View Assignment →
+                </Link>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -59,12 +54,9 @@ export default function CoursePage() {
                 <p className="text-gray-600 mb-4">
                   Implement a decoder-only Transformer from scratch for robotic trajectories.
                 </p>
-                <button
-                  onClick={() => alert('Coming soon')}
-                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
-                >
-                  Coming soon
-                </button>
+                <Link href="/course/assignments/scratch-1" className="text-blue-600 hover:text-blue-800 font-medium">
+                  View Assignment →
+                </Link>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -72,12 +64,9 @@ export default function CoursePage() {
                 <p className="text-gray-600 mb-4">
                   Critical analysis of VLA research papers (1 required).
                 </p>
-                <button
-                  onClick={() => alert('Coming soon')}
-                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
-                >
-                  Coming soon
-                </button>
+                <Link href="/course/assignments/paper-audit" className="text-blue-600 hover:text-blue-800 font-medium">
+                  View Assignment →
+                </Link>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -90,12 +79,9 @@ export default function CoursePage() {
                 <p className="text-gray-600 mb-4">
                   Textbook contribution with implementation (research or engineering track).
                 </p>
-                <button
-                  onClick={() => alert('Coming soon')}
-                  className="text-gray-500 hover:text-gray-700 font-medium cursor-not-allowed"
-                >
-                  Coming soon
-                </button>
+                <Link href="/course/assignments/capstone" className="text-blue-600 hover:text-blue-800 font-medium">
+                  View Assignment →
+                </Link>
               </div>
             </div>
           </section>
