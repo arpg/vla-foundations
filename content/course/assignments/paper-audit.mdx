@@ -1,261 +1,95 @@
 ---
-title: 'Paper Audit: Critical Analysis of VLA Research'
+title: 'Paper Audit: Technical Deep-Dive'
 assignment: 2
-due: 'Every 2 weeks (4 total)'
-points: 200
+due: 'Variable (7 days before your presentation)'
+points: 300
 ---
 
-# Paper Audit: Critical Analysis of VLA Research
+# Assignment: The Technical Paper Audit
 
-## Objective
+**Weight:** 20% (Document) + 10% (Presentation)  
+**Initial Draft Due:** Exactly 7 days prior to your scheduled presentation date.  
+**Mastery Deadline:** Sunday, April 19, 11:59 PM MST.
 
-Develop critical reading skills by deeply analyzing VLA research papers, attempting to reproduce key claims, and documenting findings for the research community.
+## 1. The Philosophy: Audit, Not Summary
 
-## Learning Goals
+In this course, we do not write "summaries." A summary is a transient document that parrots the authors' abstract. An **Audit** is a durable engineering resource intended for the `vlm-robotics.dev` living textbook.
 
-- **Evaluate** research claims against experimental evidence
-- **Reproduce** core results from published papers
-- **Identify** gaps between claims and validation
-- **Communicate** technical findings clearly and rigorously
+As a technical auditor, your job is to pressure-test the paper’s claims from a first-principles perspective. You are looking for the "Information Decay"—the points where the model’s architectural choices sacrifice physical reality for computational ease. If this paper were a technical proposal at an organization like Zoox or Tesla, would you sign off on it? Why or why not?
 
-## Assignment Overview
+## 2. The Mastery Loop (Grading & Feedback)
 
-You will complete **4 paper audits** throughout the semester (one every 2 weeks, 50 points each).
+This assignment utilizes a **Mastery-Based Feedback Loop**. Your grade reflects the technical authority and durability of your documentation.
 
-Each audit requires:
-1. Selecting a VLA paper from the approved list
-2. Reading and understanding the methodology
-3. Attempting to reproduce key claims (code, experiments, or analysis)
-4. Writing a structured critique in Markdown
-5. Submitting via pull request to the course repository
+1.  **The Review Candidate (T-minus 7 Days):** Submit a draft of your MDX document via a Pull Request (PR) to the `staging` branch. 
+2.  **Instructor Review (IR):** I will provide a technical review focusing on mathematical rigor, architectural clarity, and the depth of your critique.
+3.  **The Presentation:** Deliver a "presentationified" version of your audit to the class. 
+4.  **The Improvement Cycle:** You are expected to iterate on your MDX document throughout the semester based on IR and class feedback. 
+    * **Level 1 (C):** A correct summary with basic formatting.
+    * **Level 2 (B):** High technical depth, correct $\LaTeX$, and a sound critique of the model.
+    * **Level 3 (A - Mastery):** "Merge-Ready." The document is of such high quality that it is merged into the `main` branch of the living textbook as a canonical reference.
 
-## Paper Selection
+## 3. Technical Requirements
 
-### Approved Papers
+Your audit must be authored in MDX and include the following sections.
 
-Choose from recent VLA publications in top venues:
+### I. Formal Architecture
+You must formalize the model’s core logic using $\LaTeX$. Do not simply describe the objective; derive it.
+* Define the state-space and the latent transitions.
+* Explicitly detail the loss function $\mathcal{L}$ and any auxiliary objectives (e.g., contrastive or reconstruction losses).
+* **Example:** Define the joint probability for an autoregressive VLA:
+    $$P(a_{1:T} | v_{1:T}, l) = \prod_{t=1}^T P(a_t | v_{\le t}, a_{<t}, l)$$
 
-**Foundational Models:**
-- RT-1: Robotics Transformer for Real-World Control at Scale
-- RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control
-- PaLM-E: An Embodied Multimodal Language Model
-- Octo: An Open-Source Generalist Robot Policy
+### II. The Instructor Audit Criteria
+Address the following engineering bottlenecks:
+* **Dimensionality & Information Decay:** Where is the bottleneck? Does the projection layer ($v \to z$) discard critical spatial geometry (e.g., depth, texture, or contact physics) needed for the task?
+* **Compute & Inference Reality:** Estimate the FLOPs for a single forward pass. At what frequency (Hz) can this model realistically run on edge hardware (e.g., NVIDIA Orin or H100)?
+* **The Semantic-Motor Gap:** Identify exactly where the model's "high-level reasoning" (the LLM) fails to ground in "low-level motor primitives" (the policy).
 
-**Data & Training:**
-- Open X-Embodiment: Robotic Learning Datasets and RT-X Models
-- DROID: A Large-Scale In-the-Wild Robot Manipulation Dataset
-- BridgeData V2: A Dataset for Robot Learning at Scale
-- Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware (ALOHA)
+### III. Failure Mode Analysis
+Document the "Obvious Bugs." Identify 2–3 scenarios where the model’s logic is likely to diverge from physical reality (e.g., handling transparent objects, high-velocity dynamic obstacles, or long-horizon causal chains).
 
-**Architectures & Methods:**
-- Perceiver-Actor: A Multi-Task Transformer for Robotic Manipulation
-- Diffusion Policy: Visuomotor Policy Learning via Action Diffusion
-- 3D Diffuser Actor: Policy Diffusion with 3D Scene Representations
-- VoxPoser: Composable 3D Value Maps for Robotic Manipulation with Language Models
 
-**Evaluation & Deployment:**
-- What Matters in Training a GPT4-Leveraged Hierarchical Robot Policy?
-- On Bringing Robots Home
-- The Challenges of Deploying Reinforcement Learning Agents in the Real World
-- RoboCat: A Self-Improving Foundation Agent for Robotic Manipulation
 
-**Custom Selection:**
-If you want to audit a paper not on this list, get instructor approval first.
+## 4. Approved Paper List by Focus Area
 
-## Audit Structure
+Refer to the [Sign-up Sheet](/course/signups) to claim your area and date.
 
-Your audit should be a **Markdown file** (~2000-3000 words) with the following sections:
+### Vision Foundations
+* SigLIP, CLIP, Scaling Language-Free Visual Representation Learning, Scaling Laws for Robust Comparison.
 
-### 1. Paper Summary (200-300 words)
+### Modality Alignment
+* LLaVA, Prismatic VLMs, Qwen3-VL.
 
-- What problem does the paper address?
-- What is the proposed method/system?
-- What are the key claims?
+### Action Tokenization
+* RT-1, VQ-BeT.
 
-### 2. Methodology Analysis (400-600 words)
+### Scaling & Reasoning
+* GRPO, DeepSeek, Cosmos-Reason.
 
-- Experimental setup and datasets
-- Evaluation metrics and baselines
-- Ablation studies and controls
-- What is measured vs. what is claimed
+### World Models
+* GAIA, Cosmos, Genie3, TesserAct.
 
-### 3. Reproducibility Assessment (600-800 words)
+### Navigation
+* ViNT, Uni-NaVid, NoMaD.
 
-**Code Availability:**
-- Is code publicly available?
-- Are dependencies documented?
-- Can you run the code out-of-the-box?
+### Manipulation
+* Octo, RT-X, Pi-0.5, ManipDreamer.
 
-**Data Availability:**
-- Are datasets accessible?
-- Are data collection procedures documented?
-- Can results be reproduced with provided data?
+### Autonomous Driving
+* Alpamayo-R1, EMMA, AlphaDrive.
 
-**Reproduction Attempts:**
-- What did you try to reproduce? (e.g., a figure, table, or claim)
-- What succeeded? What failed?
-- What was unclear or missing?
+### Safety & Uncertainty
+* Foundation Models for Rapid Autonomy Validation, SAFE.
 
-### 4. Critical Evaluation (600-800 words)
+### Long-Horizon Planning
+* SayCan, Voyager, Reflective Planning, Long-Horizon Planning with Predictable Skills.
 
-**Strengths:**
-- What does this paper do well?
-- What claims are well-supported?
-- What contributions are valuable?
-
-**Weaknesses:**
-- What claims are overstated?
-- What experiments are missing?
-- What alternative explanations exist?
-
-**Deployment Feasibility:**
-- Would this work in production?
-- What are the real-world constraints?
-- What failure modes exist?
-
-### 5. Research Impact (200-300 words)
-
-- How does this paper advance the field?
-- What follow-up questions does it raise?
-- What would you do differently?
-
-### 6. References
-
-- Full citation for the paper
-- Links to code, data, and supplementary materials
-- Related work you referenced
-
-## Markdown Template
-
-Use the following template:
-
-```markdown
----
-title: "Paper Audit: [Paper Title]"
-author: "Your Name"
-date: "YYYY-MM-DD"
-paper_url: "https://arxiv.org/abs/..."
-code_url: "https://github.com/..."
-audit_number: 1
 ---
 
-# Paper Audit: [Paper Title]
+## 5. Submission Logistics
 
-## 1. Paper Summary
-
-[Your summary here]
-
-## 2. Methodology Analysis
-
-[Your analysis here]
-
-## 3. Reproducibility Assessment
-
-### Code Availability
-[Assessment]
-
-### Data Availability
-[Assessment]
-
-### Reproduction Attempts
-[What you tried and results]
-
-## 4. Critical Evaluation
-
-### Strengths
-[List strengths]
-
-### Weaknesses
-[List weaknesses]
-
-### Deployment Feasibility
-[Assessment]
-
-## 5. Research Impact
-
-[Your thoughts on impact]
-
-## 6. References
-
-1. Original paper: [Full citation]
-2. Code repository: [Link]
-3. Dataset: [Link]
-4. Related work: [Citations]
-```
-
-## Submission Process
-
-1. **Create a new branch**:
-   ```bash
-   git checkout -b paper-audit-N-yourname
-   ```
-
-2. **Add your audit file**:
-   ```bash
-   content/course/paper-audits/yourname-audit-N.md
-   ```
-
-3. **Commit and push**:
-   ```bash
-   git add content/course/paper-audits/yourname-audit-N.md
-   git commit -m "Add Paper Audit #N: [Paper Title]"
-   git push origin paper-audit-N-yourname
-   ```
-
-4. **Open a Pull Request** to the `staging` branch
-
-5. **Instructor Review**: You'll receive feedback and may be asked to revise
-
-## Grading Rubric (50 points per audit)
-
-| Criterion | Points |
-|-----------|--------|
-| Paper summary accurate and concise | 5 |
-| Methodology analysis thorough | 10 |
-| Reproducibility attempts documented | 15 |
-| Critical evaluation insightful | 15 |
-| Writing clarity and professionalism | 5 |
-| **Total** | **50** |
-
-## Tips for Success
-
-1. **Start Early**: Reproducing results takes time (often longer than expected)
-2. **Document Everything**: Track what you tried, even if it failed
-3. **Be Specific**: Cite line numbers, figure numbers, table numbers
-4. **Be Fair**: Acknowledge both strengths and weaknesses
-5. **Be Rigorous**: Back up claims with evidence
-
-## Common Pitfalls
-
-- **Surface-level analysis**: Don't just summarize the abstract
-- **No reproduction attempt**: You must try to run code or reproduce a result
-- **Unsubstantiated claims**: "This seems wrong" without evidence
-- **Ignoring context**: Consider the paper's publication date and available resources
-
-## Example Audits
-
-See the course repository for example audits from previous semesters:
-- `content/course/paper-audits/examples/`
-
-## Deadlines
-
-| Audit | Due Date |
-|-------|----------|
-| Audit #1 | End of Week 3 |
-| Audit #2 | End of Week 5 |
-| Audit #3 | End of Week 7 |
-| Audit #4 | End of Week 11 |
-
-Late submissions: 10% penalty per day (max 3 days late)
-
-## Resources
-
-- [How to Read a Paper](https://web.stanford.edu/class/ee384m/Handouts/HowtoReadPaper.pdf) (S. Keshav)
-- [The Reproducibility Crisis in ML](https://arxiv.org/abs/2003.12206)
-- [Papers with Code](https://paperswithcode.com/) - Find code implementations
-
-## Questions?
-
-- Post in the course discussion forum
-- Attend paper discussion sessions
-- Email the instructor
+1.  **Branching:** Create a branch `audit/your-name-paper-name`.
+2.  **PR to Staging:** Submit your MDX file to `content/textbook/audits/`.
+3.  **Build Check:** Your PR must pass the GitHub Action audit (no broken $\LaTeX$ or malformed frontmatter).
+4.  **Instructor Sync:** Once the build is green, tag `@chrisheckman` for Instructor Review.
