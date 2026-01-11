@@ -1,0 +1,30 @@
+{
+  "name": "vla-foundations",
+  "version": "0.1.0",
+  "description": "Vision-Language-Action Foundations course repository",
+  "private": true,
+  "scripts": {
+    "build-content": "contentlayer build",
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start"
+  },
+  "keywords": [
+    "vision-language-action",
+    "robotics",
+    "course",
+    "education"
+  ],
+  "author": "ARPG",
+  "license": "MIT",
+  "dependencies": {
+    "contentlayer": "^0.3.4",
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "next-contentlayer": "^0.3.4"
+  },
+  "packageManager": "pnpm@8.0.0"
+}
