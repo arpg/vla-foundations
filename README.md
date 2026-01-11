@@ -16,39 +16,99 @@ This repository serves as the source of truth for:
 
 ## Repository Structure
 
+This repository is organized into three main categories: **Web Content** (rendered as pages), **Source Code** (executable assignments), and **Build Infrastructure** (deployment and tooling).
+
 ```
 vla-foundations/
-├── app/                      # Next.js App Router pages
-│   ├── page.tsx             # Landing page
-│   ├── textbook/[slug]/     # Dynamic chapter pages
-│   └── reference/           # Reference implementations
-├── components/
-│   └── textbook/            # UI components for textbook
-│       ├── Sidebar.tsx      # Navigation
-│       └── TextbookLayout.tsx
-├── content/
-│   ├── textbook/            # 8-chapter VLA textbook
-│   │   ├── foundations/     # Chapter 0
-│   │   ├── architectures/   # Chapter 1
-│   │   ├── data/            # Chapter 2
-│   │   ├── training/        # Chapter 3
-│   │   ├── evaluation/      # Chapter 4
-│   │   ├── deployment/      # Chapter 5
-│   │   ├── applications/    # Chapter 6
-│   │   └── future/          # Chapter 7
-│   ├── course/              # Course materials
-│   │   ├── Syllabus.mdx
-│   │   └── assignments/     # Scratch-0, Paper Audit, Capstone
-│   └── contributors/        # Student profiles (PR requirement)
-├── lib/
-│   └── chapters.ts          # Chapter metadata utilities
-├── scripts/
-│   └── deploy.sh            # Automated deployment script
-├── .github/
+├── app/                           # Next.js App Router (web framework)
+│   ├── page.tsx                   # Landing page
+│   ├── textbook/[slug]/           # Dynamic chapter pages
+│   ├── course/                    # Course overview page
+│   │   └── assignments/[slug]/    # Dynamic assignment pages
+│   ├── contributors/[slug]/       # Dynamic contributor profile pages
+│   └── reference/                 # Reference implementations page
+│
+├── content/                       # All MDX content (rendered as web pages)
+│   ├── textbook/                  # 8-chapter VLA textbook (MDX files)
+│   │   ├── foundations/           # Chapter 0: Core concepts
+│   │   ├── architectures/         # Chapter 1: Model designs
+│   │   ├── data/                  # Chapter 2: Dataset construction
+│   │   ├── training/              # Chapter 3: Optimization methods
+│   │   ├── evaluation/            # Chapter 4: Metrics and benchmarks
+│   │   ├── deployment/            # Chapter 5: Production systems
+│   │   ├── applications/          # Chapter 6: Real-world use cases
+│   │   └── future/                # Chapter 7: Open problems
+│   │
+│   ├── course/                    # Course materials (MDX files)
+│   │   ├── Syllabus.mdx           # Course syllabus
+│   │   ├── assignments/           # Assignment specifications (instructor-written)
+│   │   │   ├── scratch-0.mdx      # Environment setup assignment
+│   │   │   ├── scratch-1.mdx      # Transformer backbone assignment
+│   │   │   ├── paper-audit.mdx    # Paper analysis assignment
+│   │   │   └── capstone.mdx       # Final project specification
+│   │   └── submissions/           # Student submission reports (student-written)
+│   │       └── scratch-1/         # Example: student reports for Scratch-1
+│   │           └── [student].mdx  # Individual student writeups
+│   │
+│   └── contributors/              # Contributor profiles (student-written)
+│       └── [github-handle].mdx    # One profile per contributor
+│
+├── src/                           # Executable source code (NOT rendered as web pages)
+│   └── assignments/               # Assignment code templates and solutions
+│       └── scratch-1/             # Example: Transformer implementation
+│           ├── README.md          # Minimal README (points to assignment page)
+│           ├── backbone.py        # Implementation template with TODOs
+│           ├── generate_data.py   # Dataset generator script
+│           └── data/              # Generated training data
+│
+├── components/                    # React UI components
+│   └── textbook/                  # Textbook-specific components
+│       ├── Sidebar.tsx            # Navigation sidebar
+│       └── TextbookLayout.tsx     # Layout wrapper
+│
+├── lib/                           # Utility libraries
+│   └── chapters.ts                # Chapter metadata and utilities
+│
+├── scripts/                       # Deployment and automation
+│   └── deploy.sh                  # Production deployment script
+│
+├── .github/                       # GitHub configuration
 │   └── workflows/
-│       └── vla-audit.yml    # CI/CD for PR validation
-└── README.md
+│       └── vla-audit.yml          # CI/CD: PR validation, build checks
+│
+├── next.config.ts                 # Next.js configuration
+├── tailwind.config.ts             # Tailwind CSS configuration
+├── package.json                   # Node.js dependencies
+└── README.md                      # This file
 ```
+
+### Directory Purpose Guidelines
+
+**`content/`** - Source of truth for all web content
+- Written in MDX (Markdown + JSX)
+- Rendered as web pages on vlm-robotics.dev
+- Instructor writes: textbook chapters, assignment specs, syllabus
+- Students write: contributor profiles, submission reports
+
+**`src/`** - Executable code (Python, etc.)
+- Assignment implementation templates
+- Utility scripts and data generators
+- NOT rendered as web pages
+- READMEs are minimal and point to assignment pages (single source of truth)
+
+**`app/`** - Next.js routing and page components
+- Defines URL structure and page layouts
+- Connects routes to content in `content/`
+- Modified when adding new page types or routes
+
+### Important: README Policy for `src/assignments/`
+
+**All READMEs in `src/assignments/` are intentionally minimal.** They contain only:
+1. Link to the canonical assignment page on vlm-robotics.dev
+2. Quick start commands
+3. File list
+
+**Full assignment details (requirements, debugging tips, resources, submission checklists) are maintained exclusively in `content/course/assignments/*.mdx`.** This ensures a single source of truth and prevents documentation drift.
 
 ## The 8-Chapter Textbook
 
