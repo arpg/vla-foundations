@@ -1,0 +1,372 @@
+---
+title: 'Capstone Project: Textbook Contribution & Implementation'
+assignment: 3
+due: 'Week 16'
+points: 300
+---
+
+# Capstone Project: Textbook Contribution & Implementation
+
+## Objective
+
+Make a substantive contribution to the VLA Foundations textbook by authoring technical content, implementing code, and presenting your work to the class.
+
+## Learning Goals
+
+- **Synthesize** knowledge from multiple research papers
+- **Implement** a non-trivial VLA component or experiment
+- **Communicate** technical concepts clearly in writing
+- **Present** findings to a technical audience
+
+## Project Tracks
+
+Choose **one** of the following tracks:
+
+### Track 1: Research Extension
+
+Extend an existing VLA paper with novel experiments or analysis.
+
+**Requirements:**
+- Reproduce baseline results from a published paper
+- Design and run new experiments that test an unexplored dimension
+- Contribute a textbook section analyzing your findings
+
+**Example Projects:**
+- "Does RT-2 generalize to novel object geometries?" - Test on CAD-generated objects
+- "Scaling laws for VLA data diversity" - Ablate dataset composition
+- "Failure modes of diffusion policies in cluttered scenes" - Systematic failure analysis
+
+### Track 2: Engineering Implementation
+
+Build a production-grade VLA component from scratch.
+
+**Requirements:**
+- Implement a key VLA technique (encoder, policy, training pipeline)
+- Write clean, documented, tested code
+- Contribute a textbook section with implementation details
+
+**Example Projects:**
+- "Efficient vision encoder for real-time robotic control" - Optimized transformer
+- "Multi-task policy training framework" - PyTorch training harness
+- "Sim-to-real transfer toolkit" - Domain randomization + evaluation suite
+
+### Track 3: Comprehensive Survey
+
+Write an authoritative survey of a VLA subtopic.
+
+**Requirements:**
+- Read 15-20 papers in a focused area
+- Identify trends, gaps, and open questions
+- Contribute a textbook section synthesizing the literature
+
+**Example Projects:**
+- "Data augmentation strategies for robotic learning" - Survey + taxonomy
+- "Benchmarking protocols for manipulation tasks" - Analysis of evaluation methods
+- "Foundation models for embodied AI: A critical review" - Strengths/weaknesses analysis
+
+## Deliverables
+
+### 1. Proposal (Week 8)
+
+**Submit**: 1-2 page proposal via pull request
+
+**Contents:**
+- Track selection (Research/Engineering/Survey)
+- Problem statement and motivation
+- Planned approach and timeline
+- Expected contribution to textbook
+
+**Grading**: Pass/Fail (instructor feedback provided)
+
+### 2. Textbook Chapter Contribution (Week 16)
+
+**Submit**: MDX file with written content
+
+**Requirements:**
+- 2000-4000 words of technical writing
+- LaTeX equations for mathematical formulations
+- Code snippets (if applicable)
+- References to relevant papers
+- Fits cohesively into one of the 8 textbook chapters
+
+**Location**: `content/textbook/[chapter-name]/your-section.mdx`
+
+**Example Structure:**
+
+```mdx
+---
+title: "3.5 Your Section Title"
+chapter: 3
+subsection: 5
+author: "Your Name"
+---
+
+# 3.5 Your Section Title
+
+## Motivation
+
+Why does this topic matter?
+
+## Background
+
+What do readers need to know?
+
+## Method
+
+How does it work? (Include equations)
+
+## Results
+
+What did you find? (Include figures/tables)
+
+## Discussion
+
+What are the implications?
+
+## References
+
+[Numbered references]
+```
+
+### 3. Code Implementation (Weeks 12-16)
+
+**Required for Research & Engineering tracks** (optional for Survey track)
+
+**Submit**: Pull request with code
+
+**Requirements:**
+- Clean, documented Python code
+- README with setup instructions
+- Example usage / demo script
+- Unit tests (if applicable)
+
+**Location**: `code/capstone/your-project-name/`
+
+**Grading Criteria:**
+- Code quality and organization (30%)
+- Documentation and comments (30%)
+- Functionality and correctness (40%)
+
+### 4. Final Presentation (Week 16)
+
+**Format**: 15-minute presentation + 5-minute Q&A
+
+**Contents:**
+1. Problem statement and motivation (2 min)
+2. Approach and methodology (5 min)
+3. Results and findings (5 min)
+4. Textbook contribution overview (2 min)
+5. Lessons learned and future work (1 min)
+
+**Slides**: Submit PDF via pull request
+
+## Timeline
+
+| Week | Milestone |
+|------|-----------|
+| 8 | Proposal due |
+| 10 | Progress check-in (office hours) |
+| 12 | Draft textbook section (optional feedback) |
+| 14 | Code implementation complete |
+| 16 | Final presentation + all deliverables due |
+
+## Grading Rubric (300 points)
+
+| Component | Points |
+|-----------|--------|
+| **Textbook Contribution** | **150** |
+| - Technical accuracy | 50 |
+| - Writing clarity | 40 |
+| - Integration with existing chapters | 30 |
+| - References and citations | 30 |
+| **Implementation / Code** | **100** |
+| - Functionality | 40 |
+| - Code quality | 30 |
+| - Documentation | 30 |
+| **Presentation** | **50** |
+| - Content clarity | 20 |
+| - Slide quality | 15 |
+| - Q&A responses | 15 |
+| **Total** | **300** |
+
+## Evaluation Criteria
+
+### Textbook Contribution
+
+**Excellent (90-100%)**:
+- Novel insights or analysis
+- Crystal-clear explanations
+- Publication-quality figures and equations
+- Comprehensive references
+
+**Good (80-89%)**:
+- Accurate technical content
+- Clear writing with minor issues
+- Relevant figures and equations
+- Adequate references
+
+**Acceptable (70-79%)**:
+- Mostly accurate content
+- Understandable but needs polish
+- Basic figures/equations
+- Some key references missing
+
+### Code Implementation
+
+**Excellent (90-100%)**:
+- Production-ready code
+- Comprehensive documentation
+- Runs out-of-the-box
+- Includes tests and examples
+
+**Good (80-89%)**:
+- Functional code
+- Adequate documentation
+- Minor setup issues
+- Basic examples
+
+**Acceptable (70-79%)**:
+- Code works with effort
+- Minimal documentation
+- Requires debugging
+- No examples
+
+### Presentation
+
+**Excellent (90-100%)**:
+- Engaging and clear
+- Well-structured slides
+- Confident Q&A responses
+- On time
+
+**Good (80-89%)**:
+- Clear presentation
+- Decent slides
+- Handles most questions
+- Slightly over/under time
+
+**Acceptable (70-79%)**:
+- Understandable content
+- Basic slides
+- Struggles with some questions
+- Noticeable timing issues
+
+## Submission Process
+
+### Proposal (Week 8)
+
+```bash
+git checkout -b capstone-proposal-yourname
+# Add file: content/course/proposals/yourname-proposal.md
+git add content/course/proposals/yourname-proposal.md
+git commit -m "Add capstone proposal: Your Name"
+git push origin capstone-proposal-yourname
+# Open PR to staging
+```
+
+### Final Submission (Week 16)
+
+```bash
+git checkout -b capstone-final-yourname
+# Add textbook section: content/textbook/[chapter]/your-section.mdx
+# Add code (if applicable): code/capstone/your-project/
+# Add slides: presentations/yourname-final.pdf
+git add .
+git commit -m "Add capstone project: Your Title"
+git push origin capstone-final-yourname
+# Open PR to staging
+```
+
+## Example Projects from Past Semesters
+
+### Research Track
+
+**"Generalization of RT-2 to Novel Objects"** (Jane Doe, 2025)
+- Reproduced RT-2 baseline on Open-X dataset
+- Generated 50 novel 3D objects with unseen geometries
+- Found 23% performance drop on novel objects
+- Contributed to Chapter 4 (Evaluation)
+
+**"Data Augmentation for Robotic Grasping"** (John Smith, 2025)
+- Implemented 8 augmentation strategies
+- Trained policies with systematic ablations
+- Identified that rotation augmentation improves generalization by 15%
+- Contributed to Chapter 2 (Data)
+
+### Engineering Track
+
+**"Real-Time Vision Encoder for Edge Deployment"** (Alice Johnson, 2025)
+- Implemented MobileViT-based encoder
+- Achieved 30 FPS on Jetson Orin
+- Only 5% accuracy drop vs. ViT-B
+- Contributed to Chapter 5 (Deployment)
+
+**"Multi-Task Policy Training Framework"** (Bob Williams, 2025)
+- Built PyTorch training harness for 10+ tasks
+- Supports multi-GPU, checkpointing, logging
+- Open-sourced with 500+ GitHub stars
+- Contributed to Chapter 3 (Training)
+
+### Survey Track
+
+**"Benchmarking Protocols for Manipulation"** (Carol Lee, 2025)
+- Analyzed 30 papers on manipulation benchmarks
+- Created taxonomy of evaluation metrics
+- Identified reproducibility issues in 60% of papers
+- Contributed to Chapter 4 (Evaluation)
+
+**"Foundation Models for Embodied AI: A Survey"** (David Chen, 2025)
+- Surveyed 40 papers on VLMs for robotics
+- Mapped landscape of architectures and datasets
+- Identified key open problems
+- Contributed to Chapter 7 (Future Directions)
+
+## Resources
+
+### Writing
+
+- [How to Write a Great Research Paper](https://www.microsoft.com/en-us/research/academic-program/write-great-research-paper/)
+- [LaTeX Math Symbols](https://www.overleaf.com/learn/latex/List_of_Greek_letters_and_math_symbols)
+- [MDX Documentation](https://mdxjs.com/)
+
+### Code
+
+- [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
+- [PyTorch Best Practices](https://pytorch.org/tutorials/beginner/saving_loading_models.html)
+- [Writing Good Documentation](https://www.writethedocs.org/guide/writing/beginners-guide-to-docs/)
+
+### Presentation
+
+- [How to Give a Great Research Talk](https://www.microsoft.com/en-us/research/academic-program/give-great-research-talk/)
+- [Presentation Tips](https://www.cs.cmu.edu/~wloescher/presentations.html)
+
+## FAQs
+
+**Q: Can I work in a team?**
+A: No, capstone projects must be individual work. However, you can discuss ideas with classmates.
+
+**Q: Can I extend my paper audit into a capstone?**
+A: Yes! If you found an interesting research question during a paper audit, you can explore it further.
+
+**Q: What if my code doesn't work perfectly?**
+A: Document what worked, what didn't, and why. Partial results are acceptable if well-analyzed.
+
+**Q: Can I contribute to multiple textbook chapters?**
+A: Focus on one cohesive section. Quality over quantity.
+
+**Q: What if my project scope changes?**
+A: Discuss with the instructor. Pivots are allowed with justification.
+
+## Getting Help
+
+- **Office Hours**: Every Tuesday/Thursday 3-4 PM
+- **Discussion Forum**: Post questions and get peer feedback
+- **Mid-Project Check-In**: Schedule a meeting in Week 12
+
+## Final Notes
+
+The capstone is your opportunity to make a lasting contribution to the VLA research community. Past student projects have been cited in papers, used by other researchers, and featured in the textbook for future cohorts.
+
+**Aim for work you'd be proud to showcase in a job interview or PhD application.**
+
+Good luck!

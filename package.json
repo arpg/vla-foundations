@@ -1,30 +1,37 @@
 {
-  "name": "vla-foundations",
+  "name": "vlm-robotics-temp",
   "version": "0.1.0",
-  "description": "Vision-Language-Action Foundations course repository",
   "private": true,
   "scripts": {
-    "build-content": "contentlayer build",
-    "build": "next build",
     "dev": "next dev",
-    "start": "next start"
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
   },
-  "keywords": [
-    "vision-language-action",
-    "robotics",
-    "course",
-    "education"
-  ],
-  "author": "ARPG",
-  "license": "MIT",
   "dependencies": {
-    "contentlayer": "^0.3.4",
-    "next": "^14.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@next/mdx": "^16.1.1",
+    "@tailwindcss/typography": "^0.5.19",
+    "@types/mdx": "^2.0.13",
+    "gray-matter": "^4.0.3",
+    "katex": "^0.16.27",
+    "next": "16.1.1",
+    "next-mdx-remote": "^5.0.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
-    "next-contentlayer": "^0.3.4"
-  },
-  "packageManager": "pnpm@8.0.0"
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
 }

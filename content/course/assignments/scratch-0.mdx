@@ -1,0 +1,191 @@
+---
+title: 'Scratch-0: Environment Setup & First PR'
+assignment: 1
+due: 'Week 1'
+points: 50
+---
+
+# Scratch-0: Environment Setup & First PR
+
+## Objective
+
+Verify your development environment and demonstrate proficiency with the course workflow by submitting your first pull request to the `vla-foundations` repository.
+
+## Learning Goals
+
+- Set up Git, Python, and required dependencies
+- Understand the GitHub PR workflow for course submissions
+- Practice MDX syntax and frontmatter
+- Verify SSH access to development servers (if applicable)
+
+## Requirements
+
+### 1. Environment Setup
+
+Install the following tools:
+
+```bash
+# Git (version control)
+git --version  # Should be 2.30+
+
+# Python (programming)
+python --version  # Should be 3.10+
+
+# Node.js (for Next.js site)
+node --version  # Should be 18+
+pnpm --version  # Should be 8+
+
+# PyTorch (deep learning)
+python -c "import torch; print(torch.__version__)"  # Should be 2.0+
+```
+
+### 2. Repository Access
+
+Clone the course repository:
+
+```bash
+git clone https://github.com/arpg/vla-foundations.git
+cd vla-foundations
+pnpm install
+```
+
+### 3. Create Your Contributor Profile
+
+**File location**: `content/contributors/your-github-username.mdx`
+
+Use the provided template (`content/contributors/_template.mdx`) and fill in:
+
+- Your full name
+- Academic background (university, major, year)
+- Research interests related to VLA/robotics
+- GitHub profile link
+- Email (optional)
+
+**Example**:
+
+```mdx
+---
+name: "Jane Doe"
+role: "Student"
+semester: "Spring 2026"
+github: "janedoe"
+---
+
+# About Me
+
+I'm a PhD student in Computer Science at CU Boulder, focusing on robotic manipulation and vision-language models.
+
+## Academic Background
+
+- **University**: University of Colorado Boulder
+- **Major**: Computer Science (PhD)
+- **Year**: 3rd year
+
+## Research Interests
+
+- Vision-Language-Action models for manipulation
+- Sim-to-real transfer learning
+- Multi-task robotic learning
+- Imitation learning from human demonstrations
+
+## Contact
+
+- **Email**: jane.doe@colorado.edu
+- **GitHub**: [@janedoe](https://github.com/janedoe)
+```
+
+### 4. Submit a Pull Request
+
+**Steps**:
+
+1. **Create a new branch**:
+   ```bash
+   git checkout -b add-contributor-yourname
+   ```
+
+2. **Add your contributor file**:
+   ```bash
+   git add content/contributors/your-github-username.mdx
+   git commit -m "Add contributor profile: Your Name"
+   ```
+
+3. **Push to your fork** (or the staging branch if you have write access):
+   ```bash
+   git push origin add-contributor-yourname
+   ```
+
+4. **Open a Pull Request** on GitHub:
+   - Base branch: `staging`
+   - Compare branch: `add-contributor-yourname`
+   - Title: `Add contributor: Your Name`
+   - Description: "Scratch-0 submission for Week 1"
+
+5. **Wait for CI checks** to pass (GitHub Actions will validate your MDX syntax)
+
+### 5. Verify Build
+
+Once your PR is merged, verify your profile appears on the site:
+
+- **Local**: Run `pnpm dev` and navigate to `/contributors`
+- **Production**: Check https://vlm-robotics.dev/contributors
+
+## Deliverables
+
+- [ ] Contributor profile file created in `content/contributors/`
+- [ ] Pull request submitted to `staging` branch
+- [ ] All CI checks passing (contentlayer build, MDX validation)
+- [ ] Profile appears on the live site after merge
+
+## Grading Rubric
+
+| Criterion | Points |
+|-----------|--------|
+| Environment setup verified | 10 |
+| MDX frontmatter valid | 10 |
+| Content complete and professional | 15 |
+| PR follows naming conventions | 5 |
+| CI checks pass | 10 |
+| **Total** | **50** |
+
+## Common Issues
+
+### MDX Syntax Errors
+
+- Missing frontmatter delimiter (`---`)
+- Invalid YAML in frontmatter
+- Unclosed code blocks
+
+**Fix**: Run `pnpm build-content` locally before submitting
+
+### Git/GitHub Issues
+
+- Forgot to create a branch (pushing directly to main)
+- Wrong base branch for PR (should be `staging`)
+- Merge conflicts (sync with upstream first)
+
+**Fix**: Review Git workflow in course materials
+
+### CI Failures
+
+- Contentlayer build error (check MDX syntax)
+- Linting errors (run `pnpm lint` locally)
+
+**Fix**: Read error messages carefully and fix issues locally
+
+## Resources
+
+- [MDX Syntax Guide](https://mdxjs.com/docs/what-is-mdx/)
+- [GitHub PR Workflow](https://docs.github.com/en/pull-requests)
+- [Git Cheat Sheet](https://education.github.com/git-cheat-sheet-education.pdf)
+
+## Deadline
+
+**Due**: End of Week 1 (Friday 11:59 PM)
+
+Late submissions will incur a 10% penalty per day.
+
+## Questions?
+
+- Post in the course discussion forum
+- Attend office hours
+- Email the instructor: christoffer.heckman@colorado.edu
