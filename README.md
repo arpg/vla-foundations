@@ -16,39 +16,99 @@ This repository serves as the source of truth for:
 
 ## Repository Structure
 
+This repository is organized into three main categories: **Web Content** (rendered as pages), **Source Code** (executable assignments), and **Build Infrastructure** (deployment and tooling).
+
 ```
 vla-foundations/
-├── app/                      # Next.js App Router pages
-│   ├── page.tsx             # Landing page
-│   ├── textbook/[slug]/     # Dynamic chapter pages
-│   └── reference/           # Reference implementations
-├── components/
-│   └── textbook/            # UI components for textbook
-│       ├── Sidebar.tsx      # Navigation
-│       └── TextbookLayout.tsx
-├── content/
-│   ├── textbook/            # 8-chapter VLA textbook
-│   │   ├── foundations/     # Chapter 0
-│   │   ├── architectures/   # Chapter 1
-│   │   ├── data/            # Chapter 2
-│   │   ├── training/        # Chapter 3
-│   │   ├── evaluation/      # Chapter 4
-│   │   ├── deployment/      # Chapter 5
-│   │   ├── applications/    # Chapter 6
-│   │   └── future/          # Chapter 7
-│   ├── course/              # Course materials
-│   │   ├── Syllabus.mdx
-│   │   └── assignments/     # Scratch-0, Paper Audit, Capstone
-│   └── contributors/        # Student profiles (PR requirement)
-├── lib/
-│   └── chapters.ts          # Chapter metadata utilities
-├── scripts/
-│   └── deploy.sh            # Automated deployment script
-├── .github/
+├── app/                           # Next.js App Router (web framework)
+│   ├── page.tsx                   # Landing page
+│   ├── textbook/[slug]/           # Dynamic chapter pages
+│   ├── course/                    # Course overview page
+│   │   └── assignments/[slug]/    # Dynamic assignment pages
+│   ├── contributors/[slug]/       # Dynamic contributor profile pages
+│   └── reference/                 # Reference implementations page
+│
+├── content/                       # All MDX content (rendered as web pages)
+│   ├── textbook/                  # 8-chapter VLA textbook (MDX files)
+│   │   ├── foundations/           # Chapter 0: Core concepts
+│   │   ├── architectures/         # Chapter 1: Model designs
+│   │   ├── data/                  # Chapter 2: Dataset construction
+│   │   ├── training/              # Chapter 3: Optimization methods
+│   │   ├── evaluation/            # Chapter 4: Metrics and benchmarks
+│   │   ├── deployment/            # Chapter 5: Production systems
+│   │   ├── applications/          # Chapter 6: Real-world use cases
+│   │   └── future/                # Chapter 7: Open problems
+│   │
+│   ├── course/                    # Course materials (MDX files)
+│   │   ├── Syllabus.mdx           # Course syllabus
+│   │   ├── assignments/           # Assignment specifications (instructor-written)
+│   │   │   ├── scratch-0.mdx      # Environment setup assignment
+│   │   │   ├── scratch-1.mdx      # Transformer backbone assignment
+│   │   │   ├── paper-audit.mdx    # Paper analysis assignment
+│   │   │   └── capstone.mdx       # Final project specification
+│   │   └── submissions/           # Student submission reports (student-written)
+│   │       └── scratch-1/         # Example: student reports for Scratch-1
+│   │           └── [student].mdx  # Individual student writeups
+│   │
+│   └── contributors/              # Contributor profiles (student-written)
+│       └── [github-handle].mdx    # One profile per contributor
+│
+├── src/                           # Executable source code (NOT rendered as web pages)
+│   └── assignments/               # Assignment code templates and solutions
+│       └── scratch-1/             # Example: Transformer implementation
+│           ├── README.md          # Minimal README (points to assignment page)
+│           ├── backbone.py        # Implementation template with TODOs
+│           ├── generate_data.py   # Dataset generator script
+│           └── data/              # Generated training data
+│
+├── components/                    # React UI components
+│   └── textbook/                  # Textbook-specific components
+│       ├── Sidebar.tsx            # Navigation sidebar
+│       └── TextbookLayout.tsx     # Layout wrapper
+│
+├── lib/                           # Utility libraries
+│   └── chapters.ts                # Chapter metadata and utilities
+│
+├── scripts/                       # Deployment and automation
+│   └── deploy.sh                  # Production deployment script
+│
+├── .github/                       # GitHub configuration
 │   └── workflows/
-│       └── vla-audit.yml    # CI/CD for PR validation
-└── README.md
+│       └── vla-audit.yml          # CI/CD: PR validation, build checks
+│
+├── next.config.ts                 # Next.js configuration
+├── tailwind.config.ts             # Tailwind CSS configuration
+├── package.json                   # Node.js dependencies
+└── README.md                      # This file
 ```
+
+### Directory Purpose Guidelines
+
+**`content/`** - Source of truth for all web content
+- Written in MDX (Markdown + JSX)
+- Rendered as web pages on vlm-robotics.dev
+- Instructor writes: textbook chapters, assignment specs, syllabus
+- Students write: contributor profiles, submission reports
+
+**`src/`** - Executable code (Python, etc.)
+- Assignment implementation templates
+- Utility scripts and data generators
+- NOT rendered as web pages
+- READMEs are minimal and point to assignment pages (single source of truth)
+
+**`app/`** - Next.js routing and page components
+- Defines URL structure and page layouts
+- Connects routes to content in `content/`
+- Modified when adding new page types or routes
+
+### Important: README Policy for `src/assignments/`
+
+**All READMEs in `src/assignments/` are intentionally minimal.** They contain only:
+1. Link to the canonical assignment page on vlm-robotics.dev
+2. Quick start commands
+3. File list
+
+**Full assignment details (requirements, debugging tips, resources, submission checklists) are maintained exclusively in `content/course/assignments/*.mdx`.** This ensures a single source of truth and prevents documentation drift.
 
 ## The 8-Chapter Textbook
 
@@ -142,17 +202,51 @@ This will:
 
 ### For Students
 
-1. **Fork the repository** (or create a branch if you have write access)
-2. **Create your contributor profile**: `content/contributors/your-github-username.mdx`
-3. **Submit assignments** via pull requests to the `staging` branch
-4. **Wait for CI checks** to pass (GitHub Actions validates MDX syntax and builds)
-5. **Instructor review** and merge
+**IMPORTANT**: All students must follow this workflow for assignment submissions.
 
-### For Instructors
+1. **Create your own branch**:
+   ```bash
+   git checkout -b assignment-name-yourname
+   ```
+   Example: `git checkout -b scratch-1-johndoe`
+
+2. **Make your changes**:
+   - Add your code to `src/assignments/`
+   - Create your submission report in `content/course/submissions/`
+   - Update your contributor profile if needed
+
+3. **Commit your work**:
+   ```bash
+   git add .
+   git commit -m "Complete Assignment X: Your Name"
+   git push origin assignment-name-yourname
+   ```
+
+4. **Open a Pull Request**:
+   - Go to https://github.com/arpg/vla-foundations
+   - Click "Pull requests" → "New pull request"
+   - **Base branch**: `staging` (NOT `main`)
+   - **Compare branch**: your branch name
+   - Title: `Assignment X: Your Name`
+   - Add a description of your work
+
+5. **Wait for CI checks** to pass (GitHub Actions will validate your submission)
+
+6. **Wait for instructor review**:
+   - **ONLY the instructor can merge pull requests**
+   - The instructor will review your code and report
+   - You may be asked to make changes
+   - Once approved, the instructor will merge to `staging`, then to `main`
+
+**You do NOT have permission to merge your own PRs. All merges are done by the instructor.**
+
+### For the Instructor
 
 1. **Review student PRs** on the `staging` branch
-2. **Merge to `main`** when approved
-3. **Deploy to production** using `./scripts/deploy.sh`
+2. **Provide feedback** and request changes if needed
+3. **Merge to `staging`** when approved
+4. **Periodically merge `staging` to `main`**
+5. **Deploy to production** using `./scripts/deploy.sh`
 
 ## CI/CD Automation
 
@@ -265,6 +359,30 @@ cp -r out/* public_html/
 - [RT-2 Paper](https://arxiv.org/abs/2307.15818)
 - [Open-X Embodiment](https://robotics-transformer-x.github.io/)
 - [DROID Dataset](https://droid-dataset.github.io/)
+
+## Instructor TODO List
+
+**Course Content Completion Tasks**:
+
+- [ ] **Scratch-0 Assignment**: Create full assignment specification in `content/course/assignments/scratch-0.mdx`
+- [ ] **Scratch-1 Assignment**: Create full assignment specification in `content/course/assignments/scratch-1.mdx`
+- [ ] **Paper Audit Assignment**: Create full assignment specification in `content/course/assignments/paper-audit.mdx`
+- [ ] **Capstone Assignment**: Create full assignment specification in `content/course/assignments/capstone.mdx`
+- [ ] **Update /course page**: Link assignments once content is ready (remove "Coming soon" placeholders)
+- [ ] **Syllabus**: Upload current syllabus to Canvas and verify link works
+- [ ] **Textbook Chapters**: Begin writing content for 8 chapters
+- [ ] **Example Paper Audit**: Create sample audit for students to reference
+- [ ] **Setup Branch Protection**: Configure GitHub branch protection rules (students require PRs, instructor can bypass)
+
+**Deployment**:
+- [ ] Test assignment submission workflow end-to-end
+- [ ] Verify CI/CD pipeline catches common errors
+- [ ] Create assignment grading rubric
+
+**Notes**:
+- Syllabus is currently linked to Canvas: https://canvas.colorado.edu/courses/134529/files/82424359/download?download_frd=1
+- Students must submit 1 paper audit (not 4)
+- Capstone tracks: Research or Engineering (no survey track)
 
 ## Contact
 

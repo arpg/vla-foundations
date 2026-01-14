@@ -1,0 +1,328 @@
+---
+title: 'Scratch-1: The Transformer Backbone'
+assignment: 4
+due: 'Tuesday, January 27, 9:00 AM MST'
+points: 100
+---
+
+# Scratch-1: The Transformer Backbone
+
+**Focus**: Implementing the $O(1)$ engine of the VLA stack.
+
+## 1. Objective
+
+In this assignment, you will implement a **decoder-only Transformer from scratch** using PyTorch. You will not use `nn.Transformer` or pre-built `transformers` library backbones. You will build the attention mechanism, the feed-forward blocks, and the autoregressive training loop.
+
+The goal is to train this model to perform **Next-Token Prediction** on a synthetic robotic trajectory dataset.
+
+### The Unified Sequence Hypothesis
+
+This assignment confronts you with the reality of the **Unified Sequence Hypothesis**: that actions, pixels, and words are all just **tokens in an autoregressive chain**. The same architecture that powers GPT-4 can control a robot arm.
+
+## 2. Technical Requirements
+
+### The Architecture
+
+Your implementation must include:
+
+1. **Multi-Head Causal Attention**: Ensuring that token $t$ cannot attend to tokens $t+1, \dots, T$.
+2. **Rotary Positional Embeddings (RoPE)**: Implementing the relative positional encoding used in modern SOTA models like Llama-3 and PaLM-E.
+3. **RMSNorm**: Utilizing Root Mean Square Layer Normalization for improved training stability.
+
+### The Formalism
+
+Your model will minimize the negative log-likelihood of the sequence $\mathbf{S} = \{s_1, s_2, \dots, s_T\}$:
+
+$$\mathcal{L}(\theta) = -\sum_{t=1}^{T} \log P(s_t | s_{<t}; \theta)$$
+
+Where each $s_t$ represents a tokenized robotic state (position $x, y, z$ and orientation $q$).
+
+## 3. Implementation Tasks
+
+Claude has scaffolded a template in the course repository under `src/assignments/scratch-1/backbone.py`. You must complete the following blocks:
+
+### Task A: The Causal Self-Attention
+
+Implement the scaled dot-product attention with a causal mask.
+
+$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T + M}{\sqrt{d_k}}\right)V$$
+
+Where $M$ is the mask matrix: $M_{ij} = 0$ for $i \ge j$ and $-\infty$ otherwise.
+
+**Key Points**:
+- The mask prevents tokens from attending to future tokens
+- Use `torch.tril` to create the causal mask
+- Apply mask before the softmax operation
+- Handle the multi-head dimension correctly
+
+### Task B: The RMSNorm Block
+
+Implement the normalization layer defined by:
+
+$$\bar{a}_i = \frac{a_i}{\sqrt{\frac{1}{n} \sum_{j=1}^n a_j^2 + \epsilon}} \cdot g_i$$
+
+Where:
+- $a_i$ is the input activation
+- $n$ is the dimension
+- $\epsilon$ is a small constant for numerical stability (typically $10^{-6}$)
+- $g_i$ is a learned scaling parameter
+
+**Key Points**:
+- RMSNorm is simpler and faster than LayerNorm (no mean subtraction)
+- Used in modern LLMs like Llama-3
+- The scaling parameter $g$ is learned during training
+
+### Task C: The Training Loop
+
+Write a training loop that processes a batch of synthetic trajectories, calculates the cross-entropy loss, and performs backpropagation.
+
+**Requirements**:
+- Process batches of sequences
+- Compute loss using teacher forcing
+- Implement gradient clipping (max norm = 1.0)
+- Log training metrics (loss, perplexity)
+- Save checkpoints every 1000 steps
+
+## 4. Dataset: Synthetic Trajectories
+
+We provide a script `src/assignments/scratch-1/generate_data.py` that creates 10,000 synthetic robot trajectories. Each trajectory consists of a 7-DOF robot arm moving toward a target.
+
+**Dataset Specifications**:
+- **State Space**: 7-DOF joint angles + 3D end-effector position
+- **Action Space**: Discretized into 256 bins per dimension
+- **Sequence Length**: 50 timesteps per trajectory
+- **Vocabulary Size**: 256 tokens
+
+**Data Format**:
+```python
+{
+    'trajectories': torch.Tensor,  # Shape: (10000, 50, 10)
+    'tokenized': torch.LongTensor  # Shape: (10000, 50) - discretized actions
+}
+```
+
+### Generating the Dataset
+
+```bash
+cd src/assignments/scratch-1
+python generate_data.py --output data/trajectories.pkl
+```
+
+## 5. Submission
+
+### Code Submission
+
+Commit your implementation to your student branch in the `arpg/vla-foundations` repo:
+
+```bash
+git checkout -b scratch-1-yourname
+git add src/assignments/scratch-1/backbone.py
+git commit -m "Complete Scratch-1: Transformer Backbone"
+git push origin scratch-1-yourname
+```
+
+Open a pull request to the `staging` branch with:
+- Title: `Scratch-1: [Your Name]`
+- Description: Brief summary of your implementation
+
+### Report Submission
+
+Create an MDX page at `content/course/submissions/scratch-1/[your-name].mdx` with the following sections:
+
+#### Required Content
+
+1. **Loss Curve**: Plot training loss over iterations
+2. **Attention Maps**: Visualize attention patterns for a sample trajectory
+3. **The Audit**: Explain what happens to the loss if you remove the Causal Mask. Why does the model "cheat"?
+
+#### Template
+
+```mdx
+---
+title: "Scratch-1 Submission: Your Name"
+student: "Your Name"
+date: "2026-01-27"
+---
+
+# Scratch-1: The Transformer Backbone
+
+## Loss Curve
+
+![Training Loss](./images/loss_curve.png)
+
+The model converged after X iterations with final loss of Y.
+
+## Attention Visualization
+
+![Attention Maps](./images/attention_maps.png)
+
+The attention patterns show...
+
+## The Audit: Removing the Causal Mask
+
+When I removed the causal mask, the following happened:
+
+[Your analysis here]
+
+### Why the Model "Cheats"
+
+[Your explanation here]
+
+## Code Highlights
+
+[Optional: Highlight interesting implementation details]
+
+## Challenges and Solutions
+
+[Optional: Discuss difficulties you encountered]
+```
+
+## 6. Grading Rubric
+
+### Pass Level (B): 70-89 points
+
+- ✅ Successful implementation of the backbone
+- ✅ Loss converges on the synthetic dataset (< 1.0)
+- ✅ Attention maps visualization included
+- ✅ Causal mask audit completed
+- ✅ Code is clean and documented
+
+### Mastery Level (A): 90-100 points
+
+All Pass Level requirements, plus:
+
+- ✅ **KV-Caching** implemented for efficient inference
+- ✅ **Rigorous derivation** of why RoPE is superior to Sinusoidal embeddings for spatial data
+- ✅ Ablation study comparing RoPE vs. Sinusoidal positional encodings
+- ✅ Inference speed comparison with and without KV-caching
+
+### Detailed Breakdown
+
+| Component | Points |
+|-----------|--------|
+| **Implementation** | **50** |
+| - Causal Self-Attention (correct masking) | 15 |
+| - RMSNorm (correct implementation) | 10 |
+| - RoPE (correct rotation application) | 15 |
+| - Training loop (convergence) | 10 |
+| **Report** | **30** |
+| - Loss curve (clear visualization) | 10 |
+| - Attention maps (informative) | 10 |
+| - Causal mask audit (insightful analysis) | 10 |
+| **Code Quality** | **20** |
+| - Clean, readable code | 10 |
+| - Proper documentation | 5 |
+| - Git workflow (clear commits) | 5 |
+| **Mastery Bonus** | **+10** |
+| - KV-Caching implementation | 5 |
+| - RoPE derivation and ablation | 5 |
+
+## 7. Resources
+
+### Attention Mechanism
+- [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017)
+- [Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/) (Jay Alammar)
+
+### RoPE (Rotary Position Embedding)
+- [RoFormer: Enhanced Transformer with Rotary Position Embedding](https://arxiv.org/abs/2104.09864)
+- [Understanding RoPE](https://blog.eleuther.ai/rotary-embeddings/)
+
+### RMSNorm
+- [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467)
+- Used in Llama-3, Grok, and modern LLMs
+
+### PyTorch
+- [PyTorch nn.Module Tutorial](https://pytorch.org/tutorials/beginner/examples_nn/two_layer_net_module.html)
+- [Einops for Tensor Operations](https://einops.rocks/)
+
+## 8. Getting Started
+
+### 1. Generate the Dataset
+
+```bash
+cd src/assignments/scratch-1
+python generate_data.py --num_trajectories 10000 --seq_length 50
+```
+
+### 2. Review the Template
+
+Open `src/assignments/scratch-1/backbone.py` and locate the `# TODO` markers.
+
+### 3. Implement the Components
+
+Start with RMSNorm (simplest), then move to Attention, then the full model.
+
+### 4. Train the Model
+
+```bash
+python train.py --data data/trajectories.pkl --epochs 10
+```
+
+### 5. Visualize Results
+
+```bash
+python visualize.py --checkpoint checkpoints/best_model.pt
+```
+
+## 9. Common Pitfalls
+
+### Attention Masking
+- **Mistake**: Applying mask after softmax
+- **Fix**: Mask must be applied before softmax (`logits + mask`)
+
+### RoPE Implementation
+- **Mistake**: Rotating the entire embedding
+- **Fix**: Only rotate pairs of dimensions (see template)
+
+### Training Instability
+- **Mistake**: No gradient clipping
+- **Fix**: Use `torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)`
+
+### Memory Issues
+- **Mistake**: Storing entire attention matrix
+- **Fix**: Use efficient attention implementations or smaller batch sizes
+
+## 10. FAQs
+
+**Q: Can I use einops for cleaner tensor operations?**
+A: Yes, but document what each einops operation does.
+
+**Q: Can I use Flash Attention?**
+A: Not for the base implementation. Flash Attention can be used for the Mastery bonus.
+
+**Q: How long should training take?**
+A: On a single GPU: ~10-15 minutes for 10k trajectories. On CPU: ~1 hour.
+
+**Q: What batch size should I use?**
+A: Start with 32. Increase if you have more VRAM.
+
+**Q: My loss isn't converging. Help?**
+A: Check:
+1. Is the causal mask applied correctly?
+2. Is the learning rate too high? (Try 1e-4)
+3. Are gradients exploding? (Enable gradient clipping)
+
+## 11. Deadline
+
+**Due**: Tuesday, January 27, 9:00 AM MST
+
+Late submissions: 10% penalty per day (max 3 days late)
+
+## 12. Office Hours
+
+If you're stuck, attend office hours or post in the discussion forum. Common questions:
+- Debugging attention masks
+- Understanding RoPE rotation matrices
+- Interpreting loss curves
+
+## 13. Collaboration Policy
+
+- **Allowed**: Discussing concepts, debugging together
+- **Not Allowed**: Copying code, sharing implementations
+- **Required**: Document any external resources used (StackOverflow, papers, blog posts)
+
+Good luck! This assignment will give you a deep understanding of how modern VLA models work under the hood.
+
+---
+
+*"The Transformer is not magic. It's just matrix multiplications and softmax."* — Andrej Karpathy

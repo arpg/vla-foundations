@@ -1,0 +1,22 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Remote Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ristoffer.ch
+          username: crh
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          script: |
+            cd ~/vla-build
+            git pull origin main
+            npm run build
+            cp -r out/* /var/www/vlm-robotics.dev/public_html/
+            echo "Deployment completed at $(date)"

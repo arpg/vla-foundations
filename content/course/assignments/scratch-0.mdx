@@ -1,191 +1,186 @@
 ---
-title: 'Scratch-0: Environment Setup & First PR'
+title: "Scratch-0: Environment Setup"
 assignment: 1
-due: 'Week 1'
+due: "Week 1"
 points: 50
 ---
 
-# Scratch-0: Environment Setup & First PR
+# Scratch-0: Environment Setup
 
-## Objective
+**Objective**: Verify your development environment and submit your first pull request to the VLA Foundations repository.
 
-Verify your development environment and demonstrate proficiency with the course workflow by submitting your first pull request to the `vla-foundations` repository.
-
-## Learning Goals
-
-- Set up Git, Python, and required dependencies
-- Understand the GitHub PR workflow for course submissions
-- Practice MDX syntax and frontmatter
-- Verify SSH access to development servers (if applicable)
-
-## Requirements
-
-### 1. Environment Setup
+## 1. Prerequisites
 
 Install the following tools:
 
-```bash
-# Git (version control)
-git --version  # Should be 2.30+
+- **Git**: Version control
+- **Python 3.10+**: Primary programming language
+- **PyTorch 2.0+**: Deep learning framework
+- **Node.js 18+**: For building the course website
 
-# Python (programming)
-python --version  # Should be 3.10+
+## 2. Task: Create Your Contributor Profile
 
-# Node.js (for Next.js site)
-node --version  # Should be 18+
-pnpm --version  # Should be 8+
-
-# PyTorch (deep learning)
-python -c "import torch; print(torch.__version__)"  # Should be 2.0+
-```
-
-### 2. Repository Access
-
-Clone the course repository:
-
-```bash
-git clone https://github.com/arpg/vla-foundations.git
-cd vla-foundations
-pnpm install
-```
-
-### 3. Create Your Contributor Profile
-
-**File location**: `content/contributors/your-github-username.mdx`
-
-Use the provided template (`content/contributors/_template.mdx`) and fill in:
-
-- Your full name
-- Academic background (university, major, year)
-- Research interests related to VLA/robotics
-- GitHub profile link
-- Email (optional)
-
-**Example**:
+Create a new file at `content/contributors/[your-github-handle].mdx` with the following structure:
 
 ```mdx
 ---
-name: "Jane Doe"
+name: "Your Full Name"
 role: "Student"
 semester: "Spring 2026"
-github: "janedoe"
+github: "your-github-handle"
 ---
 
 # About Me
 
-I'm a PhD student in Computer Science at CU Boulder, focusing on robotic manipulation and vision-language models.
+Brief introduction about yourself and your research interests.
 
 ## Academic Background
 
-- **University**: University of Colorado Boulder
-- **Major**: Computer Science (PhD)
-- **Year**: 3rd year
+- **University**: Your University
+- **Major**: Your Major
+- **Year**: Your Year
 
 ## Research Interests
 
-- Vision-Language-Action models for manipulation
-- Sim-to-real transfer learning
-- Multi-task robotic learning
-- Imitation learning from human demonstrations
+- Vision-Language-Action models
+- Robot learning
+- [Your specific interests]
 
 ## Contact
 
-- **Email**: jane.doe@colorado.edu
-- **GitHub**: [@janedoe](https://github.com/janedoe)
+- **Email**: your.email@university.edu
+- **GitHub**: [@your-handle](https://github.com/your-handle)
 ```
 
-### 4. Submit a Pull Request
+## 3. Environment Verification
 
-**Steps**:
+Run the following script to verify your PyTorch installation:
 
-1. **Create a new branch**:
-   ```bash
-   git checkout -b add-contributor-yourname
-   ```
+```python
+import torch
+import torch.nn as nn
 
-2. **Add your contributor file**:
-   ```bash
-   git add content/contributors/your-github-username.mdx
-   git commit -m "Add contributor profile: Your Name"
-   ```
+def verify_setup():
+    # 1. Check CUDA
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Running on: {device}")
 
-3. **Push to your fork** (or the staging branch if you have write access):
-   ```bash
-   git push origin add-contributor-yourname
-   ```
+    # 2. Test Linear Projection (Modality Bridge Simulation)
+    # Projecting a 1024-dim vision token to a 4096-dim language latent
+    bridge = nn.Linear(1024, 4096).to(device)
+    x = torch.randn(1, 1024).to(device)
+    y = bridge(x)
 
-4. **Open a Pull Request** on GitHub:
-   - Base branch: `staging`
-   - Compare branch: `add-contributor-yourname`
-   - Title: `Add contributor: Your Name`
-   - Description: "Scratch-0 submission for Week 1"
+    assert y.shape == (1, 4096), "Projection Shape Mismatch"
+    print("Environment Sync: SUCCESS")
 
-5. **Wait for CI checks** to pass (GitHub Actions will validate your MDX syntax)
+if __name__ == "__main__":
+    verify_setup()
+```
 
-### 5. Verify Build
+Expected output:
+```
+Running on: cuda  # or "cpu" if no GPU available
+Environment Sync: SUCCESS
+```
 
-Once your PR is merged, verify your profile appears on the site:
+## 4. Submission Instructions
 
-- **Local**: Run `pnpm dev` and navigate to `/contributors`
-- **Production**: Check https://vlm-robotics.dev/contributors
+### Step 1: Create a Branch
 
-## Deliverables
+```bash
+git checkout -b student/[your-handle]-init
+```
 
-- [ ] Contributor profile file created in `content/contributors/`
-- [ ] Pull request submitted to `staging` branch
-- [ ] All CI checks passing (contentlayer build, MDX validation)
-- [ ] Profile appears on the live site after merge
+Example: `git checkout -b student/johndoe-init`
 
-## Grading Rubric
+### Step 2: Add Your Profile
 
-| Criterion | Points |
-|-----------|--------|
-| Environment setup verified | 10 |
-| MDX frontmatter valid | 10 |
-| Content complete and professional | 15 |
-| PR follows naming conventions | 5 |
-| CI checks pass | 10 |
-| **Total** | **50** |
+```bash
+git add content/contributors/[your-github-handle].mdx
+git commit -m "Add contributor profile: Your Name"
+```
 
-## Common Issues
+### Step 3: Push Your Branch
 
-### MDX Syntax Errors
+```bash
+git push origin student/[your-handle]-init
+```
 
-- Missing frontmatter delimiter (`---`)
-- Invalid YAML in frontmatter
-- Unclosed code blocks
+### Step 4: Submit a Pull Request
 
-**Fix**: Run `pnpm build-content` locally before submitting
+1. Go to https://github.com/arpg/vla-foundations
+2. Click "Pull requests" → "New pull request"
+3. **Base branch**: `staging` (NOT `main`)
+4. **Compare branch**: `student/[your-handle]-init`
+5. **Title**: `Scratch-0: Add contributor profile - Your Name`
+6. **Description**: "Initial contributor profile for Scratch-0"
+7. Click "Create pull request"
 
-### Git/GitHub Issues
+### Step 5: Wait for CI Checks
 
-- Forgot to create a branch (pushing directly to main)
-- Wrong base branch for PR (should be `staging`)
-- Merge conflicts (sync with upstream first)
+Your PR will trigger a GitHub Action that validates:
+- MDX syntax is valid
+- Frontmatter is properly formatted
+- LaTeX rendering works
+- Site builds successfully
 
-**Fix**: Review Git workflow in course materials
+**If the build fails**: Check the error logs, fix the issues in your MDX file, and push the changes. The CI will automatically re-run.
 
-### CI Failures
+### Step 6: Instructor Review
 
-- Contentlayer build error (check MDX syntax)
-- Linting errors (run `pnpm lint` locally)
+**Important**: Only the instructor can merge your PR. You do not have merge permissions.
 
-**Fix**: Read error messages carefully and fix issues locally
+Once your PR passes all checks, the instructor will:
+1. Review your profile
+2. Provide feedback if needed
+3. Merge to `staging`
+4. Deploy to production
 
-## Resources
+## 5. Evaluation
 
-- [MDX Syntax Guide](https://mdxjs.com/docs/what-is-mdx/)
-- [GitHub PR Workflow](https://docs.github.com/en/pull-requests)
-- [Git Cheat Sheet](https://education.github.com/git-cheat-sheet-education.pdf)
+**Pass**: Your PR is merged into staging, and your profile appears on the [Contributors page](https://vlm-robotics.dev/contributors).
 
-## Deadline
+**Fail**: PR is left open or build is broken past the deadline.
+
+## 6. Troubleshooting
+
+### Common Issues
+
+**Problem**: `git push` fails with permission denied
+
+**Solution**: Make sure you're pushing to your own branch, not `main` or `staging`.
+
+---
+
+**Problem**: CI build fails with "Invalid frontmatter"
+
+**Solution**: Check that your MDX file has valid YAML frontmatter between `---` delimiters.
+
+---
+
+**Problem**: PyTorch not found
+
+**Solution**: Install PyTorch following the [official guide](https://pytorch.org/get-started/locally/).
+
+---
+
+**Problem**: Can't merge my own PR
+
+**Solution**: This is expected. Only the instructor can merge PRs. Wait for review.
+
+## 7. Getting Help
+
+- **Office Hours**: Tuesday/Thursday 3-4 PM
+- **Discussion Forum**: Post with `[scratch-0]` tag
+- **Email**: christoffer.heckman@colorado.edu
+
+## 8. Deadline
 
 **Due**: End of Week 1 (Friday 11:59 PM)
 
-Late submissions will incur a 10% penalty per day.
+Late submissions will incur a 10% penalty per day (max 3 days late).
 
-## Questions?
+---
 
-- Post in the course discussion forum
-- Attend office hours
-- Email the instructor: christoffer.heckman@colorado.edu
+**Welcome to VLA Foundations!** This assignment ensures you're ready for the technical work ahead.
