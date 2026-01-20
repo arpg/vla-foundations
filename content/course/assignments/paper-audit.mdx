@@ -7,51 +7,86 @@ points: 300
 
 # Assignment: The Technical Paper Audit
 
-**Weight:** 20% (Document) + 10% (Presentation)  
-**Initial Draft Due:** Exactly 7 days prior to your scheduled presentation date.  
+**Weight:** 20% (Document) + 10% (Presentation)
+**Initial Draft Due:** Exactly 7 days prior to your scheduled presentation date.
 **Mastery Deadline:** Sunday, April 19, 11:59 PM MST.
 
-## 1. The Philosophy: Audit, Not Summary
+## The Philosophy: Audit, Not Summary
 
 In this course, we do not write "summaries." A summary is a transient document that parrots the authors' abstract. An **Audit** is a durable engineering resource intended for the `vlm-robotics.dev` living textbook.
 
-As a technical auditor, your job is to pressure-test the paper’s claims from a first-principles perspective. You are looking for the "Information Decay"—the points where the model’s architectural choices sacrifice physical reality for computational ease. If this paper were a technical proposal at an organization like Zoox or Tesla, would you sign off on it? Why or why not?
+As a technical auditor, your job is to pressure-test the paper's claims from a first-principles perspective. You are looking for the "Information Decay"—the points where the model's architectural choices sacrifice physical reality for computational ease. If this paper were a technical proposal at an organization like Zoox or Tesla, would you sign off on it? Why or why not?
 
-## 2. The Mastery Loop (Grading & Feedback)
+## Submission Requirements & Technical Standards
+
+The Paper Audit is not a book report; it is an exhaustive technical autopsy of a specific sub-domain within the VLM-Robotics landscape. You are expected to synthesize the foundational literature and the current SOTA into a single, authoritative dossier.
+
+### Format Specifications
+
+- **Template:** Use a standard LaTeX article or conference template.
+- **Length:** **Exhaustive.** There is no page limit. The audit is complete only when the technical landscape of your chosen sub-domain is fully mapped and the underlying scaling laws and architectural trade-offs are articulated.
+- **Scope:** Your audit must cover the **primary foundational paper** of your chosen topic plus **all relevant descendant and competing works** (typically 5-10+ papers) that define the current frontier.
+
+### Required Structural Components
+
+#### Problem Domain & Taxonomy
+
+Define the specific technical challenge (e.g., *Symmetric Sigmoid Losses in Multimodal Pre-training* or *Self-Distillation for Geometric Robotics Foundations*). Provide a taxonomy of the approaches taken by different research groups. How has the "Initial Dissolve" of this problem evolved over the last 24–36 months?
+
+#### Comparative Architectural Deep-Dive
+
+Construct a rigorous technical comparison of the architectures involved.
+- **Objective Functions:** Compare the mathematical formulations (e.g., InfoNCE vs. SigLIP vs. DINO distillation).
+- **Backbone Scaling:** Contrast the vision/language encoders used across the papers. Analyze how parameter count and data volume influenced the results.
+- **Interaction Mechanisms:** Detail the differences in how these models fuse modalities (e.g., Cross-attention, Q-Formers, or simple MLP projections).
+
+You must formalize the model's core logic using $\LaTeX$. Do not simply describe the objective; derive it.
+- Define the state-space and the latent transitions.
+- Explicitly detail the loss function $\mathcal{L}$ and any auxiliary objectives (e.g., contrastive or reconstruction losses).
+- **Example:** Define the joint probability for an autoregressive VLA:
+    $$P(a_{1:T} | v_{1:T}, l) = \prod_{t=1}^T P(a_t | v_{\le t}, a_{<t}, l)$$
+
+#### The Scaling Frontier & Empirical Trends
+
+Identify the scaling laws revealed by the collective body of work.
+- What are the compute-optimal frontiers for this sub-domain?
+- Where do the "diminishing returns" or "data walls" appear in these specific approaches?
+- Use data from the papers to construct a narrative of how performance correlates with scale in this specific area.
+
+#### Robotic Grounding & Physicality Gap
+
+This is the most critical section. Evaluate how these visual-language representations survive the transition to the physical world.
+- Analyze the "Precision Gap": How do these models handle the high-frequency requirements of robotic control?
+- Critique the benchmarks: Are the papers testing on static datasets (ImageNet/COCO) or embodied environments (RT-X, Open X-Embodiment)?
+- Identify exactly where the "semantic understanding" fails to translate into "physical common sense."
+
+Address the following engineering bottlenecks:
+- **Dimensionality & Information Decay:** Where is the bottleneck? Does the projection layer ($v \to z$) discard critical spatial geometry (e.g., depth, texture, or contact physics) needed for the task?
+- **Compute & Inference Reality:** Estimate the FLOPs for a single forward pass. At what frequency (Hz) can this model realistically run on edge hardware (e.g., NVIDIA Orin or H100)?
+- **The Semantic-Motor Gap:** Identify exactly where the model's "high-level reasoning" (the LLM) fails to ground in "low-level motor primitives" (the policy).
+
+#### Critical Synthesis & The "Load-Bearing" Audit
+
+Identify the "load-bearing" assumptions of the entire sub-domain.
+- What happens if the internet-scale data used for pre-training is exhausted?
+- Which of these papers are truly foundational, and which are merely "marginal gain" iterations?
+- Propose the "Next Step" for the field: If you were a Senior Staff Engineer at a robotics lab, what would be the next 10,000 GPU-hour experiment you would run to advance this sub-domain?
+
+Document the "Obvious Bugs." Identify 2–3 scenarios where the model's logic is likely to diverge from physical reality (e.g., handling transparent objects, high-velocity dynamic obstacles, or long-horizon causal chains).
+
+## The Mastery Loop
 
 This assignment utilizes a **Mastery-Based Feedback Loop**. Your grade reflects the technical authority and durability of your documentation.
 
-1.  **The Review Candidate (T-minus 7 Days):** Submit a draft of your MDX document via a Pull Request (PR) to the `staging` branch. 
-2.  **Instructor Review (IR):** I will provide a technical review focusing on mathematical rigor, architectural clarity, and the depth of your critique.
-3.  **The Presentation:** Deliver a "presentationified" version of your audit to the class. 
-4.  **The Improvement Cycle:** You are expected to iterate on your MDX document throughout the semester based on IR and class feedback. 
-    * **Level 1 (C):** A correct summary with basic formatting.
-    * **Level 2 (B):** High technical depth, correct $\LaTeX$, and a sound critique of the model.
-    * **Level 3 (A - Mastery):** "Merge-Ready." The document is of such high quality that it is merged into the `main` branch of the living textbook as a canonical reference.
+- **The Review Candidate (T-minus 7 Days):** Submit a draft of your MDX document via a Pull Request (PR) to the `staging` branch.
+- **Instructor Review (IR):** I will provide a technical review focusing on mathematical rigor, architectural clarity, and the depth of your critique.
+- **The Presentation:** Deliver a "presentationified" version of your audit to the class.
+- **The Improvement Cycle:** You are expected to iterate on your MDX document throughout the semester based on IR and class feedback.
+  * **Level 1 (C):** A correct summary with basic formatting.
+  * **Level 2 (B):** High technical depth, correct $\LaTeX$, and a sound critique of the model.
+  * **Level 3 (A - Mastery):** "Merge-Ready." The document is of such high quality that it is merged into the `main` branch of the living textbook as a canonical reference.
 
-## 3. Technical Requirements
-
-Your audit must be authored in MDX and include the following sections.
-
-### I. Formal Architecture
-You must formalize the model’s core logic using $\LaTeX$. Do not simply describe the objective; derive it.
-* Define the state-space and the latent transitions.
-* Explicitly detail the loss function $\mathcal{L}$ and any auxiliary objectives (e.g., contrastive or reconstruction losses).
-* **Example:** Define the joint probability for an autoregressive VLA:
-    $$P(a_{1:T} | v_{1:T}, l) = \prod_{t=1}^T P(a_t | v_{\le t}, a_{<t}, l)$$
-
-### II. The Instructor Audit Criteria
-Address the following engineering bottlenecks:
-* **Dimensionality & Information Decay:** Where is the bottleneck? Does the projection layer ($v \to z$) discard critical spatial geometry (e.g., depth, texture, or contact physics) needed for the task?
-* **Compute & Inference Reality:** Estimate the FLOPs for a single forward pass. At what frequency (Hz) can this model realistically run on edge hardware (e.g., NVIDIA Orin or H100)?
-* **The Semantic-Motor Gap:** Identify exactly where the model's "high-level reasoning" (the LLM) fails to ground in "low-level motor primitives" (the policy).
-
-### III. Failure Mode Analysis
-Document the "Obvious Bugs." Identify 2–3 scenarios where the model’s logic is likely to diverge from physical reality (e.g., handling transparent objects, high-velocity dynamic obstacles, or long-horizon causal chains).
-
-
-
-## 4. Suggested Paper List by Focus Area
+## Suggested Paper List by Focus Area
 
 Refer to the [Sign-up Sheet](https://docs.google.com/spreadsheets/d/1KPhf81o5RBO3hGw3C0msXVpXGNQ5Rq1YbgwG2gEYFi8/edit?usp=sharing) to claim your area and date.
 
@@ -87,9 +122,9 @@ Refer to the [Sign-up Sheet](https://docs.google.com/spreadsheets/d/1KPhf81o5RBO
 
 ---
 
-## 5. Submission Logistics
+## Submission Logistics
 
-1.  **Branching:** Create a branch `audit/your-name-paper-name`.
-2.  **PR to Staging:** Submit your MDX file to `content/textbook/audits/`.
-3.  **Build Check:** Your PR must pass the GitHub Action audit (no broken $\LaTeX$ or malformed frontmatter).
-4.  **Instructor Sync:** Once the build is green, tag `@crheckman` for Instructor Review.
+- **Branching:** Create a branch `audit/your-name-paper-name`.
+- **PR to Staging:** Submit your MDX file to `content/textbook/audits/`.
+- **Build Check:** Your PR must pass the GitHub Action audit (no broken $\LaTeX$ or malformed frontmatter).
+- **Instructor Sync:** Once the build is green, tag `@crheckman` for Instructor Review.
