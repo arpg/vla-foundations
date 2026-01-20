@@ -84,6 +84,11 @@ Running on: cuda  # or "cpu" if no GPU available
 Environment Sync: SUCCESS
 ```
 
+## ⚠️ CRITICAL: Workflow Integrity
+* **NEVER** push directly to `staging`.
+* **NEVER** force-push (`-f`) to any branch that isn't your own feature branch.
+* If your build fails in CI but passes locally, it is likely a Case-Sensitivity issue (Linux CI vs. Mac/Win local) or malformed YAML frontmatter. **Check the GitHub Action logs first.**
+
 ## 4. Submission Instructions
 
 ### Step 1: Create a Branch
