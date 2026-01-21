@@ -35,4 +35,14 @@ jobs:
             mkdir -p /var/www/vlm-robotics.dev/public_html/staging
             cp -r out/* /var/www/vlm-robotics.dev/public_html/staging/
 
+            # Install and restart API server
+            cd api-server
+            npm install
+
+            # Use PM2 to manage the API server process
+            npm install -g pm2 || true
+            pm2 delete vla-comments-api 2>/dev/null || true
+            pm2 start server.js --name vla-comments-api
+            pm2 save
+
             echo "Staging deployment completed at $(date)"
