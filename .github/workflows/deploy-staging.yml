@@ -39,10 +39,11 @@ jobs:
             cd api-server
             npm install
 
-            # Use PM2 to manage the API server process
-            npm install -g pm2 || true
-            pm2 delete vla-comments-api 2>/dev/null || true
-            pm2 start server.js --name vla-comments-api
-            pm2 save
+            # Kill any existing API server process
+            pkill -f "node server.js" || true
+
+            # Start API server in background
+            nohup node server.js > ~/vla-staging-api.log 2>&1 &
+            echo "API server started with PID $!"
 
             echo "Staging deployment completed at $(date)"
