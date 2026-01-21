@@ -7,6 +7,18 @@ const nextConfig: NextConfig = {
     unoptimized: true, // Required for static export
   },
   turbopack: {}, // Silence Turbopack warning
+
+  // Development proxy for API server
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: '/api/:path*',
+          destination: 'http://localhost:3001/api/:path*',
+        },
+      ],
+    };
+  },
 };
 
 export default nextConfig;
