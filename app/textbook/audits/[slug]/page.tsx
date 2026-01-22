@@ -34,7 +34,7 @@ export async function generateStaticParams() {
         .filter(file => file.endsWith(".mdx") && file !== "README.mdx");
 
       params.push(...stagingFiles.map(file => ({
-        slug: \`staging/\${file.replace(".mdx", "")}\`,
+        slug: `staging/${file.replace(".mdx", "")}`,
       })));
     }
   }
@@ -50,8 +50,8 @@ export async function generateMetadata({ params }: PageProps) {
   const isStaging = slug.startsWith("staging/");
   const fileName = isStaging ? slug.replace("staging/", "") : slug;
   const filePath = isStaging
-    ? path.join(auditsDir, "staging", \`\${fileName}.mdx\`)
-    : path.join(auditsDir, \`\${fileName}.mdx\`);
+    ? path.join(auditsDir, "staging", `${fileName}.mdx`)
+    : path.join(auditsDir, `${fileName}.mdx`);
 
   if (!fs.existsSync(filePath)) {
     return { title: "Audit Not Found" };
@@ -61,7 +61,7 @@ export async function generateMetadata({ params }: PageProps) {
   const { data } = matter(fileContents);
 
   return {
-    title: \`\${data.title || "Paper Audit"} - VLA Foundations\`,
+    title: `${data.title || "Paper Audit"} - VLA Foundations`,
     description: data.paper || "Paper audit by CSCI 7000 student",
   };
 }
@@ -74,8 +74,8 @@ export default async function AuditPage({ params }: PageProps) {
   const isStaging = slug.startsWith("staging/");
   const fileName = isStaging ? slug.replace("staging/", "") : slug;
   const filePath = isStaging
-    ? path.join(auditsDir, "staging", \`\${fileName}.mdx\`)
-    : path.join(auditsDir, \`\${fileName}.mdx\`);
+    ? path.join(auditsDir, "staging", `${fileName}.mdx`)
+    : path.join(auditsDir, `${fileName}.mdx`);
 
   if (!fs.existsSync(filePath)) {
     notFound();

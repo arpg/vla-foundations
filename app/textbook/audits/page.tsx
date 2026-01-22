@@ -56,7 +56,7 @@ function getAllAudits(includeStaging: boolean = false): AuditMetadata[] {
           author: data.author || "Unknown",
           paper: data.paper || "Unknown Paper",
           topic: data.topic || "General",
-          slug: \`staging/\${file.replace(".mdx", "")}\`,
+          slug: `staging/${file.replace(".mdx", "")}`,
           isStaging: true,
         });
       }
@@ -100,7 +100,7 @@ export default function AuditsPage() {
               {productionAudits.map((audit) => (
                 <Link
                   key={audit.slug}
-                  href={\`/textbook/audits/\${audit.slug}\`}
+                  href={`/textbook/audits/${audit.slug}`}
                   className="block border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -134,7 +134,7 @@ export default function AuditsPage() {
               {stagingAudits.map((audit) => (
                 <Link
                   key={audit.slug}
-                  href={\`/textbook/audits/\${audit.slug}\`}
+                  href={`/textbook/audits/${audit.slug}`}
                   className="block border border-yellow-200 bg-yellow-50 rounded-lg p-6 hover:shadow-lg transition-shadow"
                 >
                   <div className="flex items-start justify-between mb-3">
