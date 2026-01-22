@@ -4,11 +4,16 @@
 
 ## Introduction: The Multimodal Trajectory (2023–2025)
 
-Multi-modality is the framework that enables a model to process and generate information across disparate data types; for VLMs, this is the gap between pixels and linguistc/textual tokens. In robotics, this represents the shift from a robot that sees its environment versus one that can understand or reason about its physical interactions within it. 
+Multi-modality is the framework that enables a model to process and generate information across disparate data types; for VLMs, this is the gap between pixels and linguistc/textual tokens.
+In robotics, this represents the shift from a robot that sees its environment versus one that can understand or reason about its physical interactions within it. 
 
-Before 2023, vision-language alignment relied on expensive, human labeled datasets. With the introduction of LLaVA in 2023, general-purpose LLMs were able to follow visual instructions by treating visual tokens as "foreign language" prefix to a conversation. 
+Before 2023, vision-language alignment relied on expensive, human labeled datasets.
+With the introduction of LLaVA in 2023, general-purpose LLMs were able to follow visual instructions by treating visual tokens as "foreign language" prefix to a conversation. 
 
-Since LLaVA, the landscape of Vision-Language Models (VLMs) has transitioned from modular bridging architectures to native multimodal/omni archiecture   systems. Early innovations like **LLaVA** introduced the concept of visual instruction tuning, treating image features as "foreign language" tokens. **Prismatic** later refined this by auditing the design space and optimizing its Prisms (doublecheck what their models are called) by fusing semantic and geometric encoders to minimize information decay. And lastly, the state-of-the-art (kali note: this might be overstated) is defined by **Qwen V3**, which replaces the bridge with a unified latent space for text, images, and video, enabling long-context agency and a self-correcting thinking mode.
+Since LLaVA, the landscape of Vision-Language Models (VLMs) has transitioned from modular bridging architectures to native multimodal/omni archiecture   systems.
+Early innovations like **LLaVA** introduced the concept of visual instruction tuning, treating image features as "foreign language" tokens.
+**Prismatic** later refined this by auditing the design space and optimizing its Prisms (doublecheck what their models are called) by fusing semantic and geometric encoders to minimize information decay.
+And lastly, the state-of-the-art (kali note: this might be overstated) is defined by **Qwen V3**, which replaces the bridge with a unified latent space for text, images, and video, enabling long-context agency and a self-correcting thinking mode.
 
 ---
 
@@ -52,7 +57,11 @@ However, LLaVA's default `vision_feature_select_strategy="default"` **excludes t
 $$Z_v = Z_v^{\text{full}}[1:] \in \mathbb{R}^{576 \times 1024}$$
 The [CLS] Token/Departure from CLIP:
 
-CLIP adds a special [CLS] token at the beginning (common in transformer models). This token is meant to represent the entire image globally. So CLIP actually outputs 577 tokens (1 [CLS] + 576 patches). By default, LLaVA drops the [CLS] token and only uses the 576 spatial patches. The [CLS] token is a global summary but loses spatial details; LLaVA preserves more fine-grained spatial information. 
+CLIP adds a special [CLS] token at the beginning (common in transformer models).
+This token is meant to represent the entire image globally.
+So CLIP actually outputs 577 tokens (1 [CLS] + 576 patches).
+By default, LLaVA drops the [CLS] token and only uses the 576 spatial patches.
+The [CLS] token is a global summary but loses spatial details; LLaVA preserves more fine-grained spatial information. 
 
 
 #### The Architectural Transition: 1.0 to 1.5
@@ -60,9 +69,13 @@ The transition from LLaVA 1.0 to 1.5 represents a move from simple alignment to 
 
 | Feature | LLaVA 1.0 | LLaVA 1.5 |
 | :--- | :--- | :--- |
-| **Connector** | **Linear Projection**: A single trainable matrix aligning feature spaces. | **2-layer MLP (GELU)**: A non-linear bridge that better interprets visual features. |
-| **Input Res.** | 224px (standard CLIP input). | 336px (upscaled for fine-grained OCR). |
-| **Tokens ($N_p$)** | 256 patches. | 576 patches ($24 \times 24$ grid). |
+| **Connector** | Linear Projection | 2-layer MLP (GELU) |
+| **Input Res.** | 224px | 336px |
+| **Tokens ($N_p$)** | 256 patches | 576 patches ($24 \times 24$ grid) |
+
+**Connector Evolution:**
+- **LLaVA 1.0**: Linear projection - a single trainable matrix aligning feature spaces.
+- **LLaVA 1.5**: 2-layer MLP with GELU - a non-linear bridge that better interprets visual features.
 
 [add image showing the CLIP encoder, MLP connector, and LLM backbone]
 
@@ -72,7 +85,9 @@ The mapping $W: \mathbb{R}^{1024} \rightarrow \mathbb{R}^{4096}$ appears to incr
 **Theorem (Rank Bound):** The effective rank of $W \cdot Z_v$ satisfies:
 $$\text{rank}(W \cdot Z_v) \leq \min(\text{rank}(W), \text{rank}(Z_v)) \leq \min(1024, 576) = 576$$
 
-*Proof:* For any matrices $A \in \mathbb{R}^{m \times n}$ and $B \in \mathbb{R}^{n \times p}$, $\text{rank}(AB) \leq \min(\text{rank}(A), \text{rank}(B))$. Since $Z_v \in \mathbb{R}^{576 \times 1024}$, we have $\text{rank}(Z_v) \leq 576$. The projection is injective but maps to a low-dimensional manifold embedded in $\mathbb{R}^{4096}$. 
+*Proof:* For any matrices $A \in \mathbb{R}^{m \times n}$ and $B \in \mathbb{R}^{n \times p}$, $\text{rank}(AB) \leq \min(\text{rank}(A), \text{rank}(B))$.
+Since $Z_v \in \mathbb{R}^{576 \times 1024}$, we have $\text{rank}(Z_v) \leq 576$.
+The projection is injective but maps to a low-dimensional manifold embedded in $\mathbb{R}^{4096}$. 
 
 **Information-Theoretic Perspective:**
 
@@ -262,7 +277,8 @@ Qwen V3 replaces the MLP bridge with a unified "Omni-architecture":
 
 ## 0. Problem Domain & Why It Matters
 
-**Problem:** Build a *single* autoregressive multimodal model that can reason over **interleaved text+images+video** at **256K tokens** natively, and extrapolate to **~1M tokens** (~2h video) without catastrophic decay in temporal localization, document retrieval, or language performance. Qwen3-VL explicitly frames “maintaining strong pure-text capabilities” as part of the goal.  
+**Problem:** Build a *single* autoregressive multimodal model that can reason over **interleaved text+images+video** at **256K tokens** natively, and extrapolate to **~1M tokens** (~2h video) without catastrophic decay in temporal localization, document retrieval, or language performance.
+Qwen3-VL explicitly frames "maintaining strong pure-text capabilities" as part of the goal.  
 
 **Why it’s hard (first principles):**
 
@@ -280,7 +296,8 @@ We can classify long-context multimodal systems along four axes:
 ### 1.1 Positional encoding for space–time (t,h,w)
 
 **Camp A: Factorized rotary encoding (MRoPE-style).**
-Classic MRoPE partitions embedding dimensions into temporal/spatial subspaces. Qwen3-VL claims this creates an **imbalanced frequency spectrum** that degrades long-video understanding. 
+Classic MRoPE partitions embedding dimensions into temporal/spatial subspaces.
+Qwen3-VL claims this creates an **imbalanced frequency spectrum** that degrades long-video understanding. 
 
 **Camp B: Frequency-balanced / interleaved rotary.**
 Qwen3-VL’s **Interleaved MRoPE** interleaves the t/h/w components across embedding dimensions so each axis spans both low and high frequencies. 
@@ -466,7 +483,8 @@ They also describe a staged long-context training strategy: one epoch at **32K**
 
 ### 6.1 Needle-in-a-Haystack (long video retrieval/grounding stress test)
 
-Evaluation setup: insert a salient “needle” frame at variable temporal positions; model must locate and answer a question. Videos sampled at **1 FPS**, with **dynamic frame resolution to maintain a constant visual token budget**. 
+Evaluation setup: insert a salient "needle" frame at variable temporal positions; model must locate and answer a question.
+Videos sampled at **1 FPS**, with **dynamic frame resolution to maintain a constant visual token budget**. 
 
 Results:
 
@@ -514,7 +532,8 @@ In robotics, the “critical bits” often live in high-frequency cues: thin edg
 
 ### 6.3 Semantic-motor gap: “reasoning” ≠ “motor primitives”
 
-Qwen3-VL is a **vision–language foundation model**. The report discusses bridging perception, reasoning, and action broadly (including GUI-agent data), but it does not specify a robotics action-tokenization scheme, controller interface, or embodied policy training loop in the core architecture sections we’ve examined. 
+Qwen3-VL is a **vision–language foundation model**.
+The report discusses bridging perception, reasoning, and action broadly (including GUI-agent data), but it does not specify a robotics action-tokenization scheme, controller interface, or embodied policy training loop in the core architecture sections we've examined. 
 
 > **Audit takeaway:** Great for *understanding* and *planning narratives*. Not automatically a robot policy.
 
