@@ -1,5 +1,6 @@
 import { AuditLayout } from '@/components/audit/AuditLayout';
 import { getAllAudits, getAuditBySlug, getAuditContent } from '@/lib/audits';
+import { getAllChapters } from '@/lib/chapters';
 import { notFound } from 'next/navigation';
 import { MDXRemote } from 'next-mdx-remote/rsc';
 import remarkMath from 'remark-math';
@@ -8,7 +9,6 @@ import remarkGfm from 'remark-gfm';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ review?: string }>;
 }
 
 export async function generateStaticParams() {
@@ -34,10 +34,10 @@ export async function generateMetadata({ params }: PageProps) {
   };
 }
 
-export default async function AuditPage({ params, searchParams }: PageProps) {
+export default async function AuditPage({ params }: PageProps) {
   const { slug } = await params;
-  const { review } = await searchParams;
   const audit = getAuditBySlug(slug);
+  const chapters = getAllChapters();
 
   if (!audit) {
     notFound();
@@ -49,15 +49,8 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
     notFound();
   }
 
-  // Check if we're in review mode (from query param)
-  const isReviewMode = review === 'true';
-
   return (
-    <AuditLayout
-      prNumber={audit.prNumber}
-      slug={slug}
-      isReviewMode={isReviewMode}
-    >
+    <AuditLayout chapters={chapters}>
       <MDXRemote
         source={content}
         options={{
