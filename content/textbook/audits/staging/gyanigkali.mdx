@@ -321,7 +321,7 @@ Qwen3-VL injects visual tokens into multiple early LLM layers, using intermediat
 Qwen3-VL argues this yields **large and sparse temporal position IDs** for long videos, and requires heavy fps-diverse sampling, raising data construction cost. 
 
 **Camp B: Textual time tokens.**
-Qwen3-VL adopts timestamp tokens like `<3.0 seconds>` and also trains with HMS formats. 
+Qwen3-VL adopts timestamp tokens like `&lt;3.0 seconds&gt;` and also trains with HMS formats. 
 
 ### 1.4 Long-context training
 
@@ -456,7 +456,7 @@ $$
 ### 4.2 Video timestamp tokens: symbolic time vs positional time
 
 Qwen3-VL argues time-synced MRoPE produces sparse/huge temporal IDs for long videos and requires costly fps-uniform sampling. 
-They adopt textual timestamps such as `<3.0 seconds>` and train with both seconds and HMS formats. 
+They adopt textual timestamps such as `&lt;3.0 seconds&gt;` and train with both seconds and HMS formats. 
 
 Let each temporal patch be prefixed with a tokenized timestamp (\tau_i):
 $$
