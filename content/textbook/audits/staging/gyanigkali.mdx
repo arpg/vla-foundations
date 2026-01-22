@@ -549,19 +549,8 @@ However, the exact alignment mechanism is under-specified.
 
 ---
 
-<!-- ## 9. “Obvious Bugs” (where logic diverges from physical reality)
-
-1. **Transparent/specular object interactions**
-   Compression + purely RGB tokenization tends to fail in contact-critical settings. The merger bottleneck is a suspect. 
-
-2. **High-velocity dynamic obstacles**
-   Long-context + autoregressive decoding adds latency; without a measured Hz budget, this is a likely failure mode. 
-
-3. **Occlusion + object permanence over manipulation**
-   Long context helps memory, but the model must maintain a physically consistent belief state; the report doesn’t specify mechanisms for persistent world-state tracking under action. -->
 
 ---
-GPT idea
 ## 8. The Next 10,000 GPU-hour Experiment (If I’m Senior Staff)
 
 **Goal:** Convert Qwen3-VL from a long-context multimodal reasoner into a **closed-loop embodied system** without destroying its strengths.
