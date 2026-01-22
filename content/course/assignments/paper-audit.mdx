@@ -124,7 +124,81 @@ Refer to the [Sign-up Sheet](https://docs.google.com/spreadsheets/d/1KPhf81o5RBO
 
 ## Submission Logistics
 
-- **Branching:** Create a branch `audit/your-name-paper-name`.
-- **PR to Staging:** Submit your MDX file to `content/textbook/audits/`.
-- **Build Check:** Your PR must pass the GitHub Action audit (no broken $\LaTeX$ or malformed frontmatter).
-- **Instructor Sync:** Once the build is green, tag `@crheckman` for Instructor Review.
+### Step 1: Create Your Branch
+
+Create a descriptive branch for your audit:
+
+```bash
+git checkout -b audit/your-github-handle-paper-topic
+```
+
+Example: `git checkout -b audit/johndoe-siglip`
+
+### Step 2: Add Your Audit MDX File
+
+Place your audit in the **staging directory**:
+
+```bash
+content/textbook/audits/staging/your-github-handle.mdx
+```
+
+**Required frontmatter:**
+```mdx
+---
+title: "SigLIP: Sigmoid Loss for Language-Image Pre-training"
+author: "John Doe"
+paper: "SigLIP (CVPR 2023)"
+topic: "Vision Foundations"
+---
+
+# Your audit content here...
+```
+
+### Step 3: Open a Pull Request
+
+1. **Commit and push your audit:**
+   ```bash
+   git add content/textbook/audits/staging/your-github-handle.mdx
+   git commit -m "audit: add SigLIP deep-dive by John Doe"
+   git push origin audit/your-github-handle-paper-topic
+   ```
+
+2. **Create the PR:**
+   - **Base branch:** `main`
+   - **Title:** `Audit: [Paper Topic] - [Your Name]`
+   - **Description:** Include a brief summary of your audit focus
+
+3. **Automatic preview link:** A bot will automatically comment on your PR with a preview URL where you can view your rendered audit. This preview URL will be:
+   ```
+   https://vla-foundations-git-[branch-name]-arpg.vercel.app/textbook/audits/staging/your-github-handle
+   ```
+
+### Step 4: Review Your Preview
+
+Before requesting instructor review:
+
+- ✅ Verify all LaTeX equations render correctly
+- ✅ Check that all sections are complete per the requirements
+- ✅ Ensure references are properly formatted
+- ✅ Confirm figures/diagrams display correctly
+
+### Step 5: Request Instructor Review
+
+Once your preview looks good:
+
+1. Tag `@crheckman` in a PR comment
+2. Indicate you're ready for review
+3. The preview URL makes it easy for the instructor to review your rendered audit alongside the PR code
+
+### Step 6: Iterate Based on Feedback
+
+- Push updates to your branch as needed
+- The preview URL will automatically update
+- Continue iterating until your audit reaches "Merge-Ready" status (Level 3/A)
+
+### Important Notes
+
+- **Linear git history required:** Use `git rebase` to keep your history clean
+- **Build must pass:** PRs with broken LaTeX or malformed frontmatter will not be reviewed
+- **Preview-only:** Your audit will only be visible in preview deployments until merged to main
+- **Production publishing:** Once your audit is approved and merged, it will appear at `/textbook/audits/your-github-handle` on the live site
