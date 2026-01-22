@@ -294,7 +294,6 @@ Qwen3-VL explicitly frames "maintaining strong pure-text capabilities" as part o
 
 ---
 
-<!-- ## 1. Taxonomy of Approaches (last ~24–36 months) -->
 
 We can classify long-context multimodal systems along four axes:
 
@@ -482,26 +481,7 @@ Qwen3-VL pretraining is structured into **four stages** with growing context win
 
 They also describe a staged long-context training strategy: one epoch at **32K**, then one at **256K**; the 256K phase interleaves 32K samples and includes “videos up to two hours.” 
 
-<!-- --- -->
 
-<!-- ## 6. Scaling Frontier & Empirical Trends
-
-### 6.1 Needle-in-a-Haystack (long video retrieval/grounding stress test)
-
-Evaluation setup: insert a salient "needle" frame at variable temporal positions; model must locate and answer a question.
-Videos sampled at **1 FPS**, with **dynamic frame resolution to maintain a constant visual token budget**. 
-
-Results:
-
-* **100%** accuracy up to **30 minutes** (≈ **256K tokens**) 
-* **99.5%** accuracy at **~1M tokens** (~2h) via **YaRN-based positional extension** 
-
-> **Audit critique:** This is a strong *retrieval under long context* test. It is not sufficient evidence for **causal temporal reasoning** (multi-event dependency chains) or **closed-loop control stability**.
-
-### 6.2 “Maintaining pure-text” claim
-
-The report states Qwen3-VL “surpasses its text-only counterpart on the majority of language benchmarks.” 
-They also compare Qwen3-VL-235B variants vs baselines and note competitive results among “thinking” models.  -->
 
 ---
 
