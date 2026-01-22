@@ -9,12 +9,12 @@ import remarkGfm from "remark-gfm";
 import matter from "gray-matter";
 
 interface PageProps {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string[] }>;
 }
 
 export async function generateStaticParams() {
   const auditsDir = path.join(process.cwd(), "content", "textbook", "audits");
-  const params: { slug: string }[] = [];
+  const params: { slug: string[] }[] = [];
 
   // Generate params for production audits
   if (fs.existsSync(auditsDir)) {
@@ -22,19 +22,19 @@ export async function generateStaticParams() {
       .filter(file => file.endsWith(".mdx") && file !== "README.mdx");
 
     params.push(...files.map(file => ({
-      slug: file.replace(".mdx", ""),
+      slug: [file.replace(".mdx", "")],
     })));
   }
 
   // Generate params for staging audits (only in preview/dev)
-  if (process.env.VERCEL_ENV !== "production") {
+  if (process.env.VERCEL_ENV !== "production" && process.env.STAGING_PR_NUMBER !== undefined) {
     const stagingDir = path.join(auditsDir, "staging");
     if (fs.existsSync(stagingDir)) {
       const stagingFiles = fs.readdirSync(stagingDir)
         .filter(file => file.endsWith(".mdx") && file !== "README.mdx");
 
       params.push(...stagingFiles.map(file => ({
-        slug: `staging/${file.replace(".mdx", "")}`,
+        slug: ["staging", file.replace(".mdx", "")],
       })));
     }
   }
@@ -45,10 +45,10 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params;
   const auditsDir = path.join(process.cwd(), "content", "textbook", "audits");
-  
+
   // Check if it's a staging audit
-  const isStaging = slug.startsWith("staging/");
-  const fileName = isStaging ? slug.replace("staging/", "") : slug;
+  const isStaging = slug[0] === "staging";
+  const fileName = isStaging ? slug[1] : slug[0];
   const filePath = isStaging
     ? path.join(auditsDir, "staging", `${fileName}.mdx`)
     : path.join(auditsDir, `${fileName}.mdx`);
@@ -69,10 +69,10 @@ export async function generateMetadata({ params }: PageProps) {
 export default async function AuditPage({ params }: PageProps) {
   const { slug } = await params;
   const auditsDir = path.join(process.cwd(), "content", "textbook", "audits");
-  
+
   // Check if it's a staging audit
-  const isStaging = slug.startsWith("staging/");
-  const fileName = isStaging ? slug.replace("staging/", "") : slug;
+  const isStaging = slug[0] === "staging";
+  const fileName = isStaging ? slug[1] : slug[0];
   const filePath = isStaging
     ? path.join(auditsDir, "staging", `${fileName}.mdx`)
     : path.join(auditsDir, `${fileName}.mdx`);
@@ -115,7 +115,7 @@ export default async function AuditPage({ params }: PageProps) {
               </span>
             )}
           </div>
-          
+
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             {data.title || "Paper Audit"}
           </h1>
