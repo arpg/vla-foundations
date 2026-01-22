@@ -5,6 +5,7 @@ VLA Audit Linter - Enforces "Senior Staff" engineering standards for student pap
 Checks:
 1. Semantic Line Breaks: Sentences should be on separate lines for easier PR commenting
 2. Clean History: No "Merge branch" commits allowed in PR branch
+3. MDX Syntax: Proper frontmatter, no HTML comments, escaped angle brackets
 """
 
 import sys
@@ -29,6 +30,74 @@ def check_semantic_breaks(file_path):
                 f"{file_path}:Line {i}: Potential wall-of-text detected. "
                 "Use semantic line breaks (one sentence per line)."
             )
+    return errors
+
+def check_mdx_syntax(file_path):
+    """Check for MDX-specific syntax issues."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+        lines = content.splitlines()
+
+    errors = []
+
+    # Check 1: Must have YAML frontmatter at the start
+    if not content.startswith('---'):
+        errors.append(
+            f"{file_path}: Missing YAML frontmatter. File must start with '---' followed by "
+            "title, author, paper, and topic fields."
+        )
+
+    # Check 2: No HTML comments (should use JSX-style {/* */})
+    if '<!--' in content:
+        for i, line in enumerate(lines, start=1):
+            if '<!--' in line:
+                errors.append(
+                    f"{file_path}:Line {i}: HTML comment detected. "
+                    "MDX requires JSX-style comments: {{/* comment */}}"
+                )
+
+    # Check 3: Unescaped angle brackets outside code blocks
+    in_code_block = False
+    in_frontmatter = False
+    frontmatter_count = 0
+
+    for i, line in enumerate(lines, start=1):
+        # Track code blocks
+        if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+            continue
+
+        # Track frontmatter
+        if line.strip() == '---':
+            frontmatter_count += 1
+            if frontmatter_count <= 2:
+                in_frontmatter = not in_frontmatter
+            continue
+
+        # Skip if in code block or frontmatter
+        if in_code_block or in_frontmatter:
+            continue
+
+        # Check for problematic angle brackets (not in LaTeX $...$ or proper HTML tags)
+        # Look for < followed by a number or special char (like <! or <?)
+        if '<' in line:
+            # Remove LaTeX expressions
+            cleaned = line
+            import re
+            # Remove inline math
+            cleaned = re.sub(r'\$[^\$]+\$', '', cleaned)
+            # Remove display math
+            cleaned = re.sub(r'\$\$[^\$]+\$\$', '', cleaned)
+            # Remove code spans
+            cleaned = re.sub(r'`[^`]+`', '', cleaned)
+
+            # Now check for problematic patterns
+            if re.search(r'<[0-9!?]', cleaned):
+                errors.append(
+                    f"{file_path}:Line {i}: Unescaped angle bracket detected. "
+                    "Use HTML entities (&lt;) or wrap in code backticks."
+                )
+
     return errors
 
 def check_git_history():
@@ -67,6 +136,7 @@ if __name__ == "__main__":
 
     all_errors = []
     for f in audit_files:
+        all_errors.extend(check_mdx_syntax(f))
         all_errors.extend(check_semantic_breaks(f))
     all_errors.extend(check_git_history())
 
