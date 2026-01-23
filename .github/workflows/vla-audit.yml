@@ -101,6 +101,11 @@ jobs:
             # Extract the audit filename
             AUDIT_FILE=$(echo "$FILES" | grep "content/textbook/audits/staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
             echo "slug=textbook/audits/staging/${AUDIT_FILE}" >> $GITHUB_OUTPUT
+          elif echo "$FILES" | grep -q "content/textbook/audits/.*\.mdx"; then
+            echo "type=audit" >> $GITHUB_OUTPUT
+            # Extract the audit filename (production location)
+            AUDIT_FILE=$(echo "$FILES" | grep "content/textbook/audits/.*\.mdx" | grep -v "staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            echo "slug=textbook/audits/${AUDIT_FILE}" >> $GITHUB_OUTPUT
           elif echo "$FILES" | grep -q "content/contributors/"; then
             echo "type=contributor" >> $GITHUB_OUTPUT
             # Extract the contributor filename
