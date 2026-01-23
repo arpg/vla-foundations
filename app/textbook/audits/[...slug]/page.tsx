@@ -7,6 +7,8 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import matter from "gray-matter";
+import { AuditLayout } from "@/components/audit/AuditLayout";
+import { getAllChapters } from "@/lib/chapters";
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
@@ -84,73 +86,72 @@ export default async function AuditPage({ params }: PageProps) {
   const fileContents = fs.readFileSync(filePath, "utf8");
   const { data, content } = matter(fileContents);
 
-  return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-4xl mx-auto px-6 py-16">
-        <Link href="/textbook/audits" className="text-sm text-blue-600 hover:text-blue-800 mb-8 inline-block">
-          ← Back to Audits
-        </Link>
+  // Get chapters for sidebar
+  const chapters = getAllChapters();
 
-        {/* Staging Banner */}
-        {isStaging && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 px-6 py-4 mb-8 rounded">
-            <p className="font-bold text-lg">⚠️ DRAFT AUDIT - UNDER REVIEW</p>
-            <p className="mt-2 text-sm">
-              This is a preview of a student audit currently under review. Content may change before final publication.
-            </p>
-          </div>
+  return (
+    <AuditLayout chapters={chapters}>
+      <Link href="/textbook/audits" className="text-sm text-blue-600 hover:text-blue-800 mb-8 inline-block">
+        ← Back to Audits
+      </Link>
+
+      {/* Staging Banner */}
+      {isStaging && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 px-6 py-4 mb-8 rounded">
+          <p className="font-bold text-lg">⚠️ DRAFT AUDIT - UNDER REVIEW</p>
+          <p className="mt-2 text-sm">
+            This is a preview of a student audit currently under review. Content may change before final publication.
+          </p>
+        </div>
+      )}
+
+      {/* Audit Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          {data.topic && (
+            <span className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+              {data.topic}
+            </span>
+          )}
+          {isStaging && (
+            <span className="text-sm font-medium text-yellow-700 bg-yellow-100 px-3 py-1 rounded-full">
+              DRAFT
+            </span>
+          )}
+        </div>
+
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          {data.title || "Paper Audit"}
+        </h1>
+
+        {data.paper && (
+          <p className="text-xl text-gray-600 mb-4">{data.paper}</p>
         )}
 
-        {/* Audit Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            {data.topic && (
-              <span className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                {data.topic}
-              </span>
-            )}
-            {isStaging && (
-              <span className="text-sm font-medium text-yellow-700 bg-yellow-100 px-3 py-1 rounded-full">
-                DRAFT
-              </span>
-            )}
-          </div>
-
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            {data.title || "Paper Audit"}
-          </h1>
-
-          {data.paper && (
-            <p className="text-xl text-gray-600 mb-4">{data.paper}</p>
-          )}
-
-          {data.author && (
-            <p className="text-gray-700">
-              By <span className="font-medium">{data.author}</span>
-            </p>
-          )}
-        </div>
-
-        {/* MDX Content with KaTeX support */}
-        <div className="prose prose-lg max-w-none">
-          <MDXRemote
-            source={content}
-            options={{
-              mdxOptions: {
-                remarkPlugins: [remarkMath, remarkGfm],
-                rehypePlugins: [rehypeKatex],
-              },
-            }}
-          />
-        </div>
-
-        {/* Back to audits link at bottom */}
-        <div className="mt-12 pt-8 border-t border-gray-200">
-          <Link href="/textbook/audits" className="text-blue-600 hover:text-blue-800 font-medium">
-            ← Back to All Audits
-          </Link>
-        </div>
+        {data.author && (
+          <p className="text-gray-700">
+            By <span className="font-medium">{data.author}</span>
+          </p>
+        )}
       </div>
-    </div>
+
+      {/* MDX Content with KaTeX support */}
+      <MDXRemote
+        source={content}
+        options={{
+          mdxOptions: {
+            remarkPlugins: [remarkMath, remarkGfm],
+            rehypePlugins: [rehypeKatex],
+          },
+        }}
+      />
+
+      {/* Back to audits link at bottom */}
+      <div className="mt-12 pt-8 border-t border-gray-200">
+        <Link href="/textbook/audits" className="text-blue-600 hover:text-blue-800 font-medium">
+          ← Back to All Audits
+        </Link>
+      </div>
+    </AuditLayout>
   );
 }
