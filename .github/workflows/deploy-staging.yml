@@ -15,9 +15,12 @@ jobs:
           username: crh
           key: ${{ secrets.SSH_DEPLOY_KEY }}
           script: |
+            set -x  # Enable debug output
+
             # Navigate to staging build directory
             cd ~/vla-staging || mkdir -p ~/vla-staging
             cd ~/vla-staging
+            echo "DEBUG: In staging directory"
 
             # Clone or pull staging branch
             if [ ! -d ".git" ]; then
@@ -26,26 +29,33 @@ jobs:
               git fetch origin staging
               git reset --hard origin/staging
             fi
+            echo "DEBUG: Git update complete"
 
             # Install dependencies and build
             npm install
+            echo "DEBUG: npm install complete"
             npm run build
+            echo "DEBUG: Build complete"
 
             # Deploy to staging subdirectory
             mkdir -p /var/www/vlm-robotics.dev/public_html/staging
             cp -r out/* /var/www/vlm-robotics.dev/public_html/staging/
+            echo "DEBUG: Files copied to web root"
 
             # Install and restart API server
             cd api-server
+            echo "DEBUG: Changed to api-server directory"
             npm install
+            echo "DEBUG: API server npm install complete"
 
             # Kill any existing API server process
             pkill -f "node server.js" || true
+            echo "DEBUG: Killed existing processes"
             sleep 2
 
-            echo "Staging deployment completed at $(date)"
-
+            echo "DEBUG: About to start API server"
             # Start API server in background using setsid for proper daemonization
-            # Exit immediately after to prevent SSH timeout
             setsid node server.js > ~/vla-staging-api.log 2>&1 < /dev/null &
-            exit 0
+            echo "DEBUG: API server started"
+
+            echo "Staging deployment completed at $(date)"
