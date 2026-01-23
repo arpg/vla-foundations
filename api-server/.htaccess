@@ -1,5 +1,0 @@
-# Proxy API requests to Node.js server
-# Place this in /var/www/vlm-robotics.dev/public_html/api/.htaccess
-
-RewriteEngine On
-RewriteRule ^(.*)$ http://localhost:3001/api/$1 [P,L]

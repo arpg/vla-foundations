@@ -8,7 +8,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy Staging to Remote Server
+      - name: Deploy Static Site to Remote Server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ristoffer.ch
@@ -34,16 +34,5 @@ jobs:
             # Deploy to staging subdirectory
             mkdir -p /var/www/vlm-robotics.dev/public_html/staging
             cp -r out/* /var/www/vlm-robotics.dev/public_html/staging/
-
-            # Install and restart API server
-            cd api-server
-            npm install
-
-            # Kill any existing API server process
-            pkill -f "node server.js" || true
-
-            # Start API server in background
-            nohup node server.js > ~/vla-staging-api.log 2>&1 &
-            echo "API server started with PID $!"
 
             echo "Staging deployment completed at $(date)"
