@@ -41,10 +41,11 @@ jobs:
 
             # Kill any existing API server process
             pkill -f "node server.js" || true
-            sleep 1
-
-            # Start API server in background (properly detached)
-            nohup node server.js > ~/vla-staging-api.log 2>&1 < /dev/null &
-            echo "API server started"
+            sleep 2
 
             echo "Staging deployment completed at $(date)"
+
+            # Start API server in background using setsid for proper daemonization
+            # Exit immediately after to prevent SSH timeout
+            setsid node server.js > ~/vla-staging-api.log 2>&1 < /dev/null &
+            exit 0
