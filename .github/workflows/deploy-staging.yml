@@ -36,20 +36,3 @@ jobs:
             cp -r out/* /var/www/vlm-robotics.dev/public_html/staging/
 
             echo "Staging deployment completed at $(date)"
-
-      - name: Start API Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ristoffer.ch
-          username: crh
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          script: |
-            cd ~/vla-staging/api-server
-            npm install
-
-            # Kill existing process
-            pkill -f "node server.js" || true
-            sleep 1
-
-            # Start in background
-            nohup node server.js > ~/vla-staging-api.log 2>&1 &
