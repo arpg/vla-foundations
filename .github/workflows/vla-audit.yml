@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for diff
 
       - uses: pnpm/action-setup@v2
         with:
@@ -87,24 +89,51 @@ jobs:
           target-folder: staging/pulls/${{ github.event.pull_request.number }}
           clean: false
 
+      - name: Detect Content Type
+        id: detect
+        run: |
+          # Get files changed in this PR
+          git fetch origin ${{ github.base_ref }}
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          if echo "$FILES" | grep -q "content/textbook/audits/staging/"; then
+            echo "type=audit" >> $GITHUB_OUTPUT
+            # Extract the audit filename
+            AUDIT_FILE=$(echo "$FILES" | grep "content/textbook/audits/staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            echo "slug=textbook/audits/staging/${AUDIT_FILE}" >> $GITHUB_OUTPUT
+          elif echo "$FILES" | grep -q "content/contributors/"; then
+            echo "type=contributor" >> $GITHUB_OUTPUT
+            # Extract the contributor filename
+            CONTRIB_FILE=$(echo "$FILES" | grep "content/contributors/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            echo "slug=contributors/${CONTRIB_FILE}" >> $GITHUB_OUTPUT
+          else
+            echo "type=other" >> $GITHUB_OUTPUT
+            echo "slug=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Comment PR with Preview Link
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           message: |
-            🚀 **Audit Rendered**
+            🚀 **Preview Deployed**
 
-            Your paper audit preview is ready for review!
+            Your preview is ready for review!
 
-            🔗 **Preview URL:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/staging/pulls/${{ github.event.pull_request.number }}/textbook/audits/staging/
+            🔗 **Preview URL:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/staging/pulls/${{ github.event.pull_request.number }}/${{ steps.detect.outputs.slug }}/
 
-            ### Review Checklist
+            ${{ steps.detect.outputs.type == 'audit' && '### Review Checklist
             - [ ] LaTeX equations render correctly
             - [ ] All sections are complete per the template
             - [ ] References are formatted properly
-            - [ ] Figures/diagrams display correctly
+            - [ ] Figures/diagrams display correctly' || '' }}
+
+            ${{ steps.detect.outputs.type == 'contributor' && '### Review Checklist
+            - [ ] Profile information is complete
+            - [ ] Image displays correctly
+            - [ ] Links are working' || '' }}
 
             ### Next Steps
-            1. Review your rendered audit using the preview link above
+            1. Review your rendered content using the preview link above
             2. Tag @crheckman when ready for instructor review
             3. Push updates to auto-refresh the preview
 
