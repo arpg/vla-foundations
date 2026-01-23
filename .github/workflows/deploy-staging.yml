@@ -41,9 +41,10 @@ jobs:
 
             # Kill any existing API server process
             pkill -f "node server.js" || true
+            sleep 1
 
-            # Start API server in background
-            nohup node server.js > ~/vla-staging-api.log 2>&1 &
-            echo "API server started with PID $!"
+            # Start API server in background (properly detached)
+            nohup node server.js > ~/vla-staging-api.log 2>&1 < /dev/null &
+            echo "API server started"
 
             echo "Staging deployment completed at $(date)"
