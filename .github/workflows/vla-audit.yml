@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for diff
 
       - uses: pnpm/action-setup@v2
         with:
@@ -90,15 +92,19 @@ jobs:
       - name: Detect Content Type
         id: detect
         run: |
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "content/textbook/audits/staging/"; then
+          # Get files changed in this PR
+          git fetch origin ${{ github.base_ref }}
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          if echo "$FILES" | grep -q "content/textbook/audits/staging/"; then
             echo "type=audit" >> $GITHUB_OUTPUT
             # Extract the audit filename
-            AUDIT_FILE=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep "content/textbook/audits/staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            AUDIT_FILE=$(echo "$FILES" | grep "content/textbook/audits/staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
             echo "slug=textbook/audits/staging/${AUDIT_FILE}" >> $GITHUB_OUTPUT
-          elif git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "content/contributors/"; then
+          elif echo "$FILES" | grep -q "content/contributors/"; then
             echo "type=contributor" >> $GITHUB_OUTPUT
             # Extract the contributor filename
-            CONTRIB_FILE=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep "content/contributors/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            CONTRIB_FILE=$(echo "$FILES" | grep "content/contributors/" | head -1 | xargs basename | sed 's/\.mdx$//')
             echo "slug=contributors/${CONTRIB_FILE}" >> $GITHUB_OUTPUT
           else
             echo "type=other" >> $GITHUB_OUTPUT
