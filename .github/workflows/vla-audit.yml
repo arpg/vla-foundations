@@ -144,3 +144,22 @@ jobs:
 
             ---
             *This preview will be removed when the PR is closed.*
+
+  trigger-shadow-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'staging'
+    needs: audit
+    steps:
+      - name: Trigger Shadow CI in Private Repo
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.PRIVATE_DISPATCH_TOKEN }}
+          repository: crheckman/private-vla-foundations
+          event-type: run-shadow-tests
+          client-payload: |
+            {
+              "pr_number": "${{ github.event.pull_request.number }}",
+              "head_branch": "${{ github.event.pull_request.head.ref }}",
+              "head_sha": "${{ github.event.pull_request.head.sha }}",
+              "repo_url": "${{ github.event.pull_request.head.repo.clone_url }}"
+            }
