@@ -20,8 +20,8 @@ set -euo pipefail
 echo "=== Sanitizing repository for public release ==="
 echo ""
 
-# Step 1: Delete private directories
-echo "Step 1: Removing private directories..."
+# Step 1: Delete private directories and scripts
+echo "Step 1: Removing private directories and scripts..."
 if [ -d "private/" ]; then
     rm -rf private/
     echo "  ✓ Removed: private/"
@@ -34,6 +34,13 @@ if [ -d "tests/internal/" ]; then
     echo "  ✓ Removed: tests/internal/"
 else
     echo "  ⊘ Not found: tests/internal/"
+fi
+
+if [ -d "scripts/dev/" ]; then
+    rm -rf scripts/dev/
+    echo "  ✓ Removed: scripts/dev/"
+else
+    echo "  ⊘ Not found: scripts/dev/"
 fi
 
 if [ -f "scripts/manage_solutions.py" ]; then

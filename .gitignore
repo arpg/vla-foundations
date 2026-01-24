@@ -55,6 +55,4 @@ __pycache__/
 /arxiv-digest/
 
 # Private solution infrastructure (NEVER commit to public branches)
-private/
-tests/internal/
 *.backup.py

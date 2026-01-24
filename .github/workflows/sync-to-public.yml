@@ -13,13 +13,61 @@ jobs:
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for proper sync
+          fetch-depth: 0  # Full history for proper sync and linting
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      # =====================================================================
+      # PRE-SYNC VALIDATION (FAIL-SAFE)
+      # =====================================================================
+
+      - name: Validate Git History (Senior Staff Form)
+        run: |
+          echo "=== Validating Git History ==="
+
+          # Check for merge commits (non-linear history)
+          MERGE_COMMITS=$(git log --merges --oneline | head -5)
+          if [ ! -z "$MERGE_COMMITS" ]; then
+            echo "⚠️  Warning: Found merge commits (non-linear history):"
+            echo "$MERGE_COMMITS"
+            echo ""
+            echo "Recommendation: Use rebase workflow for cleaner history"
+          fi
+
+          # Check recent commit messages for semantic structure
+          echo ""
+          echo "Recent commits:"
+          git log --oneline -5
+
+          # Check for conventional commit format
+          NON_SEMANTIC=$(git log --oneline -10 | grep -v -E "^[a-f0-9]+ (feat|fix|docs|style|refactor|test|chore|perf)(\(.+\))?:" || true)
+          if [ ! -z "$NON_SEMANTIC" ]; then
+            echo ""
+            echo "ℹ️  Note: Some commits don't follow Conventional Commits format"
+            echo "   Consider using: feat(), fix(), docs(), etc."
+          fi
+
+          echo ""
+          echo "✅ Git history validation complete"
+
+      - name: Pre-Sanitization Linting
+        run: |
+          echo "=== Pre-Sanitization Linting ==="
+
+          # Run sanitization in dry-run mode first (with fail-safe checks)
+          echo "Running sanitization validation..."
+          python3 scripts/_sanitize_todos.py || {
+            echo "❌ FAIL-SAFE: Sanitization pre-check failed!"
+            echo "   Fix [SOLUTION] markers before creating release tag."
+            exit 1
+          }
+
+          echo ""
+          echo "✅ Pre-sanitization linting passed"
 
       - name: Display repository state
         run: |
@@ -30,9 +78,13 @@ jobs:
           ls -la tests/internal/ 2>/dev/null || echo "  (not found)"
           echo ""
 
+      # =====================================================================
+      # SANITIZATION PIPELINE
+      # =====================================================================
+
       - name: Run sanitization script
         run: |
-          echo "Running sanitization..."
+          echo "=== Running Sanitization Pipeline ==="
           bash scripts/sanitize.sh
 
       - name: Display repository state after sanitization
@@ -45,46 +97,95 @@ jobs:
           git diff HEAD~1 --name-only || echo "(no previous commit)"
           echo ""
 
-      - name: Dry run check for leaks
+      # =====================================================================
+      # POST-SANITIZATION VALIDATION (FAIL-SAFE)
+      # =====================================================================
+
+      - name: Post-Sanitization Leak Detection
         run: |
-          echo "=== Checking for Solution Leaks ==="
+          echo "=== FAIL-SAFE: Checking for Solution Leaks ==="
+
+          LEAK_FOUND=0
 
           # Check for TODO: [SOLUTION] comments
+          echo "1. Checking for TODO: [SOLUTION] patterns..."
           if grep -r "TODO:.*\[SOLUTION\]" src/ content/ 2>/dev/null; then
             echo "❌ ERROR: Found TODO: [SOLUTION] in sanitized code!"
-            exit 1
+            LEAK_FOUND=1
+          else
+            echo "   ✓ No TODO: [SOLUTION] found"
           fi
 
-          # Check for inline [SOLUTION] comments
+          # Check for any [SOLUTION] markers
+          echo ""
+          echo "2. Checking for [SOLUTION] markers..."
           if grep -r "\[SOLUTION\]" src/ content/ 2>/dev/null; then
             echo "❌ ERROR: Found [SOLUTION] markers in sanitized code!"
-            exit 1
+            LEAK_FOUND=1
+          else
+            echo "   ✓ No [SOLUTION] markers found"
           fi
 
           # Check that private/ is gone
+          echo ""
+          echo "3. Verifying private/ removal..."
           if [ -d "private/" ]; then
             echo "❌ ERROR: private/ directory still exists!"
-            exit 1
+            LEAK_FOUND=1
+          else
+            echo "   ✓ private/ removed"
           fi
 
           # Check that tests/internal/ is gone
+          echo ""
+          echo "4. Verifying tests/internal/ removal..."
           if [ -d "tests/internal/" ]; then
             echo "❌ ERROR: tests/internal/ directory still exists!"
-            exit 1
+            LEAK_FOUND=1
+          else
+            echo "   ✓ tests/internal/ removed"
           fi
 
           # Check that solution management script is gone
+          echo ""
+          echo "5. Verifying manage_solutions.py removal..."
           if [ -f "scripts/manage_solutions.py" ]; then
             echo "❌ ERROR: manage_solutions.py still exists!"
+            LEAK_FOUND=1
+          else
+            echo "   ✓ manage_solutions.py removed"
+          fi
+
+          # Check that dev scripts are gone
+          echo ""
+          echo "6. Verifying scripts/dev/ removal..."
+          if [ -d "scripts/dev/" ]; then
+            echo "❌ ERROR: scripts/dev/ directory still exists!"
+            LEAK_FOUND=1
+          else
+            echo "   ✓ scripts/dev/ removed"
+          fi
+
+          echo ""
+          if [ $LEAK_FOUND -eq 0 ]; then
+            echo "✅ LEAK DETECTION PASSED: Repository is clean"
+          else
+            echo "❌ LEAK DETECTION FAILED: Solution content remains!"
+            echo ""
+            echo "🚫 ABORTING SYNC - Fix sanitization issues"
             exit 1
           fi
 
-          echo "✅ Dry run passed: No solution leaks detected"
+      # =====================================================================
+      # PUSH TO PUBLIC REPOSITORY
+      # =====================================================================
 
       - name: Push to public repo
         env:
           PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
+          echo "=== Pushing to Public Repository ==="
+
           # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -101,9 +202,12 @@ jobs:
           git checkout -b "$RELEASE_BRANCH"
           git push public "$RELEASE_BRANCH" --force
 
+          echo ""
           echo "✅ Synced to public repo (branch: $RELEASE_BRANCH)"
           echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Next steps:"
-          echo "  1. Review the changes at: https://github.com/arpg/vla-foundations/tree/$RELEASE_BRANCH"
-          echo "  2. Create a PR to merge $RELEASE_BRANCH into main/staging"
-          echo "  3. After review, merge the PR to publish the release"
+          echo "  1. Review: https://github.com/arpg/vla-foundations/tree/$RELEASE_BRANCH"
+          echo "  2. Create PR to merge $RELEASE_BRANCH → main/staging"
+          echo "  3. After review, merge PR to publish release"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

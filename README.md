@@ -3,7 +3,38 @@
 Vision-Language-Action Foundations: A living textbook and course repository.
 
 **Live Site**: https://www.vlm-robotics.dev
-**GitHub**: https://github.com/arpg/vla-foundations
+
+---
+
+## ⚠️ REPOSITORY SOURCE OF TRUTH
+
+**You are in the PRIVATE repository**: `crheckman/private-vla-foundations`
+
+This repository contains:
+- ✅ Complete assignment solutions (in `private/solutions/`)
+- ✅ Internal grading tests (in `tests/internal/`)
+- ✅ Solution management scripts
+- ✅ All public content (synced to public repo)
+
+### Repository Map
+
+| Repository | Purpose | Push Changes Here | Visibility |
+|------------|---------|-------------------|------------|
+| **`crheckman/private-vla-foundations`** | Instructor development | ✅ YES - Work here | 🔒 Private |
+| **`arpg/vla-foundations`** | Student access | ❌ NO - Auto-synced | 🌐 Public |
+
+### ⚠️ DO NOT push directly to `arpg/vla-foundations`
+
+The public repository is **automatically synced** from this private repository using GitHub Actions when you create a release tag. See `PRIVATE_REPO_SETUP.md` for workflow details.
+
+**To release changes to public:**
+```bash
+git tag release-scratch-1
+git push origin release-scratch-1
+# GitHub Actions automatically sanitizes and syncs to public repo
+```
+
+---
 
 ## Project Overview
 
