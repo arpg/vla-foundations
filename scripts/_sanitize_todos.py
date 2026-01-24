@@ -33,6 +33,19 @@ TODO_REPLACEMENT = "# TODO: Complete implementation"
 # Pattern for inline [SOLUTION] comments
 INLINE_PATTERN = re.compile(r'\s*#\s*\[SOLUTION\]:?.*$', re.MULTILINE)
 
+# Pattern for multi-line [SOLUTION] comment blocks (e.g., triple-quoted strings or consecutive comments)
+# Matches multi-line comments starting with [SOLUTION] and continuing until a non-comment line
+MULTILINE_SOLUTION_PATTERN = re.compile(
+    r'^\s*#\s*\[SOLUTION\].*?(?:\n\s*#.*?)*',
+    re.MULTILINE | re.DOTALL
+)
+
+# Pattern for triple-quoted [SOLUTION] docstrings
+DOCSTRING_SOLUTION_PATTERN = re.compile(
+    r'("""|\'\'\')\s*\[SOLUTION\].*?\1',
+    re.DOTALL
+)
+
 # Pattern to detect ANY remaining [SOLUTION] markers (for verification)
 SOLUTION_MARKER_PATTERN = re.compile(r'\[SOLUTION\]', re.IGNORECASE)
 
@@ -69,6 +82,14 @@ def sanitize_file(file_path: Path) -> Tuple[bool, int, List[str]]:
     original = content
     num_changes = 0
     warnings = []
+
+    # Remove multi-line [SOLUTION] comment blocks (must be done first)
+    content, multiline_count = MULTILINE_SOLUTION_PATTERN.subn('', content)
+    num_changes += multiline_count
+
+    # Remove triple-quoted [SOLUTION] docstrings
+    content, docstring_count = DOCSTRING_SOLUTION_PATTERN.subn('', content)
+    num_changes += docstring_count
 
     # Remove TODO: [SOLUTION] lines
     content, todo_count = TODO_PATTERN.subn(TODO_REPLACEMENT, content)

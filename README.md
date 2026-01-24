@@ -1,22 +1,14 @@
-# VLA Foundations
+# VLA Private Source of Truth (PST)
 
-Vision-Language-Action Foundations: A living textbook and course repository.
+**CONFIDENTIAL - INTERNAL USE ONLY**
+
+This repository contains solutions, hidden tests, and deployment keys for the VLA Foundations course.
 
 **Live Site**: https://www.vlm-robotics.dev
 
 ---
 
-## ⚠️ REPOSITORY SOURCE OF TRUTH
-
-**You are in the PRIVATE repository**: `crheckman/private-vla-foundations`
-
-This repository contains:
-- ✅ Complete assignment solutions (in `private/solutions/`)
-- ✅ Internal grading tests (in `tests/internal/`)
-- ✅ Solution management scripts
-- ✅ All public content (synced to public repo)
-
-### Repository Map
+## Repository Map
 
 | Repository | Purpose | Push Changes Here | Visibility |
 |------------|---------|-------------------|------------|
@@ -25,7 +17,7 @@ This repository contains:
 
 ### ⚠️ DO NOT push directly to `arpg/vla-foundations`
 
-The public repository is **automatically synced** from this private repository using GitHub Actions when you create a release tag. See `PRIVATE_REPO_SETUP.md` for workflow details.
+The public repository is **automatically synced** from this private repository using GitHub Actions when you create a release tag.
 
 **To release changes to public:**
 ```bash
@@ -36,394 +28,255 @@ git push origin release-scratch-1
 
 ---
 
-## Project Overview
+## Key Scripts
 
-This repository serves as the source of truth for:
-
-1. **The Living Textbook**: An 8-chapter technical reference on VLAs for Robotics
-2. **CSCI 7000 Course Portal**: Course logistics, assignments, and student contributions
-
-**Tech Stack**: Next.js 16, TypeScript, Tailwind CSS, MDX, Contentlayer
-
-## Repository Structure
-
-This repository is organized into three main categories: **Web Content** (rendered as pages), **Source Code** (executable assignments), and **Build Infrastructure** (deployment and tooling).
-
-```
-vla-foundations/
-├── app/                           # Next.js App Router (web framework)
-│   ├── page.tsx                   # Landing page
-│   ├── textbook/[slug]/           # Dynamic chapter pages
-│   ├── course/                    # Course overview page
-│   │   └── assignments/[slug]/    # Dynamic assignment pages
-│   ├── contributors/[slug]/       # Dynamic contributor profile pages
-│   └── reference/                 # Reference implementations page
-│
-├── content/                       # All MDX content (rendered as web pages)
-│   ├── textbook/                  # 8-chapter VLA textbook (MDX files)
-│   │   ├── foundations/           # Chapter 0: Core concepts
-│   │   ├── architectures/         # Chapter 1: Model designs
-│   │   ├── data/                  # Chapter 2: Dataset construction
-│   │   ├── training/              # Chapter 3: Optimization methods
-│   │   ├── evaluation/            # Chapter 4: Metrics and benchmarks
-│   │   ├── deployment/            # Chapter 5: Production systems
-│   │   ├── applications/          # Chapter 6: Real-world use cases
-│   │   └── future/                # Chapter 7: Open problems
-│   │
-│   ├── course/                    # Course materials (MDX files)
-│   │   ├── Syllabus.mdx           # Course syllabus
-│   │   ├── assignments/           # Assignment specifications (instructor-written)
-│   │   │   ├── scratch-0.mdx      # Environment setup assignment
-│   │   │   ├── scratch-1.mdx      # Transformer backbone assignment
-│   │   │   ├── paper-audit.mdx    # Paper analysis assignment
-│   │   │   └── capstone.mdx       # Final project specification
-│   │   └── submissions/           # Student submission reports (student-written)
-│   │       └── scratch-1/         # Example: student reports for Scratch-1
-│   │           └── [student].mdx  # Individual student writeups
-│   │
-│   └── contributors/              # Contributor profiles (student-written)
-│       └── [github-handle].mdx    # One profile per contributor
-│
-├── src/                           # Executable source code (NOT rendered as web pages)
-│   └── assignments/               # Assignment code templates and solutions
-│       └── scratch-1/             # Example: Transformer implementation
-│           ├── README.md          # Minimal README (points to assignment page)
-│           ├── backbone.py        # Implementation template with TODOs
-│           ├── generate_data.py   # Dataset generator script
-│           └── data/              # Generated training data
-│
-├── components/                    # React UI components
-│   └── textbook/                  # Textbook-specific components
-│       ├── Sidebar.tsx            # Navigation sidebar
-│       └── TextbookLayout.tsx     # Layout wrapper
-│
-├── lib/                           # Utility libraries
-│   └── chapters.ts                # Chapter metadata and utilities
-│
-├── scripts/                       # Deployment and automation
-│   └── deploy.sh                  # Production deployment script
-│
-├── .github/                       # GitHub configuration
-│   └── workflows/
-│       └── vla-audit.yml          # CI/CD: PR validation, build checks
-│
-├── next.config.ts                 # Next.js configuration
-├── tailwind.config.ts             # Tailwind CSS configuration
-├── package.json                   # Node.js dependencies
-└── README.md                      # This file
-```
-
-### Directory Purpose Guidelines
-
-**`content/`** - Source of truth for all web content
-- Written in MDX (Markdown + JSX)
-- Rendered as web pages on vlm-robotics.dev
-- Instructor writes: textbook chapters, assignment specs, syllabus
-- Students write: contributor profiles, submission reports
-
-**`src/`** - Executable code (Python, etc.)
-- Assignment implementation templates
-- Utility scripts and data generators
-- NOT rendered as web pages
-- READMEs are minimal and point to assignment pages (single source of truth)
-
-**`app/`** - Next.js routing and page components
-- Defines URL structure and page layouts
-- Connects routes to content in `content/`
-- Modified when adding new page types or routes
-
-### Important: README Policy for `src/assignments/`
-
-**All READMEs in `src/assignments/` are intentionally minimal.** They contain only:
-1. Link to the canonical assignment page on vlm-robotics.dev
-2. Quick start commands
-3. File list
-
-**Full assignment details (requirements, debugging tips, resources, submission checklists) are maintained exclusively in `content/course/assignments/*.mdx`.** This ensures a single source of truth and prevents documentation drift.
-
-## The 8-Chapter Textbook
-
-0. **Foundations** - Core concepts and problem formulation
-1. **Architectures** - Model designs and network topologies
-2. **Data** - Dataset construction and curation strategies
-3. **Training** - Optimization and fine-tuning methods
-4. **Evaluation** - Metrics and benchmarking protocols
-5. **Deployment** - Production systems and scaling
-6. **Applications** - Real-world use cases and case studies
-7. **Future Directions** - Open problems and research frontiers
-
-## Development Workflow
-
-### Initial Setup
+### Solution Management
 
 ```bash
-# Clone the repository
-git clone https://github.com/arpg/vla-foundations.git
-cd vla-foundations
+# Swap stubs for full solutions (for internal testing)
+python scripts/manage_solutions.py --inject scratch-1
 
-# Install dependencies
-pnpm install
+# Restore stubs before pushing to public
+python scripts/manage_solutions.py --reset scratch-1
 
-# Run development server
-pnpm dev
+# List available solutions
+python scripts/manage_solutions.py --list
 ```
 
-Navigate to `http://localhost:3000` to see the site.
-
-### Adding Content
-
-#### New Textbook Section
+### Sanitization
 
 ```bash
-# Create a new MDX file in the appropriate chapter
-touch content/textbook/[chapter-name]/new-section.mdx
+# The core fail-safe for removing solution leaks
+bash scripts/sanitize.sh
 ```
 
-```mdx
----
-title: "Section Title"
-chapter: 1
-subsection: 5
+This script:
+1. Deletes `private/` and `tests/internal/` directories
+2. Deletes solution management scripts
+3. Sanitizes TODO comments (removes `[SOLUTION]` hints)
+4. Sanitizes MDX files (removes instructor notes)
+5. Removes draft assignment blocks
+6. Commits sanitized state
+
 ---
 
-# Your Content Here
+## Shadow CI
 
-Include LaTeX: $f(x) = x^2$
+Rigorous internal tests are automatically run against student PRs via the **Shadow Tester** workflow.
 
-\`\`\`python
-# Include code examples
-def example():
-    pass
-\`\`\`
-```
+When a student opens a PR to the public `staging` branch:
+1. Public repo triggers a `repository_dispatch` event to this private repo
+2. Shadow Tester workflow runs internal tests against student code
+3. Results are posted back to the public PR as comments
 
-#### New Assignment
+This allows you to run hidden tests without exposing test logic or solutions.
 
-```bash
-touch content/course/assignments/assignment-name.mdx
-```
+---
 
-### Building and Deploying
+## PST System Setup
 
-#### Local Build
+### GitHub Secrets
 
-```bash
-# Build the static site
-pnpm build
+**In the Public Repo** (`arpg/vla-foundations`):
+- `PRIVATE_DISPATCH_TOKEN`: Fine-grained PAT with access to the private repo (triggers Shadow CI)
 
-# Preview the production build
-pnpm start
-```
-
-#### Deploy to Production
-
-```bash
-# Automated deployment to vlm-robotics.dev
-./scripts/deploy.sh
-```
-
-This will:
-1. Build the Next.js site locally
-2. Sync to the remote server via rsync
-3. Deploy to `https://www.vlm-robotics.dev`
-
-**Requirements**: SSH access with the automation key (`~/.ssh/id_ed25519_automation`)
-
-## Course Workflow
-
-### For Students
-
-**IMPORTANT**: All students must follow this workflow for assignment submissions.
-
-1. **Create your own branch**:
-   ```bash
-   git checkout -b assignment-name-yourname
-   ```
-   Example: `git checkout -b scratch-1-johndoe`
-
-2. **Make your changes**:
-   - Add your code to `src/assignments/`
-   - Create your submission report in `content/course/submissions/`
-   - Update your contributor profile if needed
-
-3. **Commit your work**:
-   ```bash
-   git add .
-   git commit -m "Complete Assignment X: Your Name"
-   git push origin assignment-name-yourname
-   ```
-
-4. **Open a Pull Request**:
-   - Go to https://github.com/arpg/vla-foundations
-   - Click "Pull requests" → "New pull request"
-   - **Base branch**: `staging` (NOT `main`)
-   - **Compare branch**: your branch name
-   - Title: `Assignment X: Your Name`
-   - Add a description of your work
-
-5. **Wait for CI checks** to pass (GitHub Actions will validate your submission)
-
-6. **Wait for instructor review**:
-   - **ONLY the instructor can merge pull requests**
-   - The instructor will review your code and report
-   - You may be asked to make changes
-   - Once approved, the instructor will merge to `staging`, then to `main`
-
-**You do NOT have permission to merge your own PRs. All merges are done by the instructor.**
-
-### For the Instructor
-
-1. **Review student PRs** on the `staging` branch
-2. **Provide feedback** and request changes if needed
-3. **Merge to `staging`** when approved
-4. **Periodically merge `staging` to `main`**
-5. **Deploy to production** using `./scripts/deploy.sh`
-
-## CI/CD Automation
-
-### GitHub Actions Workflow
-
-The `vla-audit.yml` workflow runs on all PRs to `staging` and `main`:
-
-- ✅ Contentlayer build validation
-- ✅ MDX syntax checking
-- ✅ LaTeX rendering verification
-- ✅ Full site build
-
-**Location**: `.github/workflows/vla-audit.yml`
+**In the Private Repo** (`crheckman/private-vla-foundations`):
+- `PUBLIC_REPO_TOKEN`: PAT with push access to the public repo (for sanitization sync)
 
 ### Branch Protection
 
-- `main`: Requires passing CI checks and instructor approval
-- `staging`: Student PR target, requires passing CI
+**Public repo:**
+- `main` and `staging` should require PRs and passing status checks
+- Enable "Require conversation resolution before merging"
 
-## Branching Strategy
+**Private repo:**
+- No restrictions (instructor has full control)
 
-- **`main`**: Production branch (deployed to live site)
-- **`staging`**: Student PR target (integration testing)
-- **Feature branches**: `feature/assignment-name`, `paper-audit-N-yourname`
+---
 
-## Technologies
+## Assignment Lifecycle
 
-### Core
-- **Next.js 16**: Static site generation
-- **TypeScript**: Type safety
-- **Tailwind CSS**: Styling
-- **MDX**: Markdown with JSX
+### Creating a New Assignment
 
-### Content Processing
-- **Contentlayer**: Content validation
-- **gray-matter**: Frontmatter parsing
-- **remark-math** + **rehype-katex**: LaTeX rendering
-- **remark-gfm**: GitHub-flavored Markdown
+1. **Create stub and solution files** in the private repo:
+   ```bash
+   # Create stub with TODOs
+   touch src/assignments/scratch-2/model.py
 
-### Deployment
-- **Apache**: Web server on DigitalOcean
-- **rsync**: File synchronization
-- **SSH**: Secure remote access
+   # Create full solution
+   touch private/solutions/model_solution.py
 
-## Development Tools
+   # Mark solution blocks with # [SOLUTION] tags
+   ```
 
-### Local Commands
+2. **Create assignment specification**:
+   ```bash
+   touch content/course/assignments/scratch-2.mdx
+   ```
 
-```bash
-# Development
-pnpm dev              # Start dev server (hot reload)
-pnpm build            # Build production site
-pnpm build-content    # Validate content only
-pnpm lint             # Run ESLint
+3. **Wrap in DRAFT block** (prevents public release):
+   ```mdx
+   <div className="draft-warning">
+   ⚠️ DRAFT: NOT YET ASSIGNED
 
-# Deployment
-./scripts/deploy.sh   # Deploy to production
+   This assignment is under development and not yet released to students.
+   </div>
+
+   # Assignment content here...
+   ```
+
+### Updating an Assignment
+
+1. **Apply changes** to the solution/stub in the private repo
+2. **Run inject** to verify updates against internal rigorous tests:
+   ```bash
+   python scripts/manage_solutions.py --inject scratch-1
+   pytest tests/internal/test_scratch1_rigor.py
+   ```
+
+### Promoting from Draft to Released
+
+1. **Remove the "DRAFT" warning block** from the MDX file in the private repo
+2. **Create a release tag**:
+   ```bash
+   git tag release-scratch-1
+   git push origin release-scratch-1
+   ```
+3. **GitHub Actions automatically**:
+   - Runs `scripts/sanitize.sh`
+   - Removes draft blocks
+   - Deletes solution markers
+   - Pushes to `public-release` branch in public repo
+4. **Review and merge** the release branch into public `main` or `staging`
+
+---
+
+## Directory Structure
+
+```
+private-vla-foundations/
+├── private/                           # NEVER synced to public
+│   ├── solutions/                     # Complete assignment solutions
+│   │   ├── backbone_solution.py       # Scratch-1 full implementation
+│   │   ├── generate_data_solution.py  # Enhanced data generation
+│   │   └── checkpoints/               # Trained model weights
+│   │       └── scratch1_gold.pt       # Gold standard for testing
+│   └── README.md                      # Solution usage guide
+│
+├── tests/                             # Testing infrastructure
+│   ├── public/                        # Tests students can see/run
+│   │   └── test_scratch1_basic.py     # Basic validation
+│   └── internal/                      # NEVER synced to public
+│       ├── test_scratch1_rigor.py     # Rigorous grading tests
+│       ├── fixtures/                  # Gold standard data
+│       │   └── scratch1_gold.pt       # Reference tensor
+│       └── conftest.py                # Internal test fixtures
+│
+├── scripts/                           # NEVER synced to public
+│   ├── manage_solutions.py            # Inject/reset utility
+│   ├── sanitize.sh                    # Main sanitization script
+│   ├── _sanitize_todos.py             # Helper for TODO cleanup
+│   └── setup_private_repo.sh          # Initial setup script
+│
+├── src/assignments/                   # Assignment stubs (synced with hints)
+│   └── scratch-1/
+│       ├── backbone.py                # TODO: [SOLUTION] hints
+│       └── generate_data.py
+│
+├── content/                           # MDX content
+│   ├── textbook/                      # 8-chapter textbook
+│   └── course/                        # Course materials
+│       └── assignments/               # Assignment specs
+│           └── scratch-1.mdx          # May contain <!-- INSTRUCTOR NOTE -->
+│
+└── .github/workflows/
+    ├── sync-to-public.yml             # Auto-sync on release tags
+    └── shadow-tester.yml              # Run internal tests on student PRs
 ```
 
-### Remote Server Access
+---
+
+## Testing Framework
+
+### Public Tests (`tests/public/`)
+- Basic validation that students can run
+- Checks provided (non-TODO) components
+- Visible in public repo
+
+### Internal Tests (`tests/internal/`)
+- Rigorous grading tests (NEVER public)
+- Gradient leak detection
+- Latent fidelity comparison against gold standard
+- Training convergence validation
+- Edge case testing
+
+### Running Tests
 
 ```bash
-# SSH into production server
-ssh -i ~/.ssh/id_ed25519_automation crh@ristoffer.ch
+# Run public tests (students can run these)
+pytest tests/public/
 
-# Navigate to project
-cd /var/www/vlm-robotics.dev
+# Run internal tests (auto-injects solutions)
+pytest tests/internal/
 
-# Manual deployment (if needed)
-npm run build
-cp -r out/* public_html/
+# Run specific test file
+pytest tests/internal/test_scratch1_rigor.py -v
 ```
 
-## Contributing
+---
 
-### Content Guidelines
+## Operational Guides
 
-- **Technical accuracy**: Ensure all claims are well-supported
-- **Clear writing**: Avoid jargon unless necessary
-- **LaTeX formatting**: Use `$inline$` and `$$display$$` syntax
-- **Code examples**: Include runnable code snippets
-- **References**: Cite papers using numbered references
+For detailed operational procedures, see:
+- **PRIVATE_OPERATIONS.md**: Comprehensive guide to review workflows, server configuration, deployment, and troubleshooting
 
-### Code Guidelines
+---
 
-- **TypeScript**: Use types for all functions
-- **ESLint**: Follow the configured linting rules
-- **Components**: Keep components small and focused
-- **Naming**: Use descriptive variable and function names
+## Quick Reference
 
-### Pull Request Process
+### Review a Student PR
+```bash
+# Public repo PR workflow
+gh pr checkout {PR_NUMBER}
+gh pr view {PR_NUMBER} --web
 
-1. Create a descriptive branch name
-2. Write clear commit messages
-3. Ensure all CI checks pass
-4. Request review from instructor
-5. Address feedback and update PR
-6. Merge when approved
+# Trigger Shadow CI manually (if needed)
+gh workflow run shadow-tester.yml -f pr_number={PR_NUMBER}
+```
 
-## Resources
+### Create a New Release
+```bash
+# Tag and push from private repo
+git tag release-scratch-1
+git push origin release-scratch-1
 
-### Documentation
-- [MDX Syntax](https://mdxjs.com/)
-- [Next.js App Router](https://nextjs.org/docs/app)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [LaTeX Math Symbols](https://www.overleaf.com/learn/latex/List_of_Greek_letters_and_math_symbols)
+# Monitor the sync workflow
+gh run list --workflow=sync-to-public.yml
+```
 
-### Papers & Datasets
-- [RT-1 Paper](https://arxiv.org/abs/2212.06817)
-- [RT-2 Paper](https://arxiv.org/abs/2307.15818)
-- [Open-X Embodiment](https://robotics-transformer-x.github.io/)
-- [DROID Dataset](https://droid-dataset.github.io/)
+### Test Sanitization Locally
+```bash
+# Dry run (doesn't commit)
+bash scripts/sanitize.sh --dry-run
 
-## Instructor TODO List
+# Check for solution leaks
+grep -r "TODO: \[SOLUTION\]" src/ content/
+grep -r "\[SOLUTION\]" src/ content/
+```
 
-**Course Content Completion Tasks**:
-
-- [ ] **Scratch-0 Assignment**: Create full assignment specification in `content/course/assignments/scratch-0.mdx`
-- [ ] **Scratch-1 Assignment**: Create full assignment specification in `content/course/assignments/scratch-1.mdx`
-- [ ] **Paper Audit Assignment**: Create full assignment specification in `content/course/assignments/paper-audit.mdx`
-- [ ] **Capstone Assignment**: Create full assignment specification in `content/course/assignments/capstone.mdx`
-- [ ] **Update /course page**: Link assignments once content is ready (remove "Coming soon" placeholders)
-- [ ] **Syllabus**: Upload current syllabus to Canvas and verify link works
-- [ ] **Textbook Chapters**: Begin writing content for 8 chapters
-- [ ] **Example Paper Audit**: Create sample audit for students to reference
-- [ ] **Setup Branch Protection**: Configure GitHub branch protection rules (students require PRs, instructor can bypass)
-
-**Deployment**:
-- [ ] Test assignment submission workflow end-to-end
-- [ ] Verify CI/CD pipeline catches common errors
-- [ ] Create assignment grading rubric
-
-**Notes**:
-- Syllabus is currently linked to Canvas: https://canvas.colorado.edu/courses/134529/files/82424359/download?download_frd=1
-- Students must submit 1 paper audit (not 4)
-- Capstone tracks: Research or Engineering (no survey track)
+---
 
 ## Contact
 
 - **Instructor**: Christoffer Heckman
 - **Email**: christoffer.heckman@colorado.edu
 - **Course**: CSCI 7000, Spring 2026
-- **GitHub**: https://github.com/arpg/vla-foundations
+
+---
 
 ## License
 
-Copyright © 2026 Christoffer Heckman. All rights reserved.
+**CONFIDENTIAL** - All rights reserved.
 
-Course materials are for educational use by enrolled students only.
+This repository and its contents are private and confidential.
+Unauthorized access or distribution is prohibited.
