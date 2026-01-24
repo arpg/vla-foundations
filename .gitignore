@@ -53,3 +53,15 @@ __pycache__/
 
 # project-specific
 /arxiv-digest/
+# Private repo files - do not commit to public
+private/
+tests/
+scripts/_sanitize_todos.py
+scripts/manage_solutions.py
+scripts/sanitize.sh
+scripts/setup_private_repo.sh
+scripts/add_github_secret.sh
+pytest.ini
+PRIVATE_REPO_SETUP.md
+SETUP_WITH_GH_CLI.md
+QUICK_REFERENCE.md
