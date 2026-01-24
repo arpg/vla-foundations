@@ -36,7 +36,7 @@ def forward_kinematics_7dof(joint_angles: np.ndarray) -> np.ndarray:
 
     x = np.sum(link_lengths * np.cos(joint_angles))
     y = np.sum(link_lengths * np.sin(joint_angles))
-    z = np.sum(link_lengths * np.sin(joint_angles[:3]))  # First 3 joints affect height
+    z = np.sum(link_lengths[:3] * np.sin(joint_angles[:3]))  # First 3 joints affect height
 
     return np.array([x, y, z])
 
