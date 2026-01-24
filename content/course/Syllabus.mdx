@@ -1,0 +1,190 @@
+---
+title: 'CSCI 7000: VLA Foundations for Robotics'
+semester: 'Spring 2026'
+instructor: 'Christoffer Heckman'
+credits: 3
+---
+
+# CSCI 7000: VLA Foundations for Robotics
+
+## Course Information
+
+- **Instructor**: Christoffer Heckman
+- **Semester**: Spring 2026
+- **Credits**: 3
+- **Level**: Graduate
+
+## Course Description
+
+This graduate seminar explores the emerging field of Vision-Language-Action (VLA) systems for robotics. Students will critically analyze state-of-the-art research, implement core VLA techniques, and contribute to the living textbook at vlm-robotics.dev.
+
+The course emphasizes rigorous technical validation, reproducibility, and practical deployment considerations for embodied AI systems.
+
+## Learning Objectives
+
+By the end of this course, students will be able to:
+
+1. **Critically evaluate** VLA research papers using principled validation criteria
+2. **Implement** core VLA components (encoders, policies, training pipelines)
+3. **Design** experiments to test generalization and robustness claims
+4. **Contribute** technical content to an open-source educational resource
+5. **Articulate** the gap between benchmark performance and real-world deployment
+
+## Course Structure
+
+### The Living Textbook
+
+Students will contribute directly to the **8-chapter VLA textbook** hosted at vlm-robotics.dev:
+
+0. Foundations - Core concepts and problem formulation
+1. Architectures - Model designs and network topologies
+2. Data - Dataset construction and curation strategies
+3. Training - Optimization and fine-tuning methods
+4. Evaluation - Metrics and benchmarking protocols
+5. Deployment - Production systems and scaling
+6. Applications - Real-world use cases and case studies
+7. Future Directions - Open problems and research frontiers
+
+### Weekly Seminars
+
+- **Tuesday/Thursday**: Paper discussions and technical deep-dives
+- **Format**: Student-led presentations followed by group critique
+- **Expectation**: All students complete assigned readings and submit questions beforehand
+
+## Assignments
+
+### 1. Scratch-0: Environment Setup (Week 1)
+
+- **Due**: End of Week 1
+- **Points**: 50
+- **Deliverable**: GitHub PR with contributor profile
+
+Verify your development environment and submit your first pull request to the course repository.
+
+### 2. Paper Audit (Ongoing)
+
+- **Due**: One audit every 2 weeks (4 total)
+- **Points**: 200 (50 each)
+- **Deliverable**: Markdown file with critical analysis
+
+Select a VLA paper, reproduce key claims, and document findings. Focus on:
+- Reproducibility of results
+- Generalization claims vs. evidence
+- Deployment feasibility
+- Methodological rigor
+
+### 3. Capstone Project (Weeks 8-16)
+
+- **Due**: Final presentation in Week 16
+- **Points**: 300
+- **Deliverable**: Textbook chapter contribution + implementation
+
+Choose one of:
+- **Research Track**: Extend existing VLA work with novel experiments
+- **Engineering Track**: Implement a production-grade VLA component
+- **Survey Track**: Comprehensive literature review on a VLA subtopic
+
+All tracks must include:
+1. Textbook chapter contribution (written content + LaTeX equations)
+2. Code implementation (if applicable)
+3. Final presentation to the class
+
+## Grading
+
+| Component | Points | Percentage |
+|-----------|--------|------------|
+| Scratch-0 | 50 | 9% |
+| Paper Audits (4 × 50) | 200 | 36% |
+| Capstone Project | 300 | 55% |
+| **Total** | **550** | **100%** |
+
+### Grading Scale
+
+- A: 90-100%
+- B: 80-89%
+- C: 70-79%
+- D: 60-69%
+- F: <60%
+
+## Course Policies
+
+### Attendance
+
+- Attendance is **mandatory** for all seminars
+- Students may miss up to 2 sessions without penalty (notify instructor in advance)
+- Additional absences will result in grade penalties
+
+### Late Work
+
+- Paper Audits: 10% penalty per day late (max 3 days)
+- Capstone: No late submissions accepted (present on final day)
+
+### Submission Workflow
+
+**All assignments must be submitted via Pull Request (PR) to the course repository.**
+
+**Required Process**:
+1. Create your own branch: `git checkout -b assignment-name-yourname`
+2. Complete your work and commit changes
+3. Push your branch: `git push origin assignment-name-yourname`
+4. Open a Pull Request to the `staging` branch (NOT `main`)
+5. Wait for CI checks to pass
+6. Wait for instructor review and approval
+
+**Important Rules**:
+- **You do NOT have permission to merge your own PRs**
+- **Only the instructor can merge pull requests**
+- PRs must target the `staging` branch, not `main`
+- All CI checks must pass before review
+- You may be asked to make changes before approval
+
+Attempting to merge your own PR or push directly to `main` or `staging` is a violation of course policy.
+
+### Academic Integrity
+
+- All code must be original or properly attributed
+- Collaboration is encouraged for learning, but submissions must be individual
+- Use of LLMs (ChatGPT, Claude, etc.) must be documented and attributed
+- Plagiarism will result in course failure and university disciplinary action
+
+### Accessibility
+
+Students with disabilities should contact the instructor and Disability Services within the first two weeks of the semester to arrange accommodations.
+
+## Required Tools
+
+- **Git/GitHub**: Version control and collaboration
+- **Python 3.10+**: Primary programming language
+- **PyTorch 2.0+**: Deep learning framework
+- **MDX/LaTeX**: Technical writing and equations
+- **SSH/Linux**: Remote server access for experiments
+
+## Resources
+
+- **Textbook**: vlm-robotics.dev (living document)
+- **GitHub**: arpg/vla-foundations
+- **Papers**: ArXiv, CoRL, RSS, ICRA, IROS
+- **Datasets**: Open-X Embodiment, DROID, BridgeData
+
+## Schedule (Tentative)
+
+| Week | Topic | Assignment |
+|------|-------|------------|
+| 1 | Introduction & Course Setup | Scratch-0 Due |
+| 2-3 | Foundations & Architectures | Paper Audit #1 |
+| 4-5 | Data & Training | Paper Audit #2 |
+| 6-7 | Evaluation & Benchmarking | Paper Audit #3 |
+| 8 | Capstone Proposals | |
+| 9-11 | Deployment & Scaling | Paper Audit #4 |
+| 12-14 | Applications & Case Studies | |
+| 15-16 | Future Directions & Final Presentations | Capstone Due |
+
+## Contact
+
+- **Email**: christoffer.heckman@colorado.edu
+- **Office Hours**: By appointment
+- **Course GitHub**: https://github.com/arpg/vla-foundations
+
+## Acknowledgments
+
+This course builds on the open-source robotics community's work on VLA systems, including projects like RT-1, RT-2, Mobile ALOHA, and the Open-X Embodiment dataset.

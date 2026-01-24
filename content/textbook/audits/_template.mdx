@@ -1,0 +1,92 @@
+---
+title: "Paper Title: Subtitle if Applicable"
+author: "Your Full Name"
+paper: "Paper Name (Conference/Journal Year)"
+topic: "Vision Foundations"
+---
+
+# Problem Domain & Taxonomy
+
+Define the specific technical challenge this paper addresses. What bottleneck in the VLM/VLA landscape does it target?
+
+## Context
+
+Brief history of the problem space (2-3 paragraphs).
+
+## Taxonomy of Approaches
+
+Classify how different research groups have approached this problem.
+
+# Comparative Architectural Deep-Dive
+
+## Objective Functions
+
+Compare mathematical formulations. For example:
+
+$$\mathcal{L}_{\text{InfoNCE}} = -\log \frac{\exp(s(v, t^+)/\tau)}{\sum_{t' \in \mathcal{T}} \exp(s(v, t')/\tau)}$$
+
+versus
+
+$$\mathcal{L}_{\text{SigLIP}} = -\sum_{i=1}^N \log \sigma(z_i \cdot y_i)$$
+
+## Backbone Scaling
+
+Analyze encoder architectures, parameter counts, and training data volumes.
+
+## Interaction Mechanisms
+
+Detail how modalities are fused (cross-attention, Q-Formers, MLP projections).
+
+# The Scaling Frontier & Empirical Trends
+
+Identify compute-optimal frontiers and data walls from collective research.
+
+## Scaling Laws
+
+Present empirical relationships between scale and performance.
+
+## Diminishing Returns
+
+Where do marginal gains plateau?
+
+# Robotic Grounding & Physicality Gap
+
+## The Precision Gap
+
+How do these models handle high-frequency robotic control requirements?
+
+## Benchmark Critique
+
+Are tests on static datasets (ImageNet/COCO) or embodied environments (RT-X)?
+
+## Engineering Bottlenecks
+
+- **Dimensionality & Information Decay:** Where does the model discard critical spatial information?
+- **Compute & Inference Reality:** FLOPs per forward pass? Hz on edge hardware (Orin, H100)?
+- **Semantic-Motor Gap:** Where does high-level reasoning fail to ground in motor primitives?
+
+# Critical Synthesis & The "Load-Bearing" Audit
+
+## Load-Bearing Assumptions
+
+What happens if internet-scale pre-training data is exhausted?
+
+## Foundational vs. Marginal Gains
+
+Which papers are truly foundational? Which are incremental?
+
+## Failure Modes
+
+Document 2-3 scenarios where the model diverges from physical reality:
+- Transparent objects
+- High-velocity dynamic obstacles
+- Long-horizon causal chains
+
+## The Next 10,000 GPU-Hour Experiment
+
+If you were a Senior Staff Engineer, what would you run next?
+
+# References
+
+1. Author et al., "Paper Title," *Conference*, Year.
+2. ...

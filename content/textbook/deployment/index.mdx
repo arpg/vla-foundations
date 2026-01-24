@@ -1,0 +1,39 @@
+---
+title: 'Deployment: Production Systems and Scaling'
+chapter: 5
+description: 'From semantic supervision to safety-critical validation for autonomous fleets'
+---
+
+# Chapter 5: Deployment
+
+## Core Questions
+
+- Why is robotics data uniquely difficult for VLMs compared to pure vision/text?
+- How do we leverage VLMs for auto-labeling at scale?
+- How do we distill foundation model reasoning into real-time controllers?
+
+## Topics
+
+### 3.1 Data Diversity & The Long Tail
+- The unique challenges of robotics data
+- Multi-modal sensor streams (vision, depth, proprioception)
+- Edge cases and safety-critical scenarios
+- Why internet-scale pre-training isn't enough
+
+### 3.2 Semantic Supervision
+- Using VLMs to auto-label petabytes of sensor data
+- Bootstrapping low-level policy training
+- Quality validation for automated labeling
+- Human-in-the-loop verification strategies
+
+### 3.3 Policy Distillation
+- Transferring high-level reasoning to edge hardware
+- Methods for compressing foundation models
+- Real-time constraints and latency budgets
+- Maintaining safety guarantees during distillation
+
+### 3.4 Safety-Critical Scaling
+- The LISS framework for autonomous fleets
+- Formalizing "Similar Miles" validation
+- Hardware-in-the-loop at scale
+- OOD detection and graceful degradation in production

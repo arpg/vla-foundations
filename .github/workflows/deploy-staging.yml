@@ -1,0 +1,56 @@
+name: Deploy Staging Branch
+
+on:
+  push:
+    branches: [ staging ]
+    paths:
+      # Only trigger on content/frontend changes
+      - 'app/**'
+      - 'content/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'next.config.ts'
+      - 'package.json'
+      - 'tailwind.config.ts'
+    paths-ignore:
+      # Ignore changes that don't affect the site
+      - 'src/assignments/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'private/**'
+      - '**.md'
+      - '.github/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Static Site to Remote Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ristoffer.ch
+          username: crh
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          script: |
+            # Navigate to staging build directory
+            cd ~/vla-staging || mkdir -p ~/vla-staging
+            cd ~/vla-staging
+
+            # Clone or pull staging branch
+            if [ ! -d ".git" ]; then
+              git clone -b staging https://github.com/arpg/vla-foundations.git .
+            else
+              git fetch origin staging
+              git reset --hard origin/staging
+            fi
+
+            # Install dependencies and build
+            npm install
+            npm run build
+
+            # Deploy to staging subdirectory
+            mkdir -p /var/www/vlm-robotics.dev/public_html/staging
+            cp -r out/* /var/www/vlm-robotics.dev/public_html/staging/
+
+            echo "Staging deployment completed at $(date)"

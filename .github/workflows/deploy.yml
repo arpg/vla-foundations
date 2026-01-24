@@ -1,0 +1,40 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      # Only trigger on content/frontend changes
+      - 'app/**'
+      - 'content/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'next.config.ts'
+      - 'package.json'
+      - 'tailwind.config.ts'
+    paths-ignore:
+      # Ignore changes that don't affect the site
+      - 'src/assignments/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'private/**'
+      - '**.md'
+      - '.github/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Remote Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ristoffer.ch
+          username: crh
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          script: |
+            cd ~/vla-build
+            git pull origin main
+            npm run build
+            rsync -av --delete out/ /var/www/vlm-robotics.dev/public_html/
+            echo "Deployment completed at $(date)"
