@@ -56,3 +56,13 @@ __pycache__/
 
 # Private solution infrastructure (NEVER commit to public branches)
 *.backup.py
+
+# Claude Code skill outputs (generated reports)
+.claude/releases/*.md
+.claude/sync-reports/*.md
+tests/internal/reports/*.txt
+tests/internal/reports/*.json
+tests/internal/reports/*.html
+!.claude/releases/.gitkeep
+!.claude/sync-reports/.gitkeep
+!tests/internal/reports/.gitkeep
