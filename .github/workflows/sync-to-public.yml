@@ -146,14 +146,14 @@ jobs:
             echo "   ✓ tests/internal/ removed"
           fi
 
-          # Check that solution management script is gone
+          # Check that dev utilities script is gone
           echo ""
-          echo "5. Verifying manage_solutions.py removal..."
-          if [ -f "scripts/manage_solutions.py" ]; then
-            echo "❌ ERROR: manage_solutions.py still exists!"
+          echo "5. Verifying dev_utils.py removal..."
+          if [ -f "scripts/dev_utils.py" ]; then
+            echo "❌ ERROR: dev_utils.py still exists!"
             LEAK_FOUND=1
           else
-            echo "   ✓ manage_solutions.py removed"
+            echo "   ✓ dev_utils.py removed"
           fi
 
           # Check that dev scripts are gone
@@ -177,14 +177,22 @@ jobs:
           fi
 
       # =====================================================================
-      # PUSH TO PUBLIC REPOSITORY
+      # PUSH TO PUBLIC REPOSITORY (ORPHAN STRATEGY)
       # =====================================================================
+      #
+      # Uses "orphan branch" strategy to break all git history links between
+      # the private and public repositories. This ensures:
+      # 1. No commit history from private repo is exposed
+      # 2. Public repo has completely independent git history
+      # 3. Maximum security against accidental solution leaks via git log
+      #
 
-      - name: Push to public repo
+      - name: Push to public repo (Orphan Strategy)
         env:
           PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
-          echo "=== Pushing to Public Repository ==="
+          echo "=== Pushing to Public Repository (Orphan Branch Strategy) ==="
+          echo ""
 
           # Configure git
           git config user.name "GitHub Actions"
@@ -193,21 +201,44 @@ jobs:
           # Add public remote
           git remote add public https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com/arpg/vla-foundations.git
 
-          # Get the tag name
+          # Get the tag name for release message
           TAG_NAME=${GITHUB_REF#refs/tags/}
-          echo "Syncing tag: $TAG_NAME"
+          echo "Release tag: $TAG_NAME"
+          echo ""
 
-          # Push to public repo on a release branch
-          RELEASE_BRANCH="public-release-${TAG_NAME}"
-          git checkout -b "$RELEASE_BRANCH"
-          git push public "$RELEASE_BRANCH" --force
+          # Create orphan branch (breaks history link)
+          echo "Creating orphan branch..."
+          git checkout --orphan temp-public-branch
+
+          # Stage all sanitized files
+          echo "Staging sanitized files..."
+          git add -A
+
+          # Commit with timestamp
+          RELEASE_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          git commit -m "Public Release: ${RELEASE_DATE}
+
+Tag: ${TAG_NAME}
+
+This commit was created via automated sanitization and orphan push.
+No git history is preserved to prevent solution leaks."
+
+          # Force push to public main branch
+          echo ""
+          echo "Force pushing to public repository main branch..."
+          git push public temp-public-branch:main --force
 
           echo ""
-          echo "✅ Synced to public repo (branch: $RELEASE_BRANCH)"
+          echo "✅ Successfully synced to public repository"
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Next steps:"
-          echo "  1. Review: https://github.com/arpg/vla-foundations/tree/$RELEASE_BRANCH"
-          echo "  2. Create PR to merge $RELEASE_BRANCH → main/staging"
-          echo "  3. After review, merge PR to publish release"
+          echo "Release Details:"
+          echo "  Tag: $TAG_NAME"
+          echo "  Date: $RELEASE_DATE"
+          echo "  Strategy: Orphan Push (no history link)"
+          echo ""
+          echo "Public Repository:"
+          echo "  URL: https://github.com/arpg/vla-foundations"
+          echo "  Branch: main"
+          echo "  Status: Live ✓"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

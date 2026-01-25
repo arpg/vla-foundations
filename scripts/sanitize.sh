@@ -43,11 +43,11 @@ else
     echo "  ⊘ Not found: scripts/dev/"
 fi
 
-if [ -f "scripts/manage_solutions.py" ]; then
-    rm -f scripts/manage_solutions.py
-    echo "  ✓ Removed: scripts/manage_solutions.py"
+if [ -f "scripts/dev_utils.py" ]; then
+    rm -f scripts/dev_utils.py
+    echo "  ✓ Removed: scripts/dev_utils.py"
 else
-    echo "  ⊘ Not found: scripts/manage_solutions.py"
+    echo "  ⊘ Not found: scripts/dev_utils.py"
 fi
 
 echo ""
