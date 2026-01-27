@@ -183,6 +183,19 @@ def verify_no_solution_markers(directory: Path, exclude_dirs: Set[str] = None) -
     if exclude_dirs is None:
         exclude_dirs = {'private', '.git', 'node_modules', '__pycache__'}
 
+    # Files that are allowed to contain [SOLUTION] as documentation
+    # These explain the sanitization process, not actual solution code
+    exclude_files = {
+        'README.md',
+        'INSTRUCTOR.md',
+        'claude.md',
+        '_sanitize_todos.py',
+        'sanitize.sh',
+        'dev_utils.py',
+        'SKILL.md',
+        'pre-flight.md',
+    }
+
     files_with_markers = []
 
     for file_path in directory.rglob("*"):
@@ -192,6 +205,18 @@ def verify_no_solution_markers(directory: Path, exclude_dirs: Set[str] = None) -
 
         # Skip excluded directories
         if any(excluded in file_path.parts for excluded in exclude_dirs):
+            continue
+
+        # Skip explicitly excluded files (documentation about the sanitization process)
+        if file_path.name in exclude_files:
+            continue
+
+        # Skip .claude directory (skill definitions)
+        if '.claude' in file_path.parts:
+            continue
+
+        # Skip .github directory (workflow definitions that reference [SOLUTION])
+        if '.github' in file_path.parts:
             continue
 
         # Skip binary files

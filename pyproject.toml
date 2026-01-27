@@ -11,6 +11,11 @@ dependencies = [
     "pytest-html>=4.0.0",
 ]
 
+[tool.uv]
+# Use CPU-only torch for compatibility, or specify CUDA version
+# For CUDA 12.3 compatibility:
+# index-url = "https://download.pytorch.org/whl/cu121"
+
 [tool.hatch.build.targets.wheel]
 packages = []
 
