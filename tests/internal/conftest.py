@@ -12,6 +12,9 @@ import torch
 import sys
 from pathlib import Path
 
+# Path to gold standard fixtures
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "private" / "fixtures"
+
 
 @pytest.fixture(scope="session", autouse=True)
 def add_assignments_to_path():
@@ -90,4 +93,44 @@ def training_setup(create_solution_model):
         'model': model,
         'optimizer': optimizer,
         'train_loader': train_loader
+    }
+
+
+@pytest.fixture
+def load_gold_standard():
+    """
+    Factory fixture for loading gold standard test fixtures.
+
+    Usage:
+        def test_something(load_gold_standard):
+            gold_data = load_gold_standard('scratch1_gold_output.pt')
+    """
+    def _load(filename: str):
+        filepath = FIXTURES_DIR / filename
+        if not filepath.exists():
+            raise FileNotFoundError(f"Gold standard fixture not found: {filepath}")
+        return torch.load(filepath, map_location='cpu', weights_only=False)
+
+    return _load
+
+
+@pytest.fixture
+def sample_batch():
+    """
+    Create a sample batch for testing.
+
+    Returns:
+        Dictionary with 'input_ids' and 'targets' tensors.
+    """
+    batch_size = 4
+    seq_len = 20
+    vocab_size = 256
+
+    # Create random input and target sequences
+    input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+    targets = torch.randint(0, vocab_size, (batch_size, seq_len))
+
+    return {
+        'input_ids': input_ids,
+        'targets': targets,
     }

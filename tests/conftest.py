@@ -8,6 +8,7 @@ public and internal test suites.
 import pytest
 import torch
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -60,7 +61,7 @@ def inject_solutions_for_internal_tests(request):
     # Inject solutions
     print("\n=== Injecting solutions for internal tests ===")
     result = subprocess.run(
-        ["python", "scripts/manage_solutions.py", "--inject", "scratch-1"],
+        [sys.executable, "scripts/dev_utils.py", "--inject", "scratch-1"],
         capture_output=True,
         text=True
     )
@@ -75,7 +76,7 @@ def inject_solutions_for_internal_tests(request):
     # Reset after tests
     print("\n=== Resetting to starter code ===")
     result = subprocess.run(
-        ["python", "scripts/manage_solutions.py", "--reset", "scratch-1"],
+        [sys.executable, "scripts/dev_utils.py", "--reset", "scratch-1"],
         capture_output=True,
         text=True
     )

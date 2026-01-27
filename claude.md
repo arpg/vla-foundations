@@ -46,12 +46,28 @@ Public Repo (arpg/vla-foundations)
 # Install dependencies
 pnpm install
 
-# Install Python requirements
-pip install pytest pytest-html torch
+# Install uv (Python package manager) - REQUIRED
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Python dependencies via uv
+uv sync
 
 # Install GitHub CLI (required for skills)
 brew install gh
 gh auth login
+```
+
+### Python Environment (uv)
+**All Python commands MUST use `uv run`** to ensure correct dependencies:
+```bash
+# Run Python scripts
+uv run python scripts/dev_utils.py --list
+
+# Run pytest
+uv run pytest tests/internal/ -v -m rigor
+
+# Run any Python file
+uv run python src/assignments/scratch-1/generate_data.py
 ```
 
 ### Development
@@ -252,31 +268,31 @@ This repository has **7 Claude Code skills** for workflow automation. See [.clau
 ### Solution Management
 ```bash
 # List all available solutions
-python3 scripts/dev_utils.py --list
+uv run python scripts/dev_utils.py --list
 
 # Inject solutions for testing/grading
-python3 scripts/dev_utils.py --inject scratch-1
+uv run python scripts/dev_utils.py --inject scratch-1
 
 # Reset to starter code
-python3 scripts/dev_utils.py --reset scratch-1
+uv run python scripts/dev_utils.py --reset scratch-1
 
 # Verify no solution leaks (similarity check)
-python3 scripts/dev_utils.py --verify-clean
+uv run python scripts/dev_utils.py --verify-clean
 ```
 
 ### Testing
 ```bash
 # Run public tests (students can see these)
-pytest tests/public/ -v
+uv run pytest tests/public/ -v
 
 # Run internal grading tests (after injecting solutions)
-pytest tests/internal/ -v -m rigor
+uv run pytest tests/internal/ -v -m rigor
 
 # Run specific test file
-pytest tests/internal/test_scratch1_rigor.py -v
+uv run pytest tests/internal/test_scratch1_rigor.py -v
 
 # Generate HTML report
-pytest tests/internal/ --html=tests/internal/reports/report.html --self-contained-html
+uv run pytest tests/internal/ --html=tests/internal/reports/report.html --self-contained-html
 ```
 
 ### Pre-Release Checks
@@ -285,7 +301,7 @@ pytest tests/internal/ --html=tests/internal/reports/report.html --self-containe
 /pre-flight
 
 # Or manually:
-python3 scripts/dev_utils.py --verify-clean
+uv run python scripts/dev_utils.py --verify-clean
 bash scripts/sanitize.sh  # (Only in orphan branch workflow)
 ```
 
@@ -606,9 +622,13 @@ Student PRs to the public repo trigger **Shadow CI** - hidden testing with inter
 - **Node.js** 18+
 - **pnpm** 8+
 - **Python** 3.11+
-- **pytest** with pytest-html
+- **uv** (Python package manager): `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **gh CLI** (for skills): `brew install gh && gh auth login`
-- **PyTorch** (for assignments)
+
+Python dependencies (managed by uv via `pyproject.toml`):
+- pytest, pytest-html
+- torch
+- numpy
 
 ---
 

@@ -1,52 +1,68 @@
 """
-SOLUTION: Scratch-1 Transformer Backbone (Complete Implementation)
+Scratch-1: The Transformer Backbone - COMPLETE SOLUTION
+CSCI 7000 - VLA Foundations
 
-This is the complete solution for the Scratch-1 assignment.
+This is the instructor solution that matches the student template exactly.
+All TODOs have been implemented correctly.
+
 DO NOT share this file with students.
 
-Includes:
-- Complete RMSNorm implementation
-- Complete CausalSelfAttention implementation
-- Complete training loop
-- DINOv2 vision backbone integration (optional)
+Architecture matches backbone.py:
+- Combined qkv_proj for Q, K, V projections
+- F.silu() (SwiGLU) activation in FeedForward
+- Pre-norm architecture with RMSNorm
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import pickle
+from pathlib import Path
 from typing import Optional, Tuple
 
 
 class RMSNorm(nn.Module):
-    """Root Mean Square Layer Normalization (COMPLETE SOLUTION)"""
+    """
+    Root Mean Square Layer Normalization
+
+    Paper: https://arxiv.org/abs/1910.07467
+    Used in: Llama-3, Grok, PaLM
+
+    Formula:
+        a_bar_i = (a_i / RMS(a)) * g_i
+        where RMS(a) = sqrt(mean(a^2) + eps)
+    """
 
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # SOLUTION: Learnable scale parameter
+        # SOLUTION: Initialize learnable scale parameter 'g' (gamma)
         self.scale = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        SOLUTION: Complete RMSNorm implementation
-
         Args:
             x: Input tensor of shape (batch, seq_len, dim)
         Returns:
             Normalized tensor of same shape
         """
-        # SOLUTION: Compute RMS efficiently using rsqrt
-        # rms = sqrt(mean(x^2) + eps) = 1 / rsqrt(mean(x^2) + eps)
+        # SOLUTION: Implement RMSNorm
+        # Step 1: Compute RMS (root mean square) along the last dimension
+        # Step 2: Normalize by dividing x by RMS (use rsqrt for efficiency)
+        # Step 3: Apply learnable scale parameter
         rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-        # SOLUTION: Normalize and apply learnable scale
         return x * rms * self.scale
 
 
 class RotaryPositionalEmbedding(nn.Module):
     """
-    Rotary Position Embedding (RoPE) - PROVIDED, NO CHANGES NEEDED
+    Rotary Position Embedding (RoPE)
+
+    Paper: RoFormer (Su et al., 2021) - https://arxiv.org/abs/2104.09864
+    Used in: Llama-3, PaLM-E, GPT-NeoX
+
+    Key Idea: Rotate pairs of dimensions by an angle proportional to position
     """
 
     def __init__(self, dim: int, max_seq_len: int = 2048, base: float = 10000.0):
@@ -65,33 +81,47 @@ class RotaryPositionalEmbedding(nn.Module):
     def _build_cache(self, seq_len: int):
         """Precompute cos and sin values for all positions"""
         t = torch.arange(seq_len, device=self.inv_freq.device).type_as(self.inv_freq)
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        emb = torch.cat([freqs, freqs], dim=-1)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)  # (seq_len, dim//2)
+        emb = torch.cat([freqs, freqs], dim=-1)  # (seq_len, dim)
         self.register_buffer("cos_cached", emb.cos(), persistent=False)
         self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
     def rotate_half(self, x: torch.Tensor) -> torch.Tensor:
-        """Helper function to rotate tensor"""
+        """Helper function to rotate tensor by swapping and negating half the dimensions"""
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
     def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Apply rotary embeddings to query and key tensors"""
+        """
+        Apply rotary embeddings to query and key tensors
+
+        Args:
+            q: Query tensor (batch, num_heads, seq_len, head_dim)
+            k: Key tensor (batch, num_heads, seq_len, head_dim)
+        Returns:
+            Rotated (q, k) tensors
+        """
         seq_len = q.shape[2]
 
-        # Get cached cos/sin
-        cos = self.cos_cached[:seq_len, :].unsqueeze(0).unsqueeze(0)
-        sin = self.sin_cached[:seq_len, :].unsqueeze(0).unsqueeze(0)
+        # Get cached cos/sin values
+        cos = self.cos_cached[:seq_len, ...]
+        sin = self.sin_cached[:seq_len, ...]
 
-        # Apply rotation
-        q_rotated = (q * cos) + (self.rotate_half(q) * sin)
-        k_rotated = (k * cos) + (self.rotate_half(k) * sin)
+        # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
+        q_rot = (q * cos) + (self.rotate_half(q) * sin)
+        k_rot = (k * cos) + (self.rotate_half(k) * sin)
 
-        return q_rotated, k_rotated
+        return q_rot, k_rot
 
 
 class CausalSelfAttention(nn.Module):
-    """Multi-Head Causal Self-Attention (COMPLETE SOLUTION)"""
+    """
+    Multi-Head Causal Self-Attention with RoPE
+
+    Key constraints:
+    - Token at position t can only attend to positions <= t
+    - Uses RoPE instead of absolute positional embeddings
+    """
 
     def __init__(self, dim: int, num_heads: int, dropout: float = 0.1):
         super().__init__()
@@ -100,93 +130,106 @@ class CausalSelfAttention(nn.Module):
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.dropout = dropout
+        self.scale = self.head_dim ** -0.5
 
-        # SOLUTION: Linear projections for Q, K, V
-        self.q_proj = nn.Linear(dim, dim, bias=False)
-        self.k_proj = nn.Linear(dim, dim, bias=False)
-        self.v_proj = nn.Linear(dim, dim, bias=False)
-        self.o_proj = nn.Linear(dim, dim, bias=False)
+        # Linear projections for Q, K, V (combined projection)
+        self.qkv_proj = nn.Linear(dim, 3 * dim, bias=False)
+        self.out_proj = nn.Linear(dim, dim, bias=False)
 
-        # SOLUTION: Dropout
+        # Dropout
         self.attn_dropout = nn.Dropout(dropout)
         self.resid_dropout = nn.Dropout(dropout)
 
-        # SOLUTION: Rotary position embeddings
-        self.rope = RotaryPositionalEmbedding(dim=self.head_dim)
+        # Rotary embeddings
+        self.rope = RotaryPositionalEmbedding(self.head_dim)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        SOLUTION: Complete attention implementation
-
         Args:
             x: Input tensor (batch, seq_len, dim)
-            mask: Optional causal mask (seq_len, seq_len)
+            mask: Optional attention mask (seq_len, seq_len)
         Returns:
             Output tensor (batch, seq_len, dim)
         """
         batch_size, seq_len, _ = x.shape
 
-        # SOLUTION: Project to Q, K, V
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
+        # SOLUTION: Implement Causal Self-Attention
 
-        # SOLUTION: Reshape for multi-head attention
-        # (batch, seq_len, dim) -> (batch, num_heads, seq_len, head_dim)
-        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # Step 1: Project input to Q, K, V
+        qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
+        # Split into Q, K, V and reshape for multi-head attention
+        qkv = qkv.view(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, batch, num_heads, seq_len, head_dim)
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
-        # SOLUTION: Apply RoPE
+        # Step 2: Apply RoPE to Q and K
         q, k = self.rope(q, k)
 
-        # SOLUTION: Scaled dot-product attention
-        # scores = Q @ K^T / sqrt(head_dim)
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        # Step 3: Compute attention scores
+        # scores = (Q @ K^T) / sqrt(d_k)
+        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+        # Shape: (batch, num_heads, seq_len, seq_len)
 
-        # SOLUTION: Apply causal mask (prevent attending to future tokens)
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, float('-inf'))
+        # Step 4: Apply causal mask
+        # The mask should prevent position i from attending to positions > i
+        if mask is None:
+            mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        # Set masked positions to -inf BEFORE softmax
+        scores = scores.masked_fill(mask == 0, float('-inf'))
 
-        # SOLUTION: Softmax and dropout
+        # Step 5: Apply softmax and dropout
         attn_weights = F.softmax(scores, dim=-1)
         attn_weights = self.attn_dropout(attn_weights)
 
-        # SOLUTION: Apply attention to values
-        attn_output = torch.matmul(attn_weights, v)
+        # Step 6: Apply attention to values
+        out = torch.matmul(attn_weights, v)
+        # Shape: (batch, num_heads, seq_len, head_dim)
 
-        # SOLUTION: Reshape back
-        # (batch, num_heads, seq_len, head_dim) -> (batch, seq_len, dim)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(batch_size, seq_len, self.dim)
+        # Step 7: Reshape and project back
+        # Concatenate heads and apply output projection
+        out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.dim)
+        out = self.out_proj(out)
+        out = self.resid_dropout(out)
 
-        # SOLUTION: Output projection
-        output = self.o_proj(attn_output)
-        output = self.resid_dropout(output)
-
-        return output
+        return out
 
 
 class FeedForward(nn.Module):
-    """Feed-Forward Network (PROVIDED, NO CHANGES NEEDED)"""
+    """
+    Position-wise Feed-Forward Network with SwiGLU activation
+
+    Used in modern LLMs for better performance than standard ReLU
+    """
 
     def __init__(self, dim: int, hidden_dim: int, dropout: float = 0.1):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, dim),
-            nn.Dropout(dropout),
-        )
+        self.fc1 = nn.Linear(dim, hidden_dim, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, dim, bias=False)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        """
+        Args:
+            x: Input tensor (batch, seq_len, dim)
+        Returns:
+            Output tensor (batch, seq_len, dim)
+        """
+        x = self.fc1(x)
+        x = F.silu(x)  # SwiGLU activation (SiLU = Swish)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = self.dropout(x)
+        return x
 
 
 class TransformerBlock(nn.Module):
-    """Single Transformer Block (PROVIDED, uses student implementations)"""
+    """
+    A single Transformer decoder block
+
+    Architecture:
+        x = x + Attention(RMSNorm(x))
+        x = x + FeedForward(RMSNorm(x))
+    """
 
     def __init__(self, dim: int, num_heads: int, ff_hidden_dim: int, dropout: float = 0.1):
         super().__init__()
@@ -196,21 +239,24 @@ class TransformerBlock(nn.Module):
         self.norm2 = RMSNorm(dim)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """Pre-norm Transformer block"""
-        # Self-attention with residual
+        """
+        Args:
+            x: Input tensor (batch, seq_len, dim)
+            mask: Optional attention mask
+        Returns:
+            Output tensor (batch, seq_len, dim)
+        """
+        # Pre-norm architecture (norm before attention/FF)
         x = x + self.attention(self.norm1(x), mask)
-
-        # Feed-forward with residual
         x = x + self.feed_forward(self.norm2(x))
-
         return x
 
 
 class DecoderOnlyTransformer(nn.Module):
     """
-    Decoder-Only Transformer for Action Prediction
+    Decoder-only Transformer for next-token prediction on robot trajectories
 
-    SOLUTION: Complete implementation with optional DINOv2 integration
+    Architecture similar to GPT, but for robotic control sequences
     """
 
     def __init__(
@@ -222,64 +268,30 @@ class DecoderOnlyTransformer(nn.Module):
         ff_hidden_dim: int,
         max_seq_len: int = 2048,
         dropout: float = 0.1,
-        use_vision_backbone: bool = False,
-        vision_backbone_frozen: bool = True,
     ):
         super().__init__()
-
         self.vocab_size = vocab_size
         self.dim = dim
-        self.use_vision_backbone = use_vision_backbone
+        self.max_seq_len = max_seq_len
 
-        # SOLUTION: Token embeddings
+        # Token embedding
         self.token_embedding = nn.Embedding(vocab_size, dim)
 
-        # SOLUTION: Optional DINOv2 vision backbone
-        if use_vision_backbone:
-            try:
-                # Load pretrained DINOv2
-                self.dinov2 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-
-                # SOLUTION: Freeze DINOv2 parameters to prevent catastrophic forgetting
-                if vision_backbone_frozen:
-                    for param in self.dinov2.parameters():
-                        param.requires_grad = False
-
-                # SOLUTION: MLP projector to map DINOv2 features to transformer dim
-                dinov2_dim = 384  # DINOv2-small output dimension
-                self.projector = nn.Sequential(
-                    nn.Linear(dinov2_dim, ff_hidden_dim),
-                    nn.GELU(),
-                    nn.Linear(ff_hidden_dim, dim),
-                    nn.LayerNorm(dim)
-                )
-            except Exception as e:
-                print(f"Warning: Failed to load DINOv2: {e}")
-                self.use_vision_backbone = False
-
-        # SOLUTION: Transformer blocks
+        # Transformer blocks
         self.blocks = nn.ModuleList([
             TransformerBlock(dim, num_heads, ff_hidden_dim, dropout)
             for _ in range(num_layers)
         ])
 
-        # SOLUTION: Final layer norm
+        # Final norm and projection to vocabulary
         self.norm_final = RMSNorm(dim)
-
-        # SOLUTION: Language model head
         self.lm_head = nn.Linear(dim, vocab_size, bias=False)
 
-        # SOLUTION: Create causal mask
-        self.register_buffer(
-            "causal_mask",
-            torch.tril(torch.ones(max_seq_len, max_seq_len)).view(1, 1, max_seq_len, max_seq_len)
-        )
-
-        # SOLUTION: Initialize weights
+        # Initialize weights
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
-        """SOLUTION: Initialize weights using scaled initialization"""
+        """Initialize weights following standard Transformer initialization"""
         if isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
@@ -291,169 +303,284 @@ class DecoderOnlyTransformer(nn.Module):
         self,
         input_ids: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
-        vision_input: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
-        SOLUTION: Complete forward pass
-
         Args:
-            input_ids: Token IDs (batch, seq_len)
-            targets: Target token IDs for loss computation (batch, seq_len)
-            vision_input: Optional vision input (batch, 3, H, W)
-
+            input_ids: Input token indices (batch, seq_len)
+            targets: Target token indices for training (batch, seq_len)
         Returns:
-            logits: (batch, seq_len, vocab_size)
-            loss: Scalar loss if targets provided, else None
+            logits: Output logits (batch, seq_len, vocab_size)
+            loss: Cross-entropy loss if targets provided, else None
         """
         batch_size, seq_len = input_ids.shape
 
-        # SOLUTION: Embed tokens
-        x = self.token_embedding(input_ids)
+        # Embed tokens
+        x = self.token_embedding(input_ids)  # (batch, seq_len, dim)
 
-        # SOLUTION: Optional vision features
-        if self.use_vision_backbone and vision_input is not None:
-            with torch.no_grad():
-                vision_features = self.dinov2(vision_input)  # (batch, dinov2_dim)
-            vision_features = self.projector(vision_features)  # (batch, dim)
-            # Prepend vision features to sequence
-            vision_features = vision_features.unsqueeze(1)  # (batch, 1, dim)
-            x = torch.cat([vision_features, x], dim=1)  # (batch, seq_len+1, dim)
-            seq_len += 1
+        # Create causal mask (lower triangular)
+        mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
-        # SOLUTION: Get causal mask
-        mask = self.causal_mask[:, :, :seq_len, :seq_len]
-
-        # SOLUTION: Pass through transformer blocks
+        # Apply transformer blocks
         for block in self.blocks:
             x = block(x, mask)
 
-        # SOLUTION: Final normalization
+        # Final norm and projection
         x = self.norm_final(x)
+        logits = self.lm_head(x)  # (batch, seq_len, vocab_size)
 
-        # SOLUTION: Project to vocabulary
-        logits = self.lm_head(x)
-
-        # SOLUTION: Compute loss if targets provided
+        # Compute loss if targets provided
         loss = None
         if targets is not None:
-            # Flatten for cross-entropy
+            # Flatten for cross-entropy (use contiguous() for non-contiguous tensors)
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
-                ignore_index=-100
+                logits.contiguous().view(-1, self.vocab_size),
+                targets.contiguous().view(-1),
+                ignore_index=-1,  # Ignore padding tokens
             )
 
         return logits, loss
 
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: Optional[int] = None,
+    ) -> torch.Tensor:
+        """
+        Autoregressive generation
 
-# SOLUTION: Complete training loop
-def train_model(
+        Args:
+            input_ids: Starting tokens (batch, seq_len)
+            max_new_tokens: Number of tokens to generate
+            temperature: Sampling temperature
+            top_k: Top-k sampling (if None, use full distribution)
+        Returns:
+            Generated sequence (batch, seq_len + max_new_tokens)
+        """
+        for _ in range(max_new_tokens):
+            # Crop context if too long
+            input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+
+            # Forward pass
+            logits, _ = self.forward(input_context)
+            logits = logits[:, -1, :] / temperature  # Get last token logits
+
+            # Optional top-k sampling
+            if top_k is not None:
+                values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < values[:, [-1]]] = -float('Inf')
+
+            # Sample from distribution
+            probs = F.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
+
+            # Append to sequence
+            input_ids = torch.cat([input_ids, next_token], dim=1)
+
+        return input_ids
+
+
+def train_epoch(
     model: DecoderOnlyTransformer,
-    train_loader,
-    val_loader,
-    num_epochs: int = 10,
-    learning_rate: float = 3e-4,
-    device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
-):
+    dataloader: torch.utils.data.DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    epoch: int,
+) -> float:
     """
-    SOLUTION: Complete training loop with best practices
+    Train for one epoch
 
     Args:
         model: The transformer model
-        train_loader: Training data loader
-        val_loader: Validation data loader
-        num_epochs: Number of training epochs
-        learning_rate: Learning rate
+        dataloader: Training data loader
+        optimizer: Optimizer
         device: Device to train on
+        epoch: Current epoch number
+    Returns:
+        Average loss for the epoch
     """
+    model.train()
+    total_loss = 0.0
+    num_batches = 0
+
+    # SOLUTION: Implement training loop
+    for batch_idx, (states, actions) in enumerate(dataloader):
+        # 1. Move data to device
+        actions = actions.to(device)
+
+        # Use actions as input with teacher forcing
+        # Input: all tokens except the last
+        # Target: all tokens except the first (shifted by 1)
+        input_ids = actions[:, :-1]
+        targets = actions[:, 1:]
+
+        # 2. Forward pass (get logits and loss)
+        logits, loss = model(input_ids, targets)
+
+        # 3. Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+
+        # 4. Gradient clipping (max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+        # 5. Optimizer step
+        optimizer.step()
+
+        # 6. Accumulate loss
+        total_loss += loss.item()
+        num_batches += 1
+
+        # Print progress every 100 batches
+        if (batch_idx + 1) % 100 == 0:
+            avg_loss = total_loss / num_batches
+            print(f"  Epoch {epoch+1} | Batch {batch_idx+1} | Avg Loss: {avg_loss:.4f}")
+
+    return total_loss / num_batches if num_batches > 0 else 0.0
+
+
+def main():
+    """
+    Main training script
+
+    Usage:
+        python backbone_complete.py
+    """
+    # Hyperparameters
+    vocab_size = 256  # Discretized action space
+    dim = 256  # Model dimension
+    num_layers = 4  # Number of transformer blocks
+    num_heads = 8  # Number of attention heads
+    ff_hidden_dim = 1024  # Feed-forward hidden dimension
+    max_seq_len = 50  # Maximum sequence length
+    batch_size = 32
+    learning_rate = 1e-4
+    num_epochs = 10
+
+    # Device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # SOLUTION: Load dataset
+    data_path = Path(__file__).parent.parent.parent / "src" / "assignments" / "scratch-1" / "data" / "trajectories.pkl"
+
+    if not data_path.exists():
+        print(f"Dataset not found at {data_path}")
+        print("Generating dataset...")
+        # Generate dataset if not exists
+        import sys
+        sys.path.insert(0, str(data_path.parent.parent))
+        from generate_data import generate_dataset, create_dataloaders
+
+        dataset = generate_dataset(num_trajectories=10000, seq_length=50, seed=42)
+
+        # Save dataset
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(data_path, 'wb') as f:
+            pickle.dump(dataset, f)
+        print(f"Dataset saved to {data_path}")
+    else:
+        print(f"Loading dataset from {data_path}")
+        with open(data_path, 'rb') as f:
+            dataset = pickle.load(f)
+
+    # Create dataloaders
+    from torch.utils.data import DataLoader, TensorDataset
+
+    num_samples = len(dataset['actions'])
+    num_train = int(num_samples * 0.9)
+
+    indices = torch.randperm(num_samples)
+    train_indices = indices[:num_train]
+    val_indices = indices[num_train:]
+
+    train_dataset = TensorDataset(
+        dataset['states'][train_indices],
+        dataset['actions'][train_indices],
+    )
+    val_dataset = TensorDataset(
+        dataset['states'][val_indices],
+        dataset['actions'][val_indices],
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    print(f"Train samples: {len(train_dataset)}, Val samples: {len(val_dataset)}")
+
+    # SOLUTION: Create model
+    model = DecoderOnlyTransformer(
+        vocab_size=vocab_size,
+        dim=dim,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        ff_hidden_dim=ff_hidden_dim,
+        max_seq_len=max_seq_len,
+        dropout=0.1,
+    )
     model = model.to(device)
+
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"Model parameters: {num_params:,}")
+
+    # SOLUTION: Create optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
 
-    # Learning rate scheduler
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epochs)
-
+    # SOLUTION: Training loop
     best_val_loss = float('inf')
+    checkpoint_dir = Path(__file__).parent.parent.parent / "src" / "assignments" / "scratch-1" / "checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(num_epochs):
-        # Training
-        model.train()
-        train_loss = 0.0
+        # Train
+        train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
 
-        for batch_idx, (states, actions) in enumerate(train_loader):
-            states = states.to(device)
-            actions = actions.to(device)
-
-            # Use actions as input (teacher forcing)
-            input_ids = actions[:, :-1]
-            targets = actions[:, 1:]
-
-            # Forward pass
-            logits, loss = model(input_ids, targets)
-
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-
-            optimizer.step()
-
-            train_loss += loss.item()
-
-        avg_train_loss = train_loss / len(train_loader)
-
-        # Validation
+        # Validate
         model.eval()
         val_loss = 0.0
+        num_val_batches = 0
 
         with torch.no_grad():
             for states, actions in val_loader:
-                states = states.to(device)
                 actions = actions.to(device)
-
                 input_ids = actions[:, :-1]
                 targets = actions[:, 1:]
 
                 logits, loss = model(input_ids, targets)
                 val_loss += loss.item()
+                num_val_batches += 1
 
-        avg_val_loss = val_loss / len(val_loader)
+        avg_val_loss = val_loss / num_val_batches if num_val_batches > 0 else 0.0
 
-        # Save best model
+        print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
+
+        # Save best checkpoint
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), 'checkpoints/best_model.pt')
+            checkpoint_path = checkpoint_dir / "best_model.pt"
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_loss,
+                'val_loss': avg_val_loss,
+            }, checkpoint_path)
+            print(f"  Saved best model (val_loss={avg_val_loss:.4f})")
 
-        scheduler.step()
-
-        print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
-
-    return model
+    # SOLUTION: Save final checkpoint
+    final_checkpoint_path = checkpoint_dir / "final_model.pt"
+    torch.save({
+        'epoch': num_epochs - 1,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'train_loss': train_loss,
+        'val_loss': avg_val_loss,
+    }, final_checkpoint_path)
+    print(f"\nTraining complete! Final model saved to {final_checkpoint_path}")
+    print(f"Best validation loss: {best_val_loss:.4f}")
 
 
 if __name__ == "__main__":
-    # Example usage
-    from generate_data import generate_dataset, create_dataloaders
-
-    # Generate dataset
-    print("Generating dataset...")
-    dataset = generate_dataset(num_trajectories=1000, seq_length=50)
-    train_loader, val_loader = create_dataloaders(dataset, batch_size=32)
-
-    # Create model
-    print("Creating model...")
-    model = DecoderOnlyTransformer(
-        vocab_size=256,
-        dim=384,
-        num_layers=4,
-        num_heads=8,
-        ff_hidden_dim=1024,
-        dropout=0.1
-    )
-
-    # Train
-    print("Training...")
-    model = train_model(model, train_loader, val_loader, num_epochs=10)
-
-    print("Training complete!")
+    main()

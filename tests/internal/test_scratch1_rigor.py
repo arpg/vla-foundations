@@ -20,6 +20,7 @@ pytestmark = [pytest.mark.internal, pytest.mark.rigor]
 
 
 @pytest.mark.gradient
+@pytest.mark.mastery
 def test_frozen_dinov2_no_gradients(create_solution_model):
     """
     Verify that frozen DINOv2 backbone has requires_grad=False for all parameters.
@@ -29,7 +30,16 @@ def test_frozen_dinov2_no_gradients(create_solution_model):
     - Catastrophic forgetting (DINOv2 loses its learned features)
     - 10x slower training
     - Much higher memory usage
+
+    NOTE: This is a MASTERY test - DINOv2 integration is optional for Scratch-1.
     """
+    # Check if model supports vision backbone (mastery feature)
+    from backbone import DecoderOnlyTransformer
+    import inspect
+    sig = inspect.signature(DecoderOnlyTransformer.__init__)
+    if 'use_vision_backbone' not in sig.parameters:
+        pytest.skip("DINOv2 integration not implemented (Mastery bonus)")
+
     # Load the solution model with DINOv2 integration
     model = create_solution_model(
         dim=384,  # Matches DINOv2 output
@@ -60,6 +70,7 @@ def test_frozen_dinov2_no_gradients(create_solution_model):
 
 
 @pytest.mark.fidelity
+@pytest.mark.mastery
 def test_projector_latent_fidelity(create_solution_model, load_gold_standard):
     """
     Compare student's projector output against gold standard tensor.
@@ -68,7 +79,16 @@ def test_projector_latent_fidelity(create_solution_model, load_gold_standard):
     - Correctly implemented (right architecture)
     - Properly initialized (not introducing noise)
     - Numerically stable (no NaNs, exploding gradients)
+
+    NOTE: This is a MASTERY test - DINOv2/projector is optional for Scratch-1.
     """
+    # Check if model supports vision backbone (mastery feature)
+    from backbone import DecoderOnlyTransformer
+    import inspect
+    sig = inspect.signature(DecoderOnlyTransformer.__init__)
+    if 'use_vision_backbone' not in sig.parameters:
+        pytest.skip("DINOv2/projector not implemented (Mastery bonus)")
+
     # Try to load gold standard (skip if not available)
     try:
         gold_data = load_gold_standard('scratch1_gold_output.pt')
