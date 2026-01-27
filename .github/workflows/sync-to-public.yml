@@ -177,56 +177,75 @@ jobs:
           fi
 
       # =====================================================================
-      # PUSH TO PUBLIC REPOSITORY (ORPHAN STRATEGY)
+      # PUSH TO PUBLIC REPOSITORY (SAFE MERGE STRATEGY)
       # =====================================================================
       #
-      # Uses "orphan branch" strategy to break all git history links between
-      # the private and public repositories. This ensures:
-      # 1. No commit history from private repo is exposed
-      # 2. Public repo has completely independent git history
-      # 3. Maximum security against accidental solution leaks via git log
+      # Uses a safe merge strategy that:
+      # 1. Fetches the current public repo state
+      # 2. Creates a new branch with sanitized content
+      # 3. Merges into public main (preserving student branches)
+      # 4. Only updates content files, doesn't destroy history
       #
 
-      - name: Push to public repo (Orphan Strategy)
+      - name: Push to public repo (Safe Merge Strategy)
         env:
           PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
-          echo "=== Pushing to Public Repository (Orphan Branch Strategy) ==="
+          echo "=== Pushing to Public Repository (Safe Merge Strategy) ==="
           echo ""
 
           # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-          # Add public remote
-          git remote add public https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com/arpg/vla-foundations.git
-
           # Get the tag name for release message
           TAG_NAME=${GITHUB_REF#refs/tags/}
           echo "Release tag: $TAG_NAME"
           echo ""
 
-          # Create orphan branch (breaks history link)
-          echo "Creating orphan branch..."
-          git checkout --orphan temp-public-branch
+          # Add public remote with auth
+          git remote add public https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com/arpg/vla-foundations.git
+
+          # Fetch public repo
+          echo "Fetching public repository..."
+          git fetch public main
+
+          # Create a fresh branch for the sanitized content
+          echo "Creating release branch..."
+          git checkout -b release-${TAG_NAME}
 
           # Stage all sanitized files
-          echo "Staging sanitized files..."
           git add -A
 
-          # Commit with timestamp
+          # Commit the sanitized content
           RELEASE_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          git commit -m "Public Release: ${RELEASE_DATE}
+          git commit -m "Release: ${TAG_NAME} (${RELEASE_DATE})
 
-Tag: ${TAG_NAME}
+Sanitized content from private repository.
+This release includes updated assignment materials.
 
-This commit was created via automated sanitization and orphan push.
-No git history is preserved to prevent solution leaks."
+Changes:
+- Updated assignment templates
+- Fixed bugs and improvements
+- Documentation updates"
 
-          # Force push to public main branch
+          # Checkout public main
+          echo "Checking out public main..."
+          git checkout -B public-main public/main
+
+          # Merge release into public-main (using theirs strategy for content files)
+          echo "Merging release content..."
+          git merge release-${TAG_NAME} --no-edit -X theirs --allow-unrelated-histories || {
+            echo "Merge had conflicts, resolving with release content..."
+            git checkout --theirs .
+            git add -A
+            git commit -m "Merge release ${TAG_NAME}: resolved with release content"
+          }
+
+          # Push merged main back to public
           echo ""
-          echo "Force pushing to public repository main branch..."
-          git push public temp-public-branch:main --force
+          echo "Pushing to public repository main branch..."
+          git push public public-main:main
 
           echo ""
           echo "✅ Successfully synced to public repository"
@@ -235,7 +254,7 @@ No git history is preserved to prevent solution leaks."
           echo "Release Details:"
           echo "  Tag: $TAG_NAME"
           echo "  Date: $RELEASE_DATE"
-          echo "  Strategy: Orphan Push (no history link)"
+          echo "  Strategy: Safe Merge (preserves student branches)"
           echo ""
           echo "Public Repository:"
           echo "  URL: https://github.com/arpg/vla-foundations"
