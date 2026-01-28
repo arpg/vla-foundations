@@ -219,8 +219,7 @@ jobs:
 
           # Commit the sanitized content
           RELEASE_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          git commit -m "$(cat <<EOF
-Release: ${TAG_NAME} (${RELEASE_DATE})
+          COMMIT_MSG="Release: ${TAG_NAME} (${RELEASE_DATE})
 
 Sanitized content from private repository.
 This release includes updated assignment materials.
@@ -228,9 +227,8 @@ This release includes updated assignment materials.
 Changes:
 - Updated assignment templates
 - Fixed bugs and improvements
-- Documentation updates
-EOF
-)"
+- Documentation updates"
+          git commit -m "$COMMIT_MSG"
 
           # Checkout public main
           echo "Checking out public main..."
