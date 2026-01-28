@@ -194,17 +194,31 @@ jobs:
           echo "=== Pushing to Public Repository (Safe Merge Strategy) ==="
           echo ""
 
+          # Verify token is available
+          if [ -z "$PUBLIC_REPO_TOKEN" ]; then
+            echo "❌ ERROR: PUBLIC_REPO_TOKEN is not set!"
+            echo "Please add the token to repository secrets:"
+            echo "  Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          fi
+          echo "✓ Token is available (length: ${#PUBLIC_REPO_TOKEN})"
+          echo ""
+
           # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+
+          # Configure git credential helper to use the token
+          git config --global credential.helper store
+          echo "https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com" > ~/.git-credentials
 
           # Get the tag name for release message
           TAG_NAME=${GITHUB_REF#refs/tags/}
           echo "Release tag: $TAG_NAME"
           echo ""
 
-          # Add public remote with auth
-          git remote add public https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com/arpg/vla-foundations.git
+          # Add public remote (without embedding credentials in URL for security)
+          git remote add public https://github.com/arpg/vla-foundations.git
 
           # Fetch public repo
           echo "Fetching public repository..."
