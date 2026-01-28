@@ -167,6 +167,37 @@ jobs:
             echo "   ✓ scripts/dev/ removed"
           fi
 
+          # Check that instructor docs are gone
+          echo ""
+          echo "7. Verifying instructor documentation removal..."
+          for file in INSTRUCTOR.md INSTRUCTOR_GUIDE.md API_SETUP.md SETUP_WITH_GH_CLI.md QUICK_START_SSH.md; do
+            if [ -f "$file" ]; then
+              echo "❌ ERROR: $file still exists!"
+              LEAK_FOUND=1
+            fi
+          done
+          echo "   ✓ Instructor docs removed"
+
+          # Check that Claude workflows are gone
+          echo ""
+          echo "8. Verifying .claude/ removal..."
+          if [ -d ".claude/" ]; then
+            echo "❌ ERROR: .claude/ directory still exists!"
+            LEAK_FOUND=1
+          else
+            echo "   ✓ .claude/ removed"
+          fi
+
+          # Check that sync workflow itself is gone
+          echo ""
+          echo "9. Verifying sync workflow removal..."
+          if [ -f ".github/workflows/sync-to-public.yml" ]; then
+            echo "❌ ERROR: sync-to-public.yml still exists!"
+            LEAK_FOUND=1
+          else
+            echo "   ✓ sync-to-public.yml removed"
+          fi
+
           echo ""
           if [ $LEAK_FOUND -eq 0 ]; then
             echo "✅ LEAK DETECTION PASSED: Repository is clean"

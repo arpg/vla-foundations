@@ -50,6 +50,26 @@ else
     echo "  ⊘ Not found: scripts/dev_utils.py"
 fi
 
+# Remove instructor documentation files
+for file in INSTRUCTOR.md INSTRUCTOR_GUIDE.md API_SETUP.md SETUP_WITH_GH_CLI.md QUICK_START_SSH.md; do
+    if [ -f "$file" ]; then
+        rm -f "$file"
+        echo "  ✓ Removed: $file"
+    fi
+done
+
+# Remove Claude Code skills and commands (instructor-only workflow automation)
+if [ -d ".claude/" ]; then
+    rm -rf .claude/
+    echo "  ✓ Removed: .claude/"
+fi
+
+# Remove sync workflow itself (shouldn't be in public repo)
+if [ -f ".github/workflows/sync-to-public.yml" ]; then
+    rm -f .github/workflows/sync-to-public.yml
+    echo "  ✓ Removed: .github/workflows/sync-to-public.yml"
+fi
+
 echo ""
 
 # Step 2: Sanitize TODO comments in Python files
