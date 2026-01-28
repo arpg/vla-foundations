@@ -302,8 +302,31 @@ jobs:
           echo "Merging release content..."
           git merge release-${TAG_NAME} --no-edit -X theirs --allow-unrelated-histories || {
             echo "Merge had conflicts, resolving with release content..."
-            git checkout --theirs .
+
+            # For rename/delete conflicts, remove the files from the index
+            # (we want the release branch state where they're deleted)
+            git status --porcelain | grep '^DU' | cut -c4- | while read file; do
+              echo "  Accepting deletion of: $file"
+              git rm "$file" 2>/dev/null || true
+            done
+
+            # For other conflicts, accept the release branch version
+            git status --porcelain | grep '^UU' | cut -c4- | while read file; do
+              echo "  Accepting release version of: $file"
+              git checkout --theirs "$file"
+              git add "$file"
+            done
+
+            # For added/deleted conflicts, prefer deletion
+            git status --porcelain | grep '^UA' | cut -c4- | while read file; do
+              echo "  Accepting deletion of: $file"
+              git rm "$file" 2>/dev/null || true
+            done
+
+            # Stage everything
             git add -A
+
+            # Commit the resolution
             git commit -m "Merge release ${TAG_NAME}: resolved with release content"
           }
 
