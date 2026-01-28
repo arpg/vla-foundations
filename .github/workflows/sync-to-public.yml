@@ -219,7 +219,7 @@ jobs:
 
           # Commit the sanitized content
           RELEASE_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          git commit -m "$(cat <<'EOF'
+          git commit -m "$(cat <<EOF
 Release: ${TAG_NAME} (${RELEASE_DATE})
 
 Sanitized content from private repository.
