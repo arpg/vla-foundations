@@ -1,8 +1,8 @@
 ---
 title: "Scaling and reasoning in Foundational Models"
 author: "Soorej Santhoshkumar Nair & Antony Zhao"
-paper: "GRPO "
-topic: "Vision Foundations"
+paper: "GRPO/DeepSeekMath, DeepSeek-R1, Cosmos-Reason1"
+topic: "Reasoning Foundations"
 ---
 
 # Scaling and reasoning in Foundational Models
@@ -45,13 +45,15 @@ Group Relative Policy Optimization (GRPO) is an improvement in the previously us
 
 PPO uses an actor-critic model where a value function calculates the Advantage. Advantage (or Generalized Advantage Estimation / GAE) can be thought of as "How much better a specific action a<sub>t</sub> is compared to an average action considering the current state s<sub>t</sub>.
 
-| Step | PPO | GRPO |
-|----------|----------|-------| 
-| Step 1 <br>**Rollout/Sampling**| Freeze current policy $\pi$<sub>old</sub> <br> Sample output tokens o<sub>1</sub>, o<sub>2</sub>,... o<sub>T</sub>  | For each prompt, sample a set of G responses {y<sub>1</sub>, y<sub>2</sub>,.., y<sub>G</sub>} <br> Instead of tokens, we sample a group of completions per prompt |
-| Step 2 <br> **Reward Computation**| Reward model gives a score <br> KL penalty added to token <br> $r_t = r_\phi - \beta \log \frac{\pi_{\text{ref}}(o_t)}{\pi_\theta(o_t)}$ | Scalar Score is assigned to each response <br> ${r_1, r_2,..., r_G}$ <br> No KL score added in this step. |
-| Step 3 <br> **Advantage Estimation**| Trained value mode $V_\phi$ is used to compute GAE <br> $\hat{A}_t = \sum_{l=0}^{\infty} (\gamma \lambda)^l ( r_{t+l} - V(s_{t+l}) )$ | Instead of a model, within group normalization based Advantage <br>$\hat{A}_t = \frac{r_i - \mu_r}{\sigma_r} $ <br> Where $\mu_r$ is the average reward for the group.|
-| Step 4 <br> **Loss computation**| Loss is calculated as follows <br> $L^{\text{PPO}} = \mathbb{E}_t \Big[ \min \big( r_t(\theta)\,\hat A_t, \operatorname{clip}\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\,\hat A_t \big) \Big]$  <br> Where, $r_t(\theta) = \frac{\pi_\theta(o_t)}{\pi_{\theta_{\text{old}}}(o_t)}$| **Policy Loss** - For each token in response i <br> $r_{i, t}(\theta) = \frac{\pi_\theta(o_{i, t})}{\pi_{\theta old}(o_{i, t})}$ <br> $L_{policy} = \mathbb{E}_{i, t}[\min(r_{i, t}(\theta)\hat{A}_t), \operatorname{clip}(r_{i, t}(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t] $ <br> <br>**KL Regularization loss** <br> $L_{KL} = \beta\cdot\mathbb{E}_{it}[\operatorname{KL}(\pi_\theta(\cdot \vert s_{i,t}) \vert\vert \pi_{ref}(\cdot \vert s_{i,t})]$ <br> <br>**Final GRPO loss** $L_{GRPO} = L_{policy} - L_{KL}$ |
-| Step 5 <br> **Optimization**| Run K epochs of SGD on same batch| Reuse same batch for K epochs |
+
+| Step| PPO| GRPO|
+| -- | -- | -- |
+| **Step 1**<br>**Rollout / Sampling**   | Freeze current policy $\pi_\text{old}$<br>Sample output tokens $o_1, o_2, \ldots o_T$| For each prompt, sample a group of $G$ responses ${y_1, y_2, \ldots, y_G}$<br>Sampling is done at the **response level**, not token level|
+| **Step 2**<br>**Reward Computation**   | Reward model assigns a score<br>KL penalty added per token<br>$r_t = r_\phi - \beta \log \frac{\pi_\text{ref}(o_t)}{\pi_\theta(o_t)}$ | Scalar reward assigned to each response<br>${r_1, r_2, \ldots, r_G}$<br>No KL term added at this stage |
+| **Step 3**<br>**Advantage Estimation** | Value model $V_\phi$ used with GAE<br>$\hat A_t = \sum_{l \ge 0} (\gamma \lambda)^l (r_{t+l} - V(s_{t+l}))$ | Within-group reward normalization<br>$\hat A_i = \frac{r_i - \mu_r}{\sigma_r}$<br>$\mu_r$ is mean group reward |
+| **Step 4**<br>**Loss Computation**     | PPO clipped objective<br>$L^\text{PPO} = \mathbb E_t[\min(r_t(\theta)\hat A_t,\ \text{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat A_t)]$<br>$r_t(\theta)=\frac{\pi_\theta(o_t)}{\pi_{\theta_\text{old}}(o_t)}$ | **Policy loss** (token-level)<br>$L_\text{policy}=\mathbb E_{i,t}[\min(r_{i,t}(\theta)\hat A_i,\ \text{clip}(r_{i,t}(\theta),1-\epsilon,1+\epsilon)\hat A_i)]$<br>$r_{i,t}(\theta)=\frac{\pi_\theta(o_{i,t})}{\pi_{\theta_\text{old}}(o_{i,t})}$<br><br>**KL regularization**<br>$L_\text{KL}=\beta,\mathbb E_{i,t}[\text{KL}(\pi_\theta(\cdot\mid s_{i,t})\Vert\pi_\text{ref}(\cdot\mid s_{i,t}))]$<br><br>**Final loss** $L^\text{GRPO}=L_\text{policy}-L_\text{KL}$ |
+| **Step 5**<br>**Optimization**| Run $K$ epochs of SGD on the same batch | Reuse the same batch for $K$ epochs |
+
 
 GRPO replaces value-function-based advantages with group-relative rewards, and moves KL regularization out of the reward and directly into the loss. Since, value function is a separate model that needs to be trained, skipping that step helps training the reinforcement learning part faster and more efficient.
 
