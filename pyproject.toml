@@ -1,0 +1,42 @@
+[project]
+name = "vla-foundations"
+version = "0.1.0"
+description = "VLA Foundations Course - Private Instructor Repository"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision",
+    "numpy>=1.24.0",
+    "pytest>=7.0.0",
+    "pytest-html>=4.0.0",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu118" }]
+torchvision = [{ index = "pytorch-cu118" }]
+
+[tool.hatch.build.targets.wheel]
+packages = []
+
+[tool.pytest.ini_options]
+markers = [
+    "internal: internal grading tests (never public)",
+    "rigor: rigorous grading tests",
+    "gradient: gradient flow tests",
+    "fidelity: output comparison tests",
+    "training: training convergence tests",
+    "mastery: optional mastery-level features (DINOv2, KV-cache, etc.)",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[dependency-groups]
+dev = []

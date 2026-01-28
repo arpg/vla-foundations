@@ -1,20 +1,41 @@
-# VLA Foundations Development Guide for AI SWE Agents (Public Repo)
+# VLA Foundations Development Guide for AI SWE Agents (Private Repo)
 
-This is the **public student-facing repository** for VLA Foundations. This is a Next.js (App Router) application used as a living textbook and course platform for Vision-Language-Action (VLA) robotics. It uses **Tailwind CSS** for styling, **MDX** for content (textbook/assignments), and **pnpm** for package management. It is deployed to **GitHub Pages** via GitHub Actions.
+This is the **private instructor repository** for VLA Foundations, containing complete assignment solutions, internal grading tests, and instructor operations. The public student-facing repository is at `arpg/vla-foundations`. This repo uses **Next.js (App Router)** for the textbook, **Tailwind CSS** for styling, **MDX** for content, and **pnpm** for package management.
 
-Read more about the course workflow in [README.md](README.md).
+Read more about the dual-repository architecture in [INSTRUCTOR.md](INSTRUCTOR.md).
 
 ---
 
-## Repository Purpose
+## Repository Architecture
 
-This is a **student repository** containing:
-- Assignment starter code with TODOs (`src/assignments/`)
-- Public validation tests (`tests/public/`)
-- Textbook content and assignment specs (`content/`)
-- Course website (Next.js application)
+This is a **two-repository system**:
 
-**Note**: Complete solutions and internal grading tests are maintained in a separate private instructor repository.
+```
+Private Repo (crheckman/private-vla-foundations)
+├── private/                    # Complete assignment solutions (NEVER PUBLIC)
+│   └── solutions/
+├── tests/internal/             # Internal grading tests (NEVER PUBLIC)
+│   ├── fixtures/              # Gold standard test data
+│   └── reports/               # Grading reports (git-ignored)
+├── scripts/
+│   ├── dev_utils.py           # Solution management (inject/reset/verify-clean)
+│   ├── sanitize.sh            # Automated sanitization pipeline
+│   └── _sanitize_todos.py     # TODO comment sanitizer
+├── .claude/
+│   ├── skills/                # Claude Code skills for automation
+│   └── commands/              # Slash command shortcuts
+└── src/assignments/           # Starter code with [SOLUTION] hints
+
+                    ↓ (Orphan push on release tag)
+
+Public Repo (arpg/vla-foundations)
+├── src/assignments/           # Starter code (TODOs only)
+├── tests/public/              # Student-visible tests
+├── content/                   # Textbook and assignment specs
+└── [NO private/ or tests/internal/]
+```
+
+**Critical**: Never commit `private/` or `tests/internal/` to public branches.
 
 ---
 
@@ -22,136 +43,281 @@ This is a **student repository** containing:
 
 ### Prerequisites
 ```bash
-# Install Node.js 18+ and pnpm
-npm install -g pnpm
-
-# Install Python 3.11+ for assignments
-python3 --version
-```
-
-### Installation
-```bash
 # Install dependencies
 pnpm install
 
+# Install uv (Python package manager) - REQUIRED
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Python dependencies via uv
+uv sync
+
+# Install GitHub CLI (required for skills)
+brew install gh
+gh auth login
+```
+
+### Python Environment (uv)
+**All Python commands MUST use `uv run`** to ensure correct dependencies:
+```bash
+# Run Python scripts
+uv run python scripts/dev_utils.py --list
+
+# Run pytest
+uv run pytest tests/internal/ -v -m rigor
+
+# Run any Python file
+uv run python src/assignments/scratch-1/generate_data.py
+```
+
+### Development
+```bash
 # Run development server
 pnpm dev
-# Access at http://localhost:3000
 
 # Build production (static export in out/)
 pnpm build
 
-# Lint
+# Lint Next.js
 pnpm lint
 ```
 
 ---
 
-## Student Workflow
+## Claude Code Skills (Automation)
 
-### 1. Setup
-Follow the Scratch-0 assignment to configure your environment.
+This repository has **7 Claude Code skills** for workflow automation. See [.claude/skills/README.md](.claude/skills/README.md) for complete documentation.
 
-### 2. Branching
-All work must be done on a branch named `<assignment>-<username>`.
+### Core Skills
 
-**Example**: `scratch-1-johndoe`
+#### `/vla-guard` - Solution Leak Audit
+**Purpose**: Prevent solution leaks before any public operation
 
+**Usage**:
 ```bash
-git checkout -b scratch-1-johndoe
+/vla-guard
 ```
 
-### 3. Implementation
-- Code stubs are in `src/assignments/`
-- Documentation and reports belong in `content/course/submissions/`
+**What it does**:
+- Scans for `[SOLUTION]` markers in `src/` and `content/`
+- Verifies `private/` and `tests/internal/` not staged
+- Checks git history for accidental commits
+- Runs `dev_utils.py --verify-clean` (similarity detection)
+- **Blocks** sync if any check fails
 
-### 4. Testing
-Run public tests to verify your implementation:
+**When to use**: Before every push, PR, or release
 
+---
+
+#### `/test-rigor` - Internal Grading Tests
+**Purpose**: Run internal grading tests with automatic solution injection/reset
+
+**Usage**:
 ```bash
-# Test specific assignment
-pytest tests/public/test_scratch1_basic.py -v
-
-# Run all public tests
-pytest tests/public/ -v
+/test-rigor
+# Select: "Scratch-1" / "Scratch-2" / "All"
 ```
 
-**Expected output**:
+**What it does**:
+1. Injects solutions: `python3 scripts/dev_utils.py --inject <assignment>`
+2. Runs pytest: `pytest tests/internal/ -v -m rigor`
+3. Generates report: `tests/internal/reports/test-report-<timestamp>.txt`
+4. Resets to starter code: `python3 scripts/dev_utils.py --reset <assignment>`
+
+**Safe to run multiple times** - always resets after completion.
+
+---
+
+#### `/generate-fixtures` - Gold Standard Fixtures
+**Purpose**: Generate reference data for fidelity tests from solution code
+
+**Usage**:
+```bash
+/generate-fixtures
+# Select assignment
 ```
-tests/public/test_scratch1_basic.py::TestModelStructure::test_model_initialization PASSED
-tests/public/test_scratch1_basic.py::TestModelStructure::test_forward_pass_shape PASSED
-tests/public/test_scratch1_basic.py::TestModelStructure::test_no_nans PASSED
-tests/public/test_scratch1_basic.py::TestModelStructure::test_gradient_flow PASSED
+
+**What it does**:
+1. Injects solutions
+2. Sets fixed random seeds (seed=42)
+3. Runs solution code to generate outputs
+4. Saves to `tests/internal/fixtures/<assignment>/gold_output.pt`
+5. Verifies no NaNs
+6. Generates fixture documentation
+7. Resets to starter code
+
+**When to use**: After completing solution implementation or updating solution code
+
+---
+
+#### `/grade` - Automated PR Grading
+**Purpose**: Complete grading workflow for student pull requests
+
+**Usage**:
+```bash
+/grade
+# Enter PR number or auto-detect latest
 ```
 
-### 5. Submission
-Open a Pull Request to the `staging` branch. **Do not target `main`**.
+**What it does**:
+1. Fetches student code from GitHub PR
+2. Runs VLA Guard on student code (detect plagiarism/leaks)
+3. Runs `tests/public/` (student-visible tests)
+4. Injects reference solution
+5. Runs `tests/internal/` (gradient leak, fidelity, training tests)
+6. Restores student code
+7. Generates detailed markdown feedback report
+8. Posts comment on PR (optional)
+9. Updates PR labels (ready-to-merge / needs-revision / changes-requested)
 
-1. Go to https://github.com/arpg/vla-foundations
-2. Click "Pull requests" → "New pull request"
-3. **Base branch**: `staging` (NOT `main`)
-4. **Compare branch**: your branch name
-5. Title: `Assignment X: Your Name`
-6. Add a description of your work
+**Output**: `tests/internal/reports/grade-pr<number>.md`
 
-### 6. Review Process
-1. Wait for CI checks to pass (GitHub Actions will validate your submission)
-2. Wait for instructor review
-3. Address any requested changes
-4. **ONLY the instructor can merge pull requests**
-5. Once approved, the instructor will merge to `staging`, then to `main`
+**When to use**: When reviewing student submissions
 
-**You do NOT have permission to merge your own PRs. All merges are done by the instructor.**
+---
+
+#### `/release` - Safe Assignment Publishing
+**Purpose**: Orchestrate complete release workflow with comprehensive safety checks
+
+**Usage**:
+```bash
+/release
+# Select: "Scratch-1" / "Scratch-2" / etc.
+```
+
+**What it does**:
+1. Verifies on main branch, no uncommitted changes
+2. Runs `/vla-guard` pre-flight audit (fail-fast)
+3. Prompts for release tag (e.g., `release-scratch-2`)
+4. Shows changes since last release
+5. Runs `scripts/sanitize.sh` (removes private/, [SOLUTION] markers, etc.)
+6. Verifies sanitization (fail-safe)
+7. Creates annotated git tag
+8. Pushes tag → triggers `.github/workflows/sync-to-public.yml`
+9. Monitors GitHub Actions workflow execution
+10. Verifies public repository (no leaks)
+11. Checks deployment status (https://www.vlm-robotics.dev)
+12. Generates release summary: `.claude/releases/release-<tag>.md`
+
+**Fail-safe**: Aborts at ANY failed check, provides remediation instructions
+
+**When to use**: When ready to publish assignment to students
+
+---
+
+#### `/new-assignment` - Assignment Scaffolding
+**Purpose**: Create complete assignment structure with templates
+
+**Usage**:
+```bash
+/new-assignment
+# Enter name, type, focus, difficulty
+```
+
+**What it does**:
+1. Creates directory structure:
+   - `src/assignments/<name>/` (starter code with TODOs)
+   - `private/solutions/<name>/` (solution templates)
+   - `tests/public/test_<name>_basic.py` (student-visible tests)
+   - `tests/internal/test_<name>_rigor.py` (grading tests)
+   - `content/course/assignments/<name>.mdx` (assignment spec)
+2. Generates Python templates
+3. Generates test templates
+4. Creates README files
+
+**Next steps after scaffolding**:
+1. Complete solution implementations
+2. Run `/generate-fixtures`
+3. Update MDX spec
+4. Run `/test-rigor`
+5. Commit changes
+6. Run `/release`
+
+---
+
+#### `/sync-check` - Post-Release Verification
+**Purpose**: Verify public repository has no leaks after release sync
+
+**Usage**:
+```bash
+/sync-check
+# Select: "Latest" or specify release tag
+```
+
+**What it does**:
+1. Clones public repo to temp directory (read-only)
+2. Scans for `[SOLUTION]` markers
+3. Checks for private directories (`private/`, `tests/internal/`)
+4. Checks for private scripts (`dev_utils.py`, `sanitize.sh`)
+5. Checks for sensitive files (credentials, `*_solution.py`)
+6. Verifies orphan push strategy (no linked git history)
+7. Compares file lists (private vs public)
+8. Checks deployment status (HTTPS 200)
+9. Runs sample fidelity check
+10. Generates verification report: `.claude/sync-reports/sync-check-<timestamp>.md`
+11. Cleans up temp files
+
+**When to use**: Always run after `/release` completes
+
+**Critical**: If leaks detected, report provides urgent remediation steps
 
 ---
 
 ## Commands Useful in Development
 
-### Python Testing
+### Solution Management
 ```bash
-# Install test dependencies
-pip install pytest torch
+# List all available solutions
+uv run python scripts/dev_utils.py --list
 
-# Run public tests
-pytest tests/public/ -v
+# Inject solutions for testing/grading
+uv run python scripts/dev_utils.py --inject scratch-1
 
-# Run specific test
-pytest tests/public/test_scratch1_basic.py::TestModelStructure::test_forward_pass_shape -v
+# Reset to starter code
+uv run python scripts/dev_utils.py --reset scratch-1
 
-# Run with detailed output
-pytest tests/public/ -v --tb=short
+# Verify no solution leaks (similarity check)
+uv run python scripts/dev_utils.py --verify-clean
 ```
 
-### Assignment Development
+### Testing
 ```bash
-# Navigate to assignment directory
-cd src/assignments/scratch-1
+# Run public tests (students can see these)
+uv run pytest tests/public/ -v
 
-# Run your implementation
-python3 model.py
+# Run internal grading tests (after injecting solutions)
+uv run pytest tests/internal/ -v -m rigor
 
-# Test your implementation
-pytest ../../tests/public/test_scratch1_basic.py -v
+# Run specific test file
+uv run pytest tests/internal/test_scratch1_rigor.py -v
+
+# Generate HTML report
+uv run pytest tests/internal/ --html=tests/internal/reports/report.html --self-contained-html
 ```
 
-### Git Operations
+### Pre-Release Checks
 ```bash
-# Create feature branch
-git checkout -b scratch-1-username
+# Complete pre-flight check
+/pre-flight
 
-# Stage changes
-git add src/assignments/scratch-1/
+# Or manually:
+uv run python scripts/dev_utils.py --verify-clean
+bash scripts/sanitize.sh  # (Only in orphan branch workflow)
+```
 
-# Commit
-git commit -m "feat: implement scratch-1 model"
+### GitHub Operations
+```bash
+# List open student PRs
+gh pr list --base staging --state open
 
-# Push to your branch
-git push origin scratch-1-username
+# View PR details
+gh pr view 123
 
-# Update with latest staging changes
-git fetch origin
-git rebase origin/staging
-git push --force-with-lease
+# Comment on PR
+gh pr comment 123 --body "Feedback here"
+
+# Merge PR
+gh pr merge 123 --squash
 ```
 
 ---
@@ -174,12 +340,11 @@ This makes PR review much easier.
 ```
 
 ### LaTeX
-Use formal LaTeX for all mathematical expressions:
-
+Use formal LaTeX for all mathematical derivations:
 ```markdown
-The action distribution is:
+The loss function is:
 $$
-p(a_t | s_t, I_t) = \text{softmax}(\text{MLP}(h_t))
+\mathcal{L} = -\sum_{t=1}^T \log p(a_t | s_t, I_t)
 $$
 ```
 
@@ -195,24 +360,32 @@ pnpm lint
 ## Testing Philosophy
 
 ### Public Tests (`tests/public/`)
-These are the tests **you can see and run** to validate your implementation.
+**Purpose**: Student-visible validation tests
 
 **What they test**:
-- Basic model structure (initialization, parameter counts)
-- Forward pass correctness (no NaNs, correct output shapes)
+- Basic model structure (initialization, shapes)
+- Forward pass correctness (no NaNs, correct dimensions)
 - Gradient flow (backpropagation works)
-- Basic functionality (model can be trained)
 
-**You should ensure all public tests pass before submitting your PR.**
+**Students can run these**: `pytest tests/public/test_scratch1_basic.py -v`
 
-### Internal Tests (Private)
-The instructor also runs **internal grading tests** that you cannot see. These test:
-- Implementation correctness against gold standards
-- Edge cases and error handling
-- Performance and efficiency
-- Advanced requirements
+### Internal Tests (`tests/internal/`)
+**Purpose**: Rigorous grading tests (NEVER synced to public)
 
-**Your grade depends on passing both public and internal tests.**
+**What they test**:
+- **Gradient Leak Test**: Verify frozen parameters (e.g., DINOv2 backbone)
+- **Latent Fidelity Test**: Compare output against gold standard fixtures
+- **Training Convergence Test**: Verify model can train and loss decreases
+- **Edge Case Tests**: Boundary conditions, error handling
+
+**Markers**:
+- `@pytest.mark.internal` - All internal tests
+- `@pytest.mark.rigor` - Strict grading tests
+- `@pytest.mark.gradient` - Gradient flow tests
+- `@pytest.mark.fidelity` - Output comparison tests
+- `@pytest.mark.training` - Training convergence tests
+
+**Run with**: `pytest tests/internal/ -v -m rigor`
 
 ---
 
@@ -224,257 +397,248 @@ pnpm dev
 # Access at http://localhost:3000
 ```
 
-Navigate to:
-- Textbook: `http://localhost:3000/textbook`
-- Assignments: `http://localhost:3000/textbook/assignments/scratch-1`
-
 ### Staging Previews
-Every Pull Request triggers a deployment to a unique subdirectory:
+Every Pull Request to `staging` branch triggers deployment to:
 ```
 https://vlm-robotics.dev/staging/pulls/[PR_NUMBER]/
 ```
 
-You can preview your changes (if you submitted MDX content) at this URL after CI completes.
+**Review Protocol**:
+1. Read the rendered audit on the staging site
+2. Comment on the **source MDX** in GitHub "Files Changed" tab
+3. Use the **Rich Diff** view in GitHub to verify LaTeX rendering
 
-### Production Site
-The live course website is at:
+### Production
+Production site deployed at:
 ```
 https://www.vlm-robotics.dev
 ```
 
-**Note**: Only instructor-approved content is deployed to production.
+Deployment triggered by:
+- Push to `main` branch (after staging → main merge)
+- GitHub Action: `.github/workflows/deploy.yml`
+- Deploys to ristoffer.ch via SSH
 
 ---
 
 ## Patterns & Standards
 
 ### Amazon Principle
-Course content follows the "audit" format. We write rigorous, durable technical audits, not summaries.
+We do not write "summaries." We write rigorous, durable **Audits**. A high-fidelity audit IS the textbook chapter.
+
+### Textbook Audit Sidebars
+Every audit MUST contain these three technical sidebars:
+
+1. **The Lineage of Failure**: Why previous approaches died
+2. **Intuitive Derivation**: The geometric/mathematical intuition of the loss function
+3. **Implementation Gotchas**: Practitioners' notes on coordinate frames, normalization, or hyperparameters
+
+### The Interface Focus
+When auditing VLA models, focus on the **Interface**:
+- **Input Projection**: Pixels → Tokens
+- **Action Head**: Tokens → Trajectories
+- **The Loss/Objective Function**
 
 ### Git Hygiene
-We are a **rebase-only** repository. Use `git rebase staging` instead of `git merge staging`.
+We are a **rebase-only** lab. Use `git rebase main`. PRs containing "Merge branch 'main'" commits will be closed.
 
 **Correct workflow**:
 ```bash
-# Update your branch with latest staging changes
 git fetch origin
-git rebase origin/staging
-
-# If conflicts occur, resolve them and continue
-git rebase --continue
-
-# Force push your rebased branch
+git rebase origin/main
 git push --force-with-lease
 ```
 
-**Never use merge commits.** PRs containing "Merge branch 'staging'" will be closed.
-
-### Assignment File Structure
-Each assignment follows this structure:
-
-```
-src/assignments/scratch-1/
-├── __init__.py          # Package initialization
-├── model.py             # Model implementation (with TODOs)
-├── train.py             # Training script (with TODOs)
-├── generate_data.py     # Data generation utilities
-└── README.md            # Assignment-specific instructions
+### Sanitization
+All private solutions are marked with `[SOLUTION]` tags:
+```python
+# TODO: Implement RMSNorm forward pass
+# [SOLUTION] Use torch.rsqrt for efficiency
+result = torch.rsqrt(variance + self.eps)
 ```
 
-**Complete the TODO sections** to implement the assignment.
+The sanitization pipeline:
+1. `scripts/_sanitize_todos.py` - Removes `[SOLUTION]` markers
+2. `scripts/sanitize.sh` - Orchestrates full cleanup (private dirs, scripts, README)
+3. Triggered automatically by `.github/workflows/sync-to-public.yml` on release tags
+
+**Load-bearing wall**: `scripts/sanitize.sh` is the primary defense against solution leaks.
+
+### Orphan Push Strategy
+When syncing to public repo, we use **orphan branches** to break all git history links:
+
+```bash
+git checkout --orphan temp-public-branch
+git add -A
+git commit -m "Public Release: $(date)"
+git push public temp-public-branch:main --force
+```
+
+**Benefits**:
+- No commit history from private repo exposed
+- Public repo has completely independent git history
+- Maximum security against accidental leaks via `git log`
 
 ---
 
 ## File Map of Interest
 
-### Configuration
-- [next.config.ts](next.config.ts) - Next.js configuration with dynamic routing
-- [tailwind.config.ts](tailwind.config.ts) - Tailwind CSS configuration
-- [tsconfig.json](tsconfig.json) - TypeScript configuration
+### GitHub Actions
+- [.github/workflows/sync-to-public.yml](.github/workflows/sync-to-public.yml) - Automated sync to public repo (orphan push)
+- [.github/workflows/shadow-tester.yml](.github/workflows/shadow-tester.yml) - Shadow CI for student PRs
+- [.github/workflows/deploy.yml](.github/workflows/deploy.yml) - Production deployment to ristoffer.ch
 
-### Content
-- [content/course/](content/course/) - Course content (textbook chapters, assignments)
-- [content/course/assignments/](content/course/assignments/) - Assignment specifications
+### Configuration
+- [next.config.ts](next.config.ts) - Next.js config with dynamic routing for staging
+- [pytest.ini](pytest.ini) - pytest markers configuration
+- [tailwind.config.ts](tailwind.config.ts) - Tailwind CSS configuration
+
+### Scripts
+- [scripts/dev_utils.py](scripts/dev_utils.py) - Solution management (inject/reset/verify-clean)
+- [scripts/sanitize.sh](scripts/sanitize.sh) - Complete sanitization pipeline
+- [scripts/_sanitize_todos.py](scripts/_sanitize_todos.py) - TODO comment sanitizer
+
+### Claude Code Skills
+- [.claude/skills/](/.claude/skills/) - All skill definitions
+- [.claude/skills/README.md](.claude/skills/README.md) - Comprehensive skills documentation
+- [.claude/commands/](.claude/commands/) - Command shortcuts
 
 ### Components
-- [components/audit/AuditLayout.tsx](components/audit/AuditLayout.tsx) - Primary wrapper for textbook chapters
-- [components/ui/](components/ui/) - Reusable UI components
+- [components/audit/AuditLayout.tsx](components/audit/AuditLayout.tsx) - Primary wrapper for rendered textbook chapters
 
 ### Testing
-- [tests/public/](tests/public/) - Public validation tests
-- [pytest.ini](pytest.ini) - pytest configuration
-
-### GitHub Actions
-- [.github/workflows/vla-audit.yml](.github/workflows/vla-audit.yml) - PR validation and staging deployment
-- [.github/workflows/deploy.yml](.github/workflows/deploy.yml) - Production deployment
-
----
-
-## Assignment Workflow Example
-
-### Scratch-1: Decoder-Only Transformer
-
-1. **Read the assignment spec**:
-   - Navigate to: https://www.vlm-robotics.dev/textbook/assignments/scratch-1
-   - Or locally: http://localhost:3000/textbook/assignments/scratch-1
-
-2. **Create your branch**:
-   ```bash
-   git checkout -b scratch-1-johndoe
-   ```
-
-3. **Implement the TODOs**:
-   ```bash
-   cd src/assignments/scratch-1
-   # Edit model.py, train.py, etc.
-   ```
-
-4. **Test your implementation**:
-   ```bash
-   pytest tests/public/test_scratch1_basic.py -v
-   ```
-
-5. **Commit and push**:
-   ```bash
-   git add src/assignments/scratch-1/
-   git commit -m "feat: implement scratch-1 decoder-only transformer"
-   git push origin scratch-1-johndoe
-   ```
-
-6. **Open PR**:
-   - Go to https://github.com/arpg/vla-foundations
-   - Create PR from `scratch-1-johndoe` to `staging`
-   - Title: "Scratch-1: John Doe"
-   - Description: Brief summary of your implementation
-
-7. **Wait for review**:
-   - CI will run public tests
-   - Instructor will run internal grading tests
-   - Instructor will provide feedback
-
-8. **Address feedback** (if needed):
-   ```bash
-   # Make changes
-   git add .
-   git commit -m "fix: address review comments"
-   git push origin scratch-1-johndoe
-   ```
-
----
-
-## Common Issues
-
-### Issue: Tests Fail Locally
-**Solution**: Ensure you installed dependencies:
-```bash
-pip install pytest torch numpy
-```
-
-### Issue: Import Errors
-**Solution**: Make sure you're running tests from the repository root:
-```bash
-cd /path/to/vla-foundations
-pytest tests/public/test_scratch1_basic.py -v
-```
-
-### Issue: Merge Conflicts
-**Solution**: Rebase your branch:
-```bash
-git fetch origin
-git rebase origin/staging
-# Resolve conflicts in your editor
-git add .
-git rebase --continue
-git push --force-with-lease
-```
-
-### Issue: PR Checks Failing
-**Solution**: Check the GitHub Actions logs:
-1. Go to your PR
-2. Click "Details" next to the failing check
-3. Read the error messages
-4. Fix the issues and push again
-
-### Issue: Can't Merge PR
-**Expected**: Students cannot merge their own PRs. Wait for instructor approval and merge.
-
----
-
-## Resources
+- [tests/conftest.py](tests/conftest.py) - pytest fixtures (auto-inject for internal tests)
+- [tests/public/](tests/public/) - Student-visible tests
+- [tests/internal/](tests/internal/) - Internal grading tests
 
 ### Documentation
-- [MDX Syntax](https://mdxjs.com/)
-- [Next.js App Router](https://nextjs.org/docs/app)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [PyTorch Documentation](https://pytorch.org/docs/)
-- [LaTeX Math Symbols](https://www.overleaf.com/learn/latex/List_of_Greek_letters_and_math_symbols)
+- [INSTRUCTOR.md](INSTRUCTOR.md) - Complete instructor guide (consolidated)
+- [SKILLS_COMPLETE.md](SKILLS_COMPLETE.md) - Skills implementation summary
+- [REFACTOR_COMPLETE.md](REFACTOR_COMPLETE.md) - Repository hardening summary
 
-### Papers & Datasets
-- [RT-1 Paper](https://arxiv.org/abs/2212.06817)
-- [RT-2 Paper](https://arxiv.org/abs/2307.15818)
-- [Open-X Embodiment](https://robotics-transformer-x.github.io/)
-- [DROID Dataset](https://droid-dataset.github.io/)
+---
 
-### Course Resources
+## Typical Workflows
+
+### Creating a New Assignment
+```bash
+# 1. Scaffold structure
+/new-assignment
+
+# 2. Implement solutions
+# Edit: private/solutions/scratch-3/model_solution.py
+
+# 3. Generate fixtures
+/generate-fixtures
+
+# 4. Update spec
+# Edit: content/course/assignments/scratch-3.mdx
+
+# 5. Test grading
+/test-rigor
+
+# 6. Commit
+git add . && git commit -m "feat: add scratch-3 assignment"
+
+# 7. Release
+/release
+
+# 8. Verify
+/sync-check
+```
+
+### Grading Student Work
+```bash
+# 1. List PRs
+gh pr list --base staging
+
+# 2. Grade PR
+/grade
+
+# 3. Review report
+cat tests/internal/reports/grade-pr123.md
+
+# 4. Merge if approved
+gh pr merge 123 --squash
+```
+
+### Pre-Release Checklist
+```bash
+# 1. Audit
+/vla-guard
+
+# 2. Pre-flight (audit + sanitize)
+/pre-flight
+
+# 3. Release
+/release
+
+# 4. Verify
+/sync-check
+```
+
+---
+
+## Shadow CI
+
+Student PRs to the public repo trigger **Shadow CI** - hidden testing with internal grading suite:
+
+1. Student opens PR to `arpg/vla-foundations` (public)
+2. Public `.github/workflows/vla-audit.yml` triggers `repository_dispatch` to private repo
+3. Private `.github/workflows/shadow-tester.yml` runs:
+   - Fetches student code
+   - Injects solutions
+   - Runs internal tests
+   - Posts Pass/Fail comment on public PR (no details)
+4. Instructor uses `/grade` for detailed feedback
+
+**Purpose**: Catch critical failures early without exposing grading logic.
+
+---
+
+## Security Boundaries
+
+### NEVER Sync to Public
+- `private/` directory (complete solutions)
+- `tests/internal/` directory (grading tests)
+- `scripts/dev_utils.py` (solution management)
+- `scripts/sanitize.sh` (sanitization script)
+- `scripts/_sanitize_todos.py` (helper script)
+- `.claude/` directory (instructor automation)
+- Files with `[SOLUTION]` markers
+
+### Multi-Layer Protection
+1. **Pre-commit hook** - Blocks commits with `[SOLUTION]` in public files
+2. **VLA Guard skill** - Scans for leaks before operations
+3. **Sanitization pipeline** - Removes private content automatically
+4. **Post-sanitization validation** - Fail-safe check in GitHub Actions
+5. **Orphan push** - Breaks git history links
+6. **Sync-check skill** - Verifies public repo after release
+
+---
+
+## Requirements
+
+- **Node.js** 18+
+- **pnpm** 8+
+- **Python** 3.11+
+- **uv** (Python package manager): `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **gh CLI** (for skills): `brew install gh && gh auth login`
+
+Python dependencies (managed by uv via `pyproject.toml`):
+- pytest, pytest-html
+- torch
+- numpy
+
+---
+
+## Support
+
+- **Instructor Guide**: [INSTRUCTOR.md](INSTRUCTOR.md)
+- **Skills Documentation**: [.claude/skills/README.md](.claude/skills/README.md)
+- **Public Repo**: https://github.com/arpg/vla-foundations
 - **Course Website**: https://www.vlm-robotics.dev
-- **Repository**: https://github.com/arpg/vla-foundations
-- **Instructor**: Christoffer Heckman (christoffer.heckman@colorado.edu)
 
 ---
 
-## Engineering Standards
-
-### Code Quality
-- Follow PEP 8 style guide for Python
-- Use type hints where appropriate
-- Add docstrings to classes and functions
-- Keep functions focused and single-purpose
-
-### Testing
-- All public tests must pass before submission
-- Write clean, readable code
-- Handle edge cases appropriately
-
-### Documentation
-- Update README.md if adding new features
-- Document complex algorithms with comments
-- Use semantic line breaks in MDX files
-
----
-
-## Grading Rubric (Typical)
-
-Assignments are typically graded on:
-
-| Component | Points | Description |
-|-----------|--------|-------------|
-| Correctness | 50% | Implementation meets requirements, passes tests |
-| Code Quality | 20% | Clean, readable, well-documented code |
-| Performance | 15% | Efficient implementation, appropriate algorithms |
-| Documentation | 15% | Clear explanations, proper formatting |
-
-**Note**: Exact rubric varies by assignment. See individual assignment specs.
-
----
-
-## Getting Help
-
-1. **Read the assignment spec carefully** - Many questions are answered there
-2. **Check the course forum** - Others may have asked similar questions
-3. **Attend office hours** - Best place for detailed help
-4. **Ask in Discord/Slack** - Quick questions and clarifications
-5. **Email instructor** - For private concerns
-
-**Do NOT share solution code publicly.** Help each other understand concepts, but do your own implementation.
-
----
-
-## License
-
-Copyright © 2026 Christoffer Heckman. All rights reserved.
-
-Course materials are for educational use by enrolled students only.
-
----
-
-**Good luck with your assignments!** Remember to start early, test often, and ask for help when needed.
+**Remember**: This is the private instructor repository. Always run `/vla-guard` before any public-facing operation.
