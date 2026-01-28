@@ -1,0 +1,54 @@
+======================================================================
+SCRATCH-1 SOLUTION TRAINING RUN
+======================================================================
+Started: 2026-01-28 09:15:53
+
+Configuration:
+  vocab_size: 256
+  dim: 256
+  num_layers: 4
+  num_heads: 8
+  ff_hidden_dim: 1024
+  max_seq_len: 50
+  dropout: 0.1
+  batch_size: 32
+  learning_rate: 0.0001
+  num_epochs: 10
+  num_trajectories: 10000
+
+GPU detected: Quadro P6000 (sm_61)
+⚠️  GPU compute capability 6.1 not supported by PyTorch 2.x (requires 7.0+)
+Falling back to CPU...
+
+Generating dataset...
+Generating 10000 trajectories...
+  Generated 1000/10000 trajectories
+  Generated 2000/10000 trajectories
+  Generated 3000/10000 trajectories
+  Generated 4000/10000 trajectories
+  Generated 5000/10000 trajectories
+  Generated 6000/10000 trajectories
+  Generated 7000/10000 trajectories
+  Generated 8000/10000 trajectories
+  Generated 9000/10000 trajectories
+  Generated 10000/10000 trajectories
+
+Dataset generated:
+  States shape: torch.Size([10000, 50, 10])
+  Actions shape: torch.Size([10000, 50])
+  Vocabulary size: 256 (discretized actions)
+Dataset generation time: 43.20s
+
+
+Dataloaders created:
+  Train samples: 9000
+  Val samples: 1000
+  Batch size: 32
+
+Creating model...
+Model parameters: 3,279,104
+
+======================================================================
+TRAINING
+======================================================================
+  Epoch 1 | Batch 100 | Avg Loss: 4.1673
