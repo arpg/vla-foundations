@@ -15,6 +15,7 @@ jobs:
         with:
           fetch-depth: 0  # Full history for proper sync and linting
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false  # Don't persist GITHUB_TOKEN credentials
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -208,6 +209,14 @@ jobs:
           # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+
+          # Clear any existing credential helpers set by actions/checkout
+          # This prevents the default GITHUB_TOKEN from overriding our PAT
+          git config --unset-all credential.helper || true
+          git config --global --unset-all credential.helper || true
+
+          # Disable git's credential caching that might use the wrong token
+          git config --global credential.useHttpPath true
 
           # Get the tag name for release message
           TAG_NAME=${GITHUB_REF#refs/tags/}
