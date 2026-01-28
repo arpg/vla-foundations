@@ -3,16 +3,6 @@ name: Deploy to Production
 on:
   push:
     branches: [ main ]
-    paths:
-      # Only trigger on content/frontend changes
-      - 'app/**'
-      - 'content/**'
-      - 'components/**'
-      - 'lib/**'
-      - 'public/**'
-      - 'next.config.ts'
-      - 'package.json'
-      - 'tailwind.config.ts'
     paths-ignore:
       # Ignore changes that don't affect the site
       - 'src/assignments/**'
@@ -21,6 +11,10 @@ on:
       - 'private/**'
       - '**.md'
       - '.github/**'
+      - 'data/**'
+      - 'pyproject.toml'
+      - 'pytest.ini'
+      - 'uv.lock'
 
 jobs:
   deploy:
