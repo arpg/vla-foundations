@@ -60,8 +60,7 @@ PPO uses an actor-critic model where a value function calculates the Advantage. 
 
 GRPO replaces value-function-based advantages with group-relative rewards, and moves KL regularization out of the reward and directly into the loss. Since, value function is a separate model that needs to be trained, skipping that step helps training the reinforcement learning part faster and more efficient.
 
-<img src="PPO vs GRPO.png" alt="PPO vs GRPO" width="900" />
-
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Soorej-ScalingAndReasoning/content/textbook/audits/PPO%20vs%20GRPO.png" alt="PPO vs GRPO" width="900" />
 **DeepSeek-R1** uses GRPO to train the model to reason on its own. 
 **Cosmos-Reason1** also uses the GRPO model for the Physical AI RL part of their model.
 
@@ -74,7 +73,7 @@ billion total parameters. On average, only 37 billion are activated every token.
 Transformer model, allowing for dramatically lower KV-cache size, up to a factor of 57x, which also speeds up responses and allows for reasoning to be done faster. 
 (Might be useful to put MLA into the the architectural deep dive, wasn't too sure since it's not specifically related to reasoning)
 
-<img src="mla_arch.jpg" alt="MLA architecture, using latents " width="900" />
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/762372b95e020009c1083aed4d17dbfef9366357/content/textbook/audits/mla_arch.jpg" alt="MLA architecture, using latents " width="900" />
 
 **Cosmos-Reason1** uses a decoder-only multimodal LLM with two possible instantiations:
 - Dense Transformer backbone
@@ -92,7 +91,7 @@ Transformer model, allowing for dramatically lower KV-cache size, up to a factor
 Cosmos-Reason1-7B, uses Qwen2.5-VL as the pre-trained model and the Cosmos-Reason1-56B, uses InternViT-300M-V2.5 as the vision encoder and Nemotron-H as the LLM backbone.
 Cosmos-Reason1 also uses a Hybrid-Mamba-MLP-transformer architecture unlike the standard transformer backbone architecture to avoid the quadratic time-complexity for the 56B model. For the 7B model, Qwen2.5L acts as the backbone.
 
-<img src="Mamba-MLP.png" alt="Hybrid-Mamba-MLP-architecture" width ="900" />
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/762372b95e020009c1083aed4d17dbfef9366357/content/textbook/audits/Mamba-MLP.png" alt="Hybrid-Mamba-MLP-architecture" width ="900" />
 
 ## Interaction Mechanisms
 
@@ -116,12 +115,12 @@ And during the instruction tuning and RL stage, the model is trained on GSM8K an
 These exemplify the focus shift from model size, number of tokens, compute size etc to better reward systems, physical vs symbolic reasoning, balanced training data split between internet data and domain related data. 
 
 
-<img src="Deepseek-arch.png" alt="DeepseekMath architecture" width ="900" />
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/762372b95e020009c1083aed4d17dbfef9366357/content/textbook/audits/Deepseek-arch.png" alt="DeepseekMath architecture" width ="900" />
 
 
 In the Cosmos-Reason1 work, the focus shifts from text-based symbolic reasoning to multimodal physical and embodied reasoning. The model is trained using a multistage pipeline that includes large-scale vision pretraining followed by supervised fine-tuning and reinforcement learning on curated multimodal datasets targeting physical commonsense, spatial reasoning, and temporal understanding. Visual inputs are processed by a pretrained vision encoder and projected into the LLM embedding space using an MLP, allowing joint reasoning within a decoder-only language model. Experiments across the 8B and 56B model variants show that while increased model size improves performance, the primary gains come from domain-specific multimodal data and task-aligned reward signals, rather than additional generic image–text data or further scaling of parameters.
 
-<img src="Cosmos-arch.png" alt="Cosmos-Reason1 architecture" width ="900" />
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/762372b95e020009c1083aed4d17dbfef9366357/content/textbook/audits/Cosmos-arch.png" width = "900" />
 
 For DeepSeek-R1, the authors propose that the problem with relying only on human-annotated reasoning traces is that this can introduce various biases into the data, as well as 
 prevent the model from performing much better than humans. This human-annotated data is also fairly expensive, which is why they use RL and GRPO to allow the model to reason by itself. 
@@ -129,7 +128,7 @@ This self-evolution of reasoning also displays various interesting and useful pr
 This is purely an emergent behavior, as the model isn't explicitly encouraged to think for longer. This increased time "thinking" also leads to various emergent behaviors such as exploring alternate solutions, 
 and the researchers note that the model begins to say "wait" in the later stages of training, and flagging some parts of its own reasoning as important or relevant.
 
-<img src="aha_moment.png" alt="aha moment in reasoning" width ="900" />
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/762372b95e020009c1083aed4d17dbfef9366357/content/textbook/audits/aha_moment.png" alt="aha moment in reasoning" width ="900" />
 
 
 ### Data Walls
