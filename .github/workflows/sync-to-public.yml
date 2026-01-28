@@ -189,14 +189,14 @@ jobs:
 
       - name: Push to public repo (Safe Merge Strategy)
         env:
-          PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN_2 }}
         run: |
           echo "=== Pushing to Public Repository (Safe Merge Strategy) ==="
           echo ""
 
           # Verify token is available
           if [ -z "$PUBLIC_REPO_TOKEN" ]; then
-            echo "❌ ERROR: PUBLIC_REPO_TOKEN is not set!"
+            echo "❌ ERROR: PUBLIC_REPO_TOKEN_2 is not set!"
             echo "Please add the token to repository secrets:"
             echo "  Settings > Secrets and variables > Actions > New repository secret"
             exit 1
