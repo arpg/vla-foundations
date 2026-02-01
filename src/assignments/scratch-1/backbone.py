@@ -30,9 +30,8 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma)
-        # Hint: Use nn.Parameter with torch.ones
-        self.scale = None  # REPLACE THIS LINE
+        # Initialize learnable scale parameter 'g' (gamma)
+        self.scale = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -41,15 +40,14 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm
+        # Implement RMSNorm
         # Step 1: Compute RMS (root mean square) along the last dimension
         # Step 2: Normalize by dividing x by RMS
         # Step 3: Apply learnable scale parameter
 
         # HINT: Use torch.mean, torch.rsqrt for efficiency
-        # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-        raise NotImplementedError("TODO: Implement RMSNorm forward pass")
+        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * rms * self.scale
 
 
 class RotaryPositionalEmbedding(nn.Module):
