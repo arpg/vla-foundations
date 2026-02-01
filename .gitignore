@@ -63,3 +63,6 @@ __pycache__/
 !.claude/releases/.gitkeep
 !.claude/sync-reports/.gitkeep
 !tests/internal/reports/.gitkeep
+
+# Ignore generated data
+*.pkl
