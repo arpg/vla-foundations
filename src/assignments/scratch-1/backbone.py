@@ -493,11 +493,15 @@ def main():
         # Visualize one example data point
         example_state, example_action = train_actions[0]
         print(f"Example state shape: {example_state.shape}, Example action shape: {example_action.shape}")
-        state_num = 0
-        for example_state, example_action in zip(example_state[0:1], example_action[0:1]):
-            for element in example_state:
-                print(f"Action {example_action} State {state_num}: Trajectory Value: {element.item()}")
-    
+        for traj_point in zip(example_action, example_state):
+            print(
+                f"Action token: {traj_point[0].item():>5} | "
+                f"J0: {traj_point[1][0]: .2f}, J1: {traj_point[1][1]: .2f}, "
+                f"J2: {traj_point[1][2]: .2f}, J3: {traj_point[1][3]: .2f}, "
+                f"J4: {traj_point[1][4]: .2f}, J5: {traj_point[1][5]: .2f}, "
+                f"J6: {traj_point[1][6]: .2f}, X: {traj_point[1][7]: .2f}, "
+                f"Y: {traj_point[1][8]: .2f}, Z: {traj_point[1][9]: .2f}"
+            )
     # TODO: PART 2: Create model
     # model = DecoderOnlyTransformer(...)
 
