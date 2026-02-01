@@ -53,13 +53,18 @@ __pycache__/
 
 # project-specific
 /arxiv-digest/
+# Private repo files - do not commit to public
+private/
+tests/
+scripts/_sanitize_todos.py
+scripts/manage_solutions.py
+scripts/sanitize.sh
+scripts/setup_private_repo.sh
+scripts/add_github_secret.sh
+pytest.ini
+PRIVATE_REPO_SETUP.md
+SETUP_WITH_GH_CLI.md
+QUICK_REFERENCE.md
 
-# Private solution infrastructure (NEVER commit to public branches)
-*.backup.py
-
-# Claude Code skill outputs (generated reports)
-.claude/releases/*.md
-.claude/sync-reports/*.md
-!.claude/releases/.gitkeep
-!.claude/sync-reports/.gitkeep
-!tests/internal/reports/.gitkeep
+# Ignore generated data
+*.pkl

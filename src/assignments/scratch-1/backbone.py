@@ -13,7 +13,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from typing import Optional, Tuple    
+from typing import Optional, Tuple
+from pathlib import Path
+import pickle
+from torch.utils.data import DataLoader, TensorDataset
 
 class RMSNorm(nn.Module):
     """
@@ -432,22 +435,67 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # TODO: Load dataset
+    # PART 1: Load dataset
     # Use the generate_data.py script to create synthetic trajectories
-    # Load from data/trajectories.pkl
+    # Load from data/trajectories.pkl from anywhere in file system
+    local_data_path = Path("data/trajectories.pkl")
+    data_path = local_data_path.resolve()
+    print(f"Loading data from {data_path}")
 
-    # TODO: Create model
+    if not data_path.exists():
+        raise FileNotFoundError(f"Data file not found at {data_path}. Please run generate_data.py to create it.")
+    
+    # Load generated trajectories pickle file
+    with open(data_path, "rb") as f:
+        trajectory_data = pickle.load(f)
+    
+    # Print a bunch of information about the data
+    print("Data loaded successfully. Trajectories: " + type(trajectory_data).__name__)
+    for key in trajectory_data:
+        print(f"Key: {key}, Type: {type(trajectory_data[key])}, Length: {len(trajectory_data[key])}")
+    print(f"Loaded {len(trajectory_data['actions'])} trajectories")
+    if len(trajectory_data["actions"]) == 0:
+        raise ValueError("No trajectories found in the dataset.")
+    print(f"Example trajectory length: {len(trajectory_data['actions'][0])}")
+    # Create Training and Validation DataSets with Torch
+    number_of_trajectories = len(trajectory_data['actions'])
+    train_size = int(0.9 * number_of_trajectories)
+
+    # Randomly shuffle indices
+    indices = torch.randperm(number_of_trajectories).tolist()
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
+
+    # Create TensorDatasets
+    train_actions = TensorDataset(
+        trajectory_data['states'][train_indices],
+        trajectory_data['actions'][train_indices]
+    )
+    val_actions = TensorDataset(
+        trajectory_data['states'][val_indices],
+        trajectory_data['actions'][val_indices]
+    )
+
+    # Verify Dataset Size
+    print(f"Training set size: {len(train_actions)}")
+    print(f"Validation set size: {len(val_actions)}")
+
+    # Create DataLoaders
+    train_loader = DataLoader(train_actions, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_actions, batch_size=batch_size, shuffle=False)
+
+    # TODO: PART 2: Create model
     # model = DecoderOnlyTransformer(...)
 
-    # TODO: Create optimizer
+    # TODO: PART 3: Create optimizer
     # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # TODO: Training loop
+    # TODO: PART 4: Training loop
     # for epoch in range(num_epochs):
     #     train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
     #     print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
 
-    # TODO: Save checkpoint
+    # TODO: PART 5: Save checkpoint
     # torch.save(model.state_dict(), "checkpoints/best_model.pt")
 
     print("TODO: Complete the main training script")
