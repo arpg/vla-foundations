@@ -431,6 +431,8 @@ def main():
     learning_rate = 1e-4
     num_epochs = 10
 
+    debug_info = True
+
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -449,14 +451,17 @@ def main():
     with open(data_path, "rb") as f:
         trajectory_data = pickle.load(f)
     
-    # Print a bunch of information about the data
-    print("Data loaded successfully. Trajectories: " + type(trajectory_data).__name__)
-    for key in trajectory_data:
-        print(f"Key: {key}, Type: {type(trajectory_data[key])}, Length: {len(trajectory_data[key])}")
-    print(f"Loaded {len(trajectory_data['actions'])} trajectories")
     if len(trajectory_data["actions"]) == 0:
         raise ValueError("No trajectories found in the dataset.")
-    print(f"Example trajectory length: {len(trajectory_data['actions'][0])}")
+    
+    if debug_info:
+        # Print a bunch of information about the data
+        print("Data loaded successfully. Trajectories: " + type(trajectory_data).__name__)
+        for key in trajectory_data:
+            print(f"Key: {key}, Type: {type(trajectory_data[key])}, Length: {len(trajectory_data[key])}")
+        print(f"Loaded {len(trajectory_data['actions'])} trajectories")
+        print(f"Example trajectory length: {len(trajectory_data['actions'][0])}")
+
     # Create Training and Validation DataSets with Torch
     number_of_trajectories = len(trajectory_data['actions'])
     train_size = int(0.9 * number_of_trajectories)
@@ -484,6 +489,15 @@ def main():
     train_loader = DataLoader(train_actions, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_actions, batch_size=batch_size, shuffle=False)
 
+    if debug_info:
+        # Visualize one example data point
+        example_state, example_action = train_actions[0]
+        print(f"Example state shape: {example_state.shape}, Example action shape: {example_action.shape}")
+        state_num = 0
+        for example_state, example_action in zip(example_state[0:1], example_action[0:1]):
+            for element in example_state:
+                print(f"Action {example_action} State {state_num}: Trajectory Value: {element.item()}")
+    
     # TODO: PART 2: Create model
     # model = DecoderOnlyTransformer(...)
 
