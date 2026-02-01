@@ -14,7 +14,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from typing import Optional, Tuple
-
+import pandas as pd
+import numpy as np
 
 class RMSNorm(nn.Module):
     """
@@ -31,9 +32,9 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma)
+        # TODO: Initialize learnable scale parameter 'g' (gamma) DONE
         # Hint: Use nn.Parameter with torch.ones
-        self.scale = None  # REPLACE THIS LINE
+        self.scale = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -42,15 +43,15 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm
+        # TODO: Implement RMSNorm DONE
         # Step 1: Compute RMS (root mean square) along the last dimension
         # Step 2: Normalize by dividing x by RMS
         # Step 3: Apply learnable scale parameter
-
+        rms = torch.rsqrt(x.pow(2).mean(dim = -1, keepdim = True) + self.eps)
+        xnorm = x* rms
+        return xnorm * self.scale
         # HINT: Use torch.mean, torch.rsqrt for efficiency
         # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-        raise NotImplementedError("TODO: Implement RMSNorm forward pass")
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -151,39 +152,55 @@ class CausalSelfAttention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention
+        # TODO: Implement Causal Self-Attention DONE
 
         # Step 1: Project input to Q, K, V
-        # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
+        qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
         # Split into Q, K, V and reshape for multi-head attention
         # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
+        qkv = qkv.view((batch_size, seq_len, 3, self.num_heads, self.head_dim))
+        qkv = qkv.permute(2, 0, 3, 1, 4)
+        Q, K, V = qkv[0], qkv[1], qkv[2]
 
         # Step 2: Apply RoPE to Q and K
-        # q, k = self.rope(q, k)
+        Q, K = self.rope(Q, K)
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
         # Hint: Use torch.matmul or @ operator
         # Shape should be (batch, num_heads, seq_len, seq_len)
+        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
 
         # Step 4: Apply causal mask
         # The mask should prevent position i from attending to positions > i
         # Hint: Create a lower-triangular matrix using torch.tril
         # Set masked positions to -inf BEFORE softmax
         # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
+        if mask is None:
+            mask = torch.tril(torch.ones(seq_len, seq_len, device = x.device, dtype = torch.bool))
+
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(0).unsqueeze(0)
+        
+        scores = scores.masked_fill(mask == 0, -1e9)
 
         # Step 5: Apply softmax and dropout
-        # attn_weights = F.softmax(scores, dim=-1)
-        # attn_weights = self.attn_dropout(attn_weights)
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.attn_dropout(attn_weights)
 
         # Step 6: Apply attention to values
         # out = attn_weights @ V
+        out = torch.matmul(attn_weights, V)
 
         # Step 7: Reshape and project back
         # Concatenate heads and apply output projection
         # Hint: Use .transpose() and .contiguous().view() to reshape
+        out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.dim)
+        out = self.out_proj(out)
+        out = self.resid_dropout(out)
 
-        raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
+        return out
+        # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass") DONE
 
 
 class FeedForward(nn.Module):
@@ -325,8 +342,8 @@ class DecoderOnlyTransformer(nn.Module):
         if targets is not None:
             # Flatten for cross-entropy
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                logits.reshape(-1, self.vocab_size),
+                targets.reshape(-1),
                 ignore_index=-1,  # Ignore padding tokens
             )
 
@@ -397,20 +414,46 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
 
-    # TODO: Implement training loop
+    # TODO: Implement training loop DONE
     # For each batch:
-    #   1. Move data to device
-    #   2. Forward pass (get logits and loss)
-    #   3. Backward pass
-    #   4. Gradient clipping (max_norm=1.0)
-    #   5. Optimizer step
-    #   6. Zero gradients
-    #   7. Accumulate loss
+    for batch_idx, batch in enumerate(dataloader):
+        states, actions = batch
 
-    # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
-    # Hint: Print progress every 100 batches
+        #   1. Move data to device
+        actions = actions.to(device)
 
-    raise NotImplementedError("TODO: Implement training loop")
+        input_ids = actions[:, :-1].long().to(device)
+        targets = actions[:, 1:].long().to(device)
+
+        #   2. Forward pass (get logits and loss)
+        optimizer.zero_grad(set_to_none = True)
+        _, loss = model(input_ids, targets)
+
+        #   3. Backward pass
+        loss.backward()
+
+        #   4. Gradient clipping (max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm = 1.0)
+
+        #   5. Optimizer step
+        optimizer.step()
+
+        #   6. Zero gradients
+        optimizer.zero_grad(set_to_none=True)
+        #   7. Accumulate loss
+        total_loss += loss.item()
+        num_batches += 1
+
+        # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
+        # Hint: Print progress every 100 batches
+        if (batch_idx + 1) % 100 == 0:
+            avg = total_loss / num_batches if num_batches > 0 else float('nan')
+            print(f"Epoch {epoch + 1} Batch {batch_idx + 1}: avg_loss = {avg:.6f}")
+
+    return total_loss/num_batches if num_batches> 0 else 0.0
+
+
+    # raise NotImplementedError("TODO: Implement training loop") DONE
 
 
 def main():
@@ -438,22 +481,45 @@ def main():
     # TODO: Load dataset
     # Use the generate_data.py script to create synthetic trajectories
     # Load from data/trajectories.pkl
+    df = pd.read_pickle('data/trajectories.pkl')
+    states = df['states']
+    actions = df['actions']
+    if isinstance(states, np.ndarray):
+        states = torch.tensor(states, dtype=torch.float32)
+    if isinstance(actions, np.ndarray):
+        actions = torch.tensor(actions, dtype=torch.long)
+
+    dataset = torch.utils.data.TensorDataset(states, actions)
+    num_samples = len(dataset)
+    num_train = int(0.9 * num_samples)
+    num_val = num_samples - num_train
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, num_val])
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     # TODO: Create model
-    # model = DecoderOnlyTransformer(...)
+    model = DecoderOnlyTransformer(
+        vocab_size,
+        dim,
+        num_layers,
+        num_heads,
+        ff_hidden_dim,
+        max_seq_len
+    )
 
     # TODO: Create optimizer
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     # TODO: Training loop
-    # for epoch in range(num_epochs):
-    #     train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
-    #     print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+    for epoch in range(num_epochs):
+        train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
+        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
 
     # TODO: Save checkpoint
-    # torch.save(model.state_dict(), "checkpoints/best_model.pt")
+    torch.save(model.state_dict(), "checkpoints/best_model.pt")
 
-    print("TODO: Complete the main training script")
+    # print("TODO: Complete the main training script")  DONE
 
 
 if __name__ == "__main__":
