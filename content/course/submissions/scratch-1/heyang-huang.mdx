@@ -31,9 +31,9 @@ Specifically, without the causal mask, each token is allowed to attend to future
 ### Why the Model "Cheats"
 
 Without the causal mask, the attention mechanism can directly access future tokens, effectively collapsing the prediction task into a near-identity mapping. Instead of learning to model the conditional distribution  
-\( P(s_t \mid s_{<t}) \),  
+$P(s_t \mid s_{<t})$,  
 the model implicitly learns  
-\( P(s_t \mid s_{\leq T}) \),  
+$P(s_t \mid s_{\le T})$,  
 which includes the answer.
 
 This results in deceptively low training loss but produces a model that performs poorly at inference time, where future tokens are not available. The causal mask is therefore essential to enforce the correct autoregressive structure and prevent this form of “cheating.”
