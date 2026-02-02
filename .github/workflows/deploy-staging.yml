@@ -3,6 +3,18 @@ name: Deploy Staging Branch
 on:
   push:
     branches: [ staging ]
+    paths-ignore:
+      # Ignore changes that don't affect the site
+      - 'src/assignments/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'private/**'
+      - '**.md'
+      - '.github/**'
+      - 'data/**'
+      - 'pyproject.toml'
+      - 'pytest.ini'
+      - 'uv.lock'
 
 jobs:
   deploy:
@@ -11,7 +23,7 @@ jobs:
       - name: Deploy Static Site to Remote Server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ristoffer.ch
+          host: direct.ristoffer.ch
           username: crh
           key: ${{ secrets.SSH_DEPLOY_KEY }}
           script: |

@@ -5,11 +5,6 @@ due: 'Sunday, February 1, 9:00 AM MST'
 points: 100
 ---
 
-<div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-6 py-4 mb-8 rounded">
-  <p className="font-bold text-xl">⚠️ DRAFT: NOT YET ASSIGNED</p>
-  <p className="mt-2">This assignment is still under review and subject to change. Do not begin work until this notice is removed.</p>
-</div>
-
 # Scratch-1: The Transformer Backbone
 
 **Focus**: Implementing the $O(1)$ engine of the VLA stack.
@@ -187,7 +182,9 @@ When I removed the causal mask, the following happened:
 ### Pass Level (B): 70-89 points
 
 - ✅ Successful implementation of the backbone
-- ✅ Loss converges on the synthetic dataset (< 1.0)
+- ✅ Loss shows clear convergence (appreciable decrease from initial loss)
+  - Expected: Initial loss ~3-4, Final loss ~1.9-2.2
+  - Model should demonstrate learning, not achieve arbitrary threshold
 - ✅ Attention maps visualization included
 - ✅ Causal mask audit completed
 - ✅ Code is clean and documented
@@ -306,6 +303,13 @@ A: Check:
 1. Is the causal mask applied correctly?
 2. Is the learning rate too high? (Try 1e-4)
 3. Are gradients exploding? (Enable gradient clipping)
+
+**Q: What loss should I expect?**
+A: With correct implementation on the synthetic trajectory dataset:
+- **Initial loss**: ~3-4 (near random guessing for 256-way classification)
+- **Final loss**: ~1.9-2.2 (showing clear learning)
+- **Key metric**: Appreciable decrease indicating the model learns patterns
+- The action encoding represents direction + magnitude toward target, which is learnable but not trivial
 
 ## 11. Deadline
 
