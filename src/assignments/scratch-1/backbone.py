@@ -13,7 +13,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from typing import Optional, Tuple    
+from typing import Optional, Tuple
+import os
+import matplotlib.pyplot as plt
+import pickle
 
 class RMSNorm(nn.Module):
     """
@@ -32,7 +35,7 @@ class RMSNorm(nn.Module):
         self.eps = eps
         # TODO: Initialize learnable scale parameter 'g' (gamma)
         # Hint: Use nn.Parameter with torch.ones
-        self.scale = None  # REPLACE THIS LINE
+        self.scale = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -47,10 +50,11 @@ class RMSNorm(nn.Module):
         # Step 3: Apply learnable scale parameter
 
         # HINT: Use torch.mean, torch.rsqrt for efficiency
-        # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-        raise NotImplementedError("TODO: Implement RMSNorm forward pass")
-
+        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        norm = x * rms
+        scaled = norm * self.scale
+        # raise NotImplementedError("TODO: Implement RMSNorm forward pass")
+        return scaled
 
 class RotaryPositionalEmbedding(nn.Module):
     """
@@ -140,6 +144,9 @@ class CausalSelfAttention(nn.Module):
         # Rotary embeddings
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
+        # Storage ~ add this new variable to store last attn weights for attention map visualization later
+        self.last_attn_weights = None
+
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Args:
@@ -156,33 +163,54 @@ class CausalSelfAttention(nn.Module):
         # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
         # Split into Q, K, V and reshape for multi-head attention
         # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
+        qkv = self.qkv_proj(x)
+        q, k, v = qkv.chunk(3, dim=-1) # split into 3, each are size (batch, seq len, dim)
+        # view to reshape
+        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        k = k.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        v = v.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        # transpose to reorder seq_len and num_heads
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
 
         # Step 2: Apply RoPE to Q and K
-        # q, k = self.rope(q, k)
+        q, k = self.rope(q, k)
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
         # Hint: Use torch.matmul or @ operator
         # Shape should be (batch, num_heads, seq_len, seq_len)
+        scores = (q @ k.transpose(-2, -1)) * self.scale # only transpose last 2 dims, keep batch and num_heads the same
 
         # Step 4: Apply causal mask
         # The mask should prevent position i from attending to positions > i
         # Hint: Create a lower-triangular matrix using torch.tril
         # Set masked positions to -inf BEFORE softmax
         # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
+        mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+        # ^ remove the above 2 lines to see results w/o causal mask
 
         # Step 5: Apply softmax and dropout
-        # attn_weights = F.softmax(scores, dim=-1)
-        # attn_weights = self.attn_dropout(attn_weights)
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.attn_dropout(attn_weights)
 
         # Step 6: Apply attention to values
-        # out = attn_weights @ V
+        self.last_attn_weights = attn_weights # store so we can make attention map visualization later...
+        out = attn_weights @ v
 
         # Step 7: Reshape and project back
         # Concatenate heads and apply output projection
         # Hint: Use .transpose() and .contiguous().view() to reshape
+        # ++ Output tensor (batch, seq_len, dim)
+        out = out.transpose(2, 1)
+        out = out.contiguous().view(batch_size, seq_len, -1)
+        out = self.out_proj(out)
+        out = self.resid_dropout(out)
+        return out
 
-        raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
+        # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
 
 
 class FeedForward(nn.Module):
@@ -379,7 +407,8 @@ def train_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
-) -> float:
+    step_counter: int,
+) -> Tuple[float, int, list]:
     """
     Train for one epoch
 
@@ -395,6 +424,7 @@ def train_epoch(
     model.train()
     total_loss = 0.0
     num_batches = 0
+    batch_losses = [] # save loss per step not epoch!!
 
     # TODO: Implement training loop
     # For each batch:
@@ -406,10 +436,46 @@ def train_epoch(
     #   6. Zero gradients
     #   7. Accumulate loss
 
+    # note: inputs and targets are token inputs and correct token output in sequence
+    for batch_idx, (inputs, targets) in enumerate(dataloader):
+        inputs = inputs.to(device)
+        targets = targets.to(device)
+
+        logits, loss = model(inputs, targets) # forward pass
+
+        loss.backward() # backward pass ~ refer to gpt dev for how this works...
+
+        # max_norm is max allowed l2 norm of gradient...use 1.0 as specified
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+        optimizer.step() # step optimizer
+
+        optimizer.zero_grad() # zero out grads ~ refer to gpt dev for example again
+
+        total_loss += loss.item() # add to loss!
+        num_batches += 1 # increment num batches so we can average
+
+        # add new counter so we can track every 1000 save a checkpoint
+        # also add it to fxn signature, and change return to have loss, step counter, and batch loss for plotting later
+        step_counter += 1
+        batch_losses.append(loss.item())
+
+        # save checkpoint every 1000
+        if step_counter % 1000 == 0:
+            os.makedirs("checkpoints", exist_ok=True)
+            torch.save(model.state_dict(), f"checkpoints/checkpoint_step_{step_counter}.pt")
+
+        # print progress every 100 batches
+        if batch_idx % 100 == 0:
+            perplexity = math.exp(loss.item())
+            print(f"Epoch {epoch} Batch {batch_idx} | Loss = {loss.item()} Perplexity = {perplexity}")
+
+    return total_loss / num_batches, step_counter, batch_losses
+
     # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
     # Hint: Print progress every 100 batches
 
-    raise NotImplementedError("TODO: Implement training loop")
+    # raise NotImplementedError("TODO: Implement training loop")
 
 
 def main():
@@ -437,23 +503,66 @@ def main():
     # TODO: Load dataset
     # Use the generate_data.py script to create synthetic trajectories
     # Load from data/trajectories.pkl
+    with open('data/trajectories.pkl', 'rb') as f:
+        dataset = pickle.load(f)
+    # make a dataloader from dataset, add shuffle so order is randomized in each training iter
+    tokenized = dataset["actions"] # dataset labels are states and actions, not trajectories and tokenized...
+    inputs = tokenized[:, :-1] # inputs is all tokens in sequence except last
+    targets = tokenized[:, 1:] # same but except first ~ i.e. autoregressive, one points to the next, like in gpt from scratch
+    train_dataset = torch.utils.data.TensorDataset(inputs, targets)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     # TODO: Create model
     # model = DecoderOnlyTransformer(...)
+    model = DecoderOnlyTransformer(vocab_size=vocab_size, dim=dim, num_layers=num_layers, num_heads=num_heads, ff_hidden_dim=ff_hidden_dim, max_seq_len=max_seq_len)
+    model = model.to(device)
 
     # TODO: Create optimizer
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     # TODO: Training loop
-    # for epoch in range(num_epochs):
-    #     train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
-    #     print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+    loss_plot = []
+    step_counter = 0
+    for epoch in range(num_epochs):
+        train_loss, step_counter, batch_losses = train_epoch(model, train_loader, optimizer, device, epoch, step_counter)
+        loss_plot.extend(batch_losses)
+        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
 
     # TODO: Save checkpoint
-    # torch.save(model.state_dict(), "checkpoints/best_model.pt")
+    torch.save(model.state_dict(), "checkpoints/best_model.pt")
 
-    print("TODO: Complete the main training script")
+    # Plotting stuff
 
+    # plot loss
+    plt.figure()
+    plt.plot(loss_plot)
+    plt.xlabel("Step")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Curve With Causal Mask Removed")
+    plt.savefig("loss_curve_no_mask.png")
+
+    # plot attention map
+    model.eval() # change to eval mode ~ part of nn.module fxn, like model.train()
+    with torch.no_grad():
+        sample_input = inputs[0:1].to(device) # get first traj, move to device
+        model(sample_input) # run model on the trajectory ^
+    # pull out attention weights for first traj
+    fig, axes = plt.subplots(4, 8, figsize=(32, 16))
+    for layer in range(num_layers):
+        for head in range(num_heads):
+            # weights is [batch, num_heads, seq_len, seq_len], so pull out first 2 dims for each
+            # only 1 traj so batch 0, num_heads index = head
+            # move off gpu to cpu, and convert to numpy for plotting
+            attn = model.blocks[layer].attention.last_attn_weights[0, head].cpu().numpy()
+            attn_plot = axes[layer, head].imshow(attn, cmap='viridis')
+            axes[layer, head].set_title(f"L{layer} H{head}")
+            axes[layer, head].set_xlabel("Key")
+            axes[layer, head].set_ylabel("Query")
+    plt.tight_layout()
+    fig.colorbar(attn_plot, ax=axes, label='Attention Weight')
+    plt.savefig("attention_maps_no_mask.png", bbox_inches='tight') # add tight to crop extra whitespace
+
+    # print("TODO: Complete the main training script")
 
 if __name__ == "__main__":
     main()
