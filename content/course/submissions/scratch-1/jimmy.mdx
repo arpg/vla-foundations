@@ -42,9 +42,23 @@ Additionally, from the printed loss logs, we can see that the loss converges to 
 
 ### Why the Model "Cheats"
 
-When you remove the causal mask, you are effectively allowing tokens during training to view tokens ahead of the current position in the sequence. This effectively is the same as looking into the future, and you are training a model to predict what will happen with knowlegde of what will happen already, instead of predicting purely based on the past and then punishing wrong predictions via the loss.
+When you remove the causal mask, you are effectively allowing tokens during training to view tokens ahead of the current position in the sequence. This effectively is the same as looking into the future, and you are training a model to predict what will happen with knowledge of what will happen already, instead of predicting purely based on the past and then punishing wrong predictions via the loss.
 
 Consequently, you end up overfitting the learning, converging the loss to almost 0 because you are already giving the model the answers. This makes for poor generalization, as during inference time, the model can't look at these future tokens because they don't exist. The training loss converged upon might be low, but the model has not actually learned to 'predict' anything meaningful.
+
+## Challenges and Solutions
+
+KV-caching implementation was quite tricky. Aside from tracing the full pipeline to make sure old and new KVs were passed through correctly, I also had to figure out how to correctly add the old KVs to the context, as well as how this affected the RoPE implementation:
+
+1. To add the KV cache to the context, I concatenated the old vs with the current k at each forward() call in CausalSelfAttention. The reasoning behind this was that typically, each iter would have to recompute previous tokens, but by concatenating the cache, we could skip all the previous recomputation, and build up the k list from our previous end position.
+2. For RoPE, since we are using the KV cache, each time we run forward the effective seq_len for new stuff to process is always 1 (because past is already computed). This also meant that when we look into the cos and sin caches for the rotary encodings, we would need to offset by the positional offset created by the cache essentially skipping all previous lookups. Instead of having RoPE compute the positional encoding of token 20 per say thinking it is at position 0 (because it indexes from seq_len = 1 again).
+
+Inference Speedup Statistics:
+Inference speed for 100 tokens without KV-Caching: 0.852973222732544s
+Inference speed for 100 tokens with KV-Caching: 0.7572641372680664s
+Improvement: 1.1263879810943658
+
+Our training example was relatively quite small so the inference times do not vary largely, but when scaled up, a 12.6% improvement is quite decent.
 
 ## Appendix
 

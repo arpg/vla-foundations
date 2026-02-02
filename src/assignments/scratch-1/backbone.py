@@ -17,6 +17,7 @@ from typing import Optional, Tuple
 import os
 import matplotlib.pyplot as plt
 import pickle
+import time
 
 class RMSNorm(nn.Module):
     """
@@ -92,21 +93,25 @@ class RotaryPositionalEmbedding(nn.Module):
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, q: torch.Tensor, k: torch.Tensor, pos_offset: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Apply rotary embeddings to query and key tensors
 
         Args:
             q: Query tensor (batch, num_heads, seq_len, head_dim)
             k: Key tensor (batch, num_heads, seq_len, head_dim)
+            pos_offset: Offset so we start at the latest position for RoPE instead of rotating all
         Returns:
             Rotated (q, k) tensors
         """
         seq_len = q.shape[2]
 
         # Get cached cos/sin values
-        cos = self.cos_cached[:seq_len, ...]
-        sin = self.sin_cached[:seq_len, ...]
+        # Note: for kv caching, we need to offset by the current position so we know to rotate tokens correctly
+        # i.e. with kv caching we only process latest token so seq_len is always passed in as 1 instead of
+        # whatever full length it would be w/o kv caching
+        cos = self.cos_cached[pos_offset:pos_offset + seq_len, ...]
+        sin = self.sin_cached[pos_offset:pos_offset + seq_len, ...]
 
         # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
         q_rot = (q * cos) + (self.rotate_half(q) * sin)
@@ -147,13 +152,16 @@ class CausalSelfAttention(nn.Module):
         # Storage ~ add this new variable to store last attn weights for attention map visualization later
         self.last_attn_weights = None
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    # modify input args to allow past_kv, and modify return to pass through kvs
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, past_kv: Optional[Tuple[torch.Tensor, torch.Tensor]] = None) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask (seq_len, seq_len)
+            past_kv: Optional cached kvs from prev step
         Returns:
             Output tensor (batch, seq_len, dim)
+            Tuple of current k and v for caching
         """
         batch_size, seq_len, _ = x.shape
 
@@ -175,7 +183,20 @@ class CausalSelfAttention(nn.Module):
         v = v.transpose(1, 2)
 
         # Step 2: Apply RoPE to Q and K
-        q, k = self.rope(q, k)
+        pos_offset = 0
+        past_k, past_v = None, None
+        if past_kv  is not None:
+            past_k, past_v = past_kv # we just need to extract 1 to get the current pos offset
+            pos_offset = past_k.shape[2] # the seq len dimension
+        q, k = self.rope(q, k, pos_offset=pos_offset)
+
+        # check if we have any past_kv passed into fxn
+        # if we do, concat it with the current to skip recomputing all previous
+        if past_kv is not None:
+            k = torch.cat([past_k, k], dim=2) # make sure concat along seq_len
+            v = torch.cat([past_v, v], dim=2)
+        # store and pass kv into next iter
+        curr_kv = (k, v)
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
@@ -188,7 +209,13 @@ class CausalSelfAttention(nn.Module):
         # Hint: Create a lower-triangular matrix using torch.tril
         # Set masked positions to -inf BEFORE softmax
         # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
-        mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        # Edit: for kv caching, we need to change mask size for cached sequence
+        # ^ e.g. previously, k is shape (batch, heads, seq_len=1, dim)
+        # but now its (batch, heads, seq_len=1+cache, dim)
+        cached_seq_len = k.shape[2]
+        mask = torch.tril(torch.ones(cached_seq_len, cached_seq_len, device=x.device))
+        # For kv caching apply mask to the new positions only
+        mask = mask[-seq_len:, :] # positions go down by row, we take the last seq_len out of seq_len+cache
         scores = scores.masked_fill(mask == 0, float('-inf'))
         # ^ remove the above 2 lines to see results w/o causal mask
 
@@ -208,7 +235,7 @@ class CausalSelfAttention(nn.Module):
         out = out.contiguous().view(batch_size, seq_len, -1)
         out = self.out_proj(out)
         out = self.resid_dropout(out)
-        return out
+        return out, curr_kv
 
         # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
 
@@ -257,18 +284,23 @@ class TransformerBlock(nn.Module):
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, past_kv: Optional[Tuple] = None) -> torch.Tensor:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask
+            past_kv: Optional kv from prev step
         Returns:
             Output tensor (batch, seq_len, dim)
+            Current kv cache
         """
         # Pre-norm architecture (norm before attention/FF)
-        x = x + self.attention(self.norm1(x), mask)
+
+        # KV caching edit: split into two steps so we can extract the curr kv to pass through
+        attn, curr_kv = self.attention(self.norm1(x), mask, past_kv)
+        x = x + attn
         x = x + self.feed_forward(self.norm2(x))
-        return x
+        return x, curr_kv
 
 
 class DecoderOnlyTransformer(nn.Module):
@@ -309,6 +341,9 @@ class DecoderOnlyTransformer(nn.Module):
         # Initialize weights
         self.apply(self._init_weights)
 
+        # Storage for kv cache
+        self.kv_cache = None
+
     def _init_weights(self, module):
         """Initialize weights following standard Transformer initialization"""
         if isinstance(module, nn.Linear):
@@ -322,14 +357,17 @@ class DecoderOnlyTransformer(nn.Module):
         self,
         input_ids: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
+        kv_cache: Optional[list] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             input_ids: Input token indices (batch, seq_len)
             targets: Target token indices for training (batch, seq_len)
+            kv_cache: Optional list of all previous KVs
         Returns:
             logits: Output logits (batch, seq_len, vocab_size)
             loss: Cross-entropy loss if targets provided, else None
+            kvs: Updated list of all previous kvs
         """
         batch_size, seq_len = input_ids.shape
 
@@ -339,9 +377,17 @@ class DecoderOnlyTransformer(nn.Module):
         # Create causal mask (lower triangular)
         mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
+        # storage for kvs
+        kvs = []
+
         # Apply transformer blocks
-        for block in self.blocks:
-            x = block(x, mask)
+        for i, block in enumerate(self.blocks):
+            if kv_cache is not None:
+                past_kv = kv_cache[i]
+            else:
+                past_kv = None
+            x, curr_kv = block(x, mask, past_kv)
+            kvs.append(curr_kv)
 
         # Final norm and projection
         x = self.norm_final(x)
@@ -357,7 +403,7 @@ class DecoderOnlyTransformer(nn.Module):
                 ignore_index=-1,  # Ignore padding tokens
             )
 
-        return logits, loss
+        return logits, loss, kvs
 
     @torch.no_grad()
     def generate(
@@ -366,6 +412,7 @@ class DecoderOnlyTransformer(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
+        use_kv_cache: bool = False,
     ) -> torch.Tensor:
         """
         Autoregressive generation
@@ -378,12 +425,21 @@ class DecoderOnlyTransformer(nn.Module):
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
+        # cache past kvs
+        self.kv_cache = None # reset cache for each generate call
+        
         for _ in range(max_new_tokens):
             # Crop context if too long
-            input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+            # ^ Edit: process entire context for first
+            # then for subsequent since we have the cache we only need to process latest
+            if self.kv_cache is None or not use_kv_cache:
+                input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+            else:
+                input_context = input_ids[:, -1:] # just process last token since we already have cache
 
             # Forward pass
-            logits, _ = self.forward(input_context)
+            # modified forward that takes and returns the kv cache
+            logits, _, self.kv_cache = self.forward(input_context, kv_cache=self.kv_cache if use_kv_cache else None)
             logits = logits[:, -1, :] / temperature  # Get last token logits
 
             # Optional top-k sampling
@@ -441,7 +497,7 @@ def train_epoch(
         inputs = inputs.to(device)
         targets = targets.to(device)
 
-        logits, loss = model(inputs, targets) # forward pass
+        logits, loss, _ = model(inputs, targets) # forward pass ~ kv cache not used during training, just leave as _ for now
 
         loss.backward() # backward pass ~ refer to gpt dev for how this works...
 
@@ -538,8 +594,8 @@ def main():
     plt.plot(loss_plot)
     plt.xlabel("Step")
     plt.ylabel("Loss")
-    plt.title("Training Loss Curve With Causal Mask Removed")
-    plt.savefig("loss_curve_no_mask.png")
+    plt.title("Training Loss Curve")
+    plt.savefig("loss_curve.png")
 
     # plot attention map
     model.eval() # change to eval mode ~ part of nn.module fxn, like model.train()
@@ -560,9 +616,24 @@ def main():
             axes[layer, head].set_ylabel("Query")
     plt.tight_layout()
     fig.colorbar(attn_plot, ax=axes, label='Attention Weight')
-    plt.savefig("attention_maps_no_mask.png", bbox_inches='tight') # add tight to crop extra whitespace
+    plt.savefig("attention_maps.png", bbox_inches='tight') # add tight to crop extra whitespace
 
     # print("TODO: Complete the main training script")
+
+    # KV-Caching test
+    print("KV-Caching test:")
+    model.eval()
+    # test generate 100 new tokens w/ no cache
+    start = time.time()
+    _ = model.generate(inputs[0:1].to(device), max_new_tokens=100, use_kv_cache=False)
+    dur_no_cache = time.time() - start
+    # test generate 100 new tokens w/ cache
+    start = time.time()
+    _ = model.generate(inputs[0:1].to(device), max_new_tokens=100, use_kv_cache=True)
+    dur_cache = time.time() - start
+    print(f"Inference speed for 100 tokens without KV-Caching: {dur_no_cache}s")
+    print(f"Inference speed for 100 tokens with KV-Caching: {dur_cache}s")
+    print(f"Improvement: {dur_no_cache/dur_cache}")
 
 if __name__ == "__main__":
     main()
