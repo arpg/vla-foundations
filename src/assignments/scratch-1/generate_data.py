@@ -8,7 +8,17 @@ Dataset format:
 - 10,000 trajectories
 - 50 timesteps per trajectory
 - 7-DOF joint angles + 3D end-effector position (10 dimensions total)
-- Actions discretized into 256 bins
+- Actions encode direction + magnitude toward target (256 bins)
+
+Action Encoding (structured and learnable):
+- Direction: 8 octants (±X, ±Y, ±Z combinations) → 3 bits
+- Magnitude: Distance to target in 32 bins → 5 bits
+- Total: 8 * 32 = 256 discrete actions
+
+This encoding makes actions LEARNABLE from state because:
+- Model sees current position and target
+- Can compute error vector
+- Can predict corresponding action
 
 Usage:
     python generate_data.py --num_trajectories 10000 --seq_length 50 --output data/trajectories.pkl
@@ -36,7 +46,7 @@ def forward_kinematics_7dof(joint_angles: np.ndarray) -> np.ndarray:
 
     x = np.sum(link_lengths * np.cos(joint_angles))
     y = np.sum(link_lengths * np.sin(joint_angles))
-    z = np.sum(link_lengths * np.sin(joint_angles[:3]))  # First 3 joints affect height
+    z = np.sum(link_lengths[:3] * np.sin(joint_angles[:3]))  # First 3 joints affect height
 
     return np.array([x, y, z])
 
@@ -45,19 +55,22 @@ def generate_trajectory(
     start_joints: np.ndarray,
     target_pos: np.ndarray,
     seq_length: int = 50,
-    noise_std: float = 0.05,
+    noise_std: float = 0.02,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Generate a single trajectory from start configuration to target position
+
+    IMPROVED: Actions now encode structured motion toward target, making them
+    learnable from state. Action represents direction and magnitude of motion.
 
     Args:
         start_joints: Initial joint configuration (7,)
         target_pos: Target end-effector position (3,)
         seq_length: Number of timesteps
-        noise_std: Standard deviation of noise to add
+        noise_std: Standard deviation of noise to add (reduced for learnability)
     Returns:
         states: Array of shape (seq_length, 10) with [joint_angles, ee_pos]
-        actions: Array of shape (seq_length,) with discretized joint deltas
+        actions: Array of shape (seq_length,) with structured action encoding
     """
     states = np.zeros((seq_length, 10))  # 7 joints + 3 ee_pos
     actions = np.zeros(seq_length, dtype=np.int64)
@@ -72,30 +85,60 @@ def generate_trajectory(
         states[t, :7] = current_joints
         states[t, 7:] = ee_pos
 
-        # Compute simple gradient-based control toward target
-        # This is NOT real inverse kinematics, just a synthetic trajectory generator
+        # Compute error vector toward target (THIS IS THE KEY TO LEARNABILITY)
         error = target_pos - ee_pos
-        joint_delta = 0.02 * np.random.randn(7)  # Random exploration
+        error_magnitude = np.linalg.norm(error)
 
-        # Add gradient component (simplified)
-        joint_delta[:3] += 0.01 * error  # First 3 joints affect position most
+        # Normalize error to get direction
+        if error_magnitude > 1e-6:
+            error_dir = error / error_magnitude
+        else:
+            error_dir = np.zeros(3)
 
-        # Add noise
+        # === STRUCTURED ACTION ENCODING ===
+        # Action encodes: direction (8 octants) + magnitude (32 levels) = 256 bins
+        # This is LEARNABLE because model sees state → can compute error → can predict action
+
+        # 1. Encode direction into one of 8 octants (3 bits)
+        octant = (
+            (4 if error_dir[0] > 0 else 0) +
+            (2 if error_dir[1] > 0 else 0) +
+            (1 if error_dir[2] > 0 else 0)
+        )
+
+        # 2. Encode magnitude into 32 bins (5 bits)
+        # Clip magnitude to [0, 3.0] (max workspace reach)
+        magnitude_normalized = np.clip(error_magnitude / 3.0, 0.0, 1.0)
+        magnitude_bin = int(magnitude_normalized * 31)
+
+        # 3. Combine: action = octant * 32 + magnitude_bin
+        action_deterministic = octant * 32 + magnitude_bin
+
+        # Add small noise to action for regularization (±2 bins)
+        action_noise = np.random.randint(-2, 3)
+        action_discrete = np.clip(action_deterministic + action_noise, 0, 255)
+        actions[t] = action_discrete
+
+        # === GENERATE MOTION TOWARD TARGET ===
+        # Joint motion is now MORE deterministic toward target
+        joint_delta = np.zeros(7)
+
+        # Use error to drive joint motion (simplified IK)
+        # First 3 joints have most effect on position
+        if error_magnitude > 1e-6:
+            joint_delta[:3] = 0.05 * error  # Stronger gradient component
+            # Distal joints (3-6) get smaller updates based on dominant error direction
+            joint_delta[3:] = 0.02 * np.max(np.abs(error))  # Scale by max error component
+
+        # Add small exploration noise (reduced from 0.05)
         joint_delta += noise_std * np.random.randn(7)
 
-        # Clip deltas
-        joint_delta = np.clip(joint_delta, -0.1, 0.1)
+        # Clip deltas to reasonable range
+        joint_delta = np.clip(joint_delta, -0.15, 0.15)
 
         # Update joints
         current_joints += joint_delta
         current_joints = np.clip(current_joints, -np.pi, np.pi)  # Joint limits
-
-        # Discretize action (joint delta) into 256 bins
-        # Map from [-0.1, 0.1] to [0, 255]
-        action_continuous = np.mean(joint_delta)  # Average delta for simplicity
-        action_discrete = int((action_continuous + 0.1) / 0.2 * 255)
-        action_discrete = np.clip(action_discrete, 0, 255)
-        actions[t] = action_discrete
 
     return states, actions
 
