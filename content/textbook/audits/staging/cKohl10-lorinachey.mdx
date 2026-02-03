@@ -493,7 +493,7 @@ $$
 | SomethingSomethingV2 | Real | RollingDepth | Marigold | Human Hand | 100k |
 | **Total** | - | - | - | - | **~285k** |
 
-**Synthetic Data (RLBench [26])**: 20 tasks × 1000 instances × 4 views = 80k videos with ground-truth depth. Normals estimated via depth2normal. Scene randomization (background, texture, lighting) via Colosseum pipeline.
+**Synthetic Data (RLBench [26])**: 20 tasks × 1000 instances × 4 views = 80k videos with ground-truth depth. Normals estimated via depth2normal. Scene randomization (background, texture, lighting) via Colosseum [27] pipeline.
 
 **Real Data Annotation**: RollingDepth [31] provides temporally consistent affine-invariant depth. Marigold [32] provides frame-consistent normal maps. This enables scaling to large real-world datasets without expensive sensor data.
 
@@ -646,6 +646,8 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 [21] D. Ha and J. Schmidhuber. "Recurrent world models facilitate policy evolution." NeurIPS 2018.
 
 [26] S. James et al. "RLBench: The robot learning benchmark." IEEE RAL 2020.
+
+[27] W. Pumacay et al. "The Colosseum: A benchmark for evaluating generalization for robotic manipulation." arXiv 2024.
 
 [31] B. Ke et al. "Video depth without video models." 2024.
 
