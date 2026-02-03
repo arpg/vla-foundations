@@ -8,7 +8,7 @@ from backbone import DecoderOnlyTransformer, TrajectoryDataset, create_dataloade
 from visualizer import Visualizer
 from pathlib import Path
 
-def train(use_rope: bool, key: str, visualizer: Visualizer):
+def train(use_rope: bool, use_causal_mask: bool, key: str, visualizer: Visualizer):
     # Hyperparameters
     vocab_size = 256  # Discretized action space
     dim = 256  # Model dimension
@@ -34,7 +34,7 @@ def train(use_rope: bool, key: str, visualizer: Visualizer):
 
     # TODO: Create model
     # model = DecoderOnlyTransformer(...)
-    model = DecoderOnlyTransformer(vocab_size=vocab_size, dim=dim, num_layers=num_layers, num_heads=num_heads, ff_hidden_dim=ff_hidden_dim, max_seq_len=max_seq_len, dropout=dropout, use_rope=use_rope)
+    model = DecoderOnlyTransformer(vocab_size=vocab_size, dim=dim, num_layers=num_layers, num_heads=num_heads, ff_hidden_dim=ff_hidden_dim, max_seq_len=max_seq_len, dropout=dropout, use_rope=use_rope, use_causal_mask=use_causal_mask)
     model.to(device)
 
     # TODO: Create optimizer
@@ -67,10 +67,13 @@ def main():
     
     # Train with RoPE
     print("Training with RoPE...")
-    train(use_rope=True, key="rope", visualizer=visualizer)
+    train(use_rope=True, use_causal_mask=True, key="rope", visualizer=visualizer)
     # Train with Sinusoidal positional encodings
     print("Training with Sinusoidal positional encodings...")
-    train(use_rope=False, key="sinusoidal", visualizer=visualizer)
+    train(use_rope=False, use_causal_mask=True, key="sinusoidal", visualizer=visualizer)
+
+    print("Training with RoPE and no causal mask...")
+    train(use_rope=True, use_causal_mask=False, key="rope_no_causal_mask", visualizer=visualizer)
 
     # Generate and save loss curve
     visualizer.visualize_loss()

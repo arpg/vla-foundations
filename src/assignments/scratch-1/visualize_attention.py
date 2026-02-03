@@ -63,6 +63,8 @@ def main():
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best_model.pt")
     parser.add_argument("--data", type=str, default="data/trajectories.pkl")
     parser.add_argument("--sample_idx", type=int, default=0, help="Which trajectory to visualize")
+    parser.add_argument("--use_rope", type=bool, default=True, help="Whether to use RoPE")
+    parser.add_argument("--use_causal_mask", type=bool, default=True, help="Whether to use causal mask")
     args = parser.parse_args()
     
     # Hyperparameters (must match training)
@@ -86,7 +88,9 @@ def main():
         num_heads=num_heads,
         ff_hidden_dim=ff_hidden_dim,
         max_seq_len=max_seq_len,
-        dropout=dropout
+        dropout=dropout,
+        use_rope=args.use_rope,
+        use_causal_mask=args.use_causal_mask
     )
     model.load_state_dict(torch.load(args.checkpoint, map_location=device))
     model.to(device)

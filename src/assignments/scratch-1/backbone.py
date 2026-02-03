@@ -148,7 +148,73 @@ class SinusoidalPositionalEmbedding(nn.Module):
         """
         return x + self.pe[:, :x.size(1), :]
 
+class SelfAttention(nn.Module):
+    """
+    Multi-Head Self-Attention with RoPE and no causal mask
+    """
 
+    def __init__(self, dim: int, num_heads: int, dropout: float = 0.1, use_rope: bool = True):
+        super().__init__()
+        assert dim % num_heads == 0, "dim must be divisible by num_heads"
+
+        self.dim = dim
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
+
+        # Linear projections for Q, K, V
+        self.qkv_proj = nn.Linear(dim, 3 * dim, bias=False)
+        self.out_proj = nn.Linear(dim, dim, bias=False)
+
+        # Dropout
+        self.attn_dropout = nn.Dropout(dropout)
+        self.resid_dropout = nn.Dropout(dropout)
+
+        # Rotary embeddings
+        self.rope = RotaryPositionalEmbedding(self.head_dim) if use_rope else None
+
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, return_attention: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """
+        Args:
+            x: Input tensor (batch, seq_len, dim)
+            mask: Optional attention mask (seq_len, seq_len)
+            return_attention: Whether to return attention weights
+        Returns:
+            Output tensor (batch, seq_len, dim)
+            Attention weights (batch, num_heads, seq_len, seq_len) if return_attention=True
+        """
+        batch_size, seq_len, _ = x.shape
+        qkv = self.qkv_proj(x)
+        q, k, v = qkv.chunk(3, dim=-1) # q -> (batch, seq_len, dim)...
+        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim) # (batch, seq_len, num_heads, head_dim)
+        k = k.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        v = v.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        q = q.transpose(1, 2) # (batch, num_heads, seq_len, head_dim)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        if self.rope is not None:
+            q, k = self.rope(q, k)
+
+        scores = (q @ k.transpose(-2, -1)) * self.scale # (batch, num_heads, seq_len, seq_len)
+
+        # No causal mask! The following commented code was removed
+        # tril = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        # scores = scores.masked_fill(tril == 0, float('-inf'))
+
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights_dropped = self.attn_dropout(attn_weights)
+
+        out = attn_weights_dropped @ v
+
+        out = out.transpose(1, 2) # (batch, seq_len, num_heads, head_dim)
+        out = out.contiguous().view(batch_size, seq_len, self.dim) # (batch, seq_len, dim)
+        out = self.out_proj(out)
+        out = self.resid_dropout(out)
+        
+        if return_attention:
+            return out, attn_weights
+        return out, None
 
 class CausalSelfAttention(nn.Module):
     """
@@ -283,9 +349,12 @@ class TransformerBlock(nn.Module):
         x = x + FeedForward(RMSNorm(x))
     """
 
-    def __init__(self, dim: int, num_heads: int, ff_hidden_dim: int, dropout: float = 0.1, use_rope: bool = True):
+    def __init__(self, dim: int, num_heads: int, ff_hidden_dim: int, dropout: float = 0.1, use_rope: bool = True, use_causal_mask: bool = True):
         super().__init__()
-        self.attention = CausalSelfAttention(dim, num_heads, dropout, use_rope)
+        if use_causal_mask:
+            self.attention = CausalSelfAttention(dim, num_heads, dropout, use_rope)
+        else:
+            self.attention = SelfAttention(dim, num_heads, dropout)
         self.feed_forward = FeedForward(dim, ff_hidden_dim, dropout)
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
@@ -324,6 +393,7 @@ class DecoderOnlyTransformer(nn.Module):
         max_seq_len: int = 2048,
         dropout: float = 0.1,
         use_rope: bool = True,
+        use_causal_mask: bool = True,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -341,7 +411,7 @@ class DecoderOnlyTransformer(nn.Module):
 
         # Transformer blocks
         self.blocks = nn.ModuleList([
-            TransformerBlock(dim, num_heads, ff_hidden_dim, dropout, use_rope)
+            TransformerBlock(dim, num_heads, ff_hidden_dim, dropout, use_rope, use_causal_mask)
             for _ in range(num_layers)
         ])
 
