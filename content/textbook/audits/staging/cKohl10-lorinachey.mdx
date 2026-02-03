@@ -15,7 +15,7 @@ Autonomous driving requires the ability to predict future states of the world in
 
 ## Thesis
 
-Should we remove this?
+Per Chris, the thesis should be a high-level thesis for the entire World Models category.
 [PLACEHOLDER: Insert thesis statement here]
 
 ---
@@ -118,7 +118,7 @@ With weights: $\lambda_{L_1} = 0.2$, $\lambda_{L_2} = 2.0$, $\lambda_{\text{perc
 
 **Architecture**: Autoregressive Transformer with causal masking
 
-**Token Interleaving**: The key design choice is how multimodal inputs are combined. Rather than using separate encoders with cross-attention, GAIA-1 interleaves all modalities into a single flat sequence processed with standard causal self-attention. For each timestep $t$, tokens are ordered as: **text → image → action**.
+**Token Interleaving**: The key design choice is how multimodal inputs are combined. Rather than using separate encoders with cross-attention, GAIA-1 interleaves all modalities into a single flat sequence processed with standard causal self-attention. For each timestep $t$, tokens are ordered as: **text to image to action**.
 
 ```
 Sequence: [c₁ z₁ a₁] [c₂ z₂ a₂] ... [cₜ zₜ aₜ]
@@ -163,7 +163,7 @@ $$
 \mathcal{L}_{\text{video}} = \mathbb{E}_{\epsilon, t'} \left[ \left\|\epsilon_\theta(x_{t'}, t', z, m) - \epsilon\right\|_2^2 \right]
 $$
 
-**Inference Pipeline**: Decode first 7 frames from tokens, autoregressively decode remaining frames (2-frame overlap), temporal upsample 6.25 Hz → 25 Hz, DDIM sampler with 50 steps.
+**Inference Pipeline**: Decode first 7 frames from tokens, autoregressively decode remaining frames (2-frame overlap), temporal upsample 6.25 Hz to 25 Hz, DDIM sampler with 50 steps.
 
 ### 2.5 Key Architectural Trade-Offs
 
@@ -229,7 +229,7 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 ### 4.3 Engineering Bottlenecks
 
-**Information Decay.** The tokenizer compresses 3.5M bits → 7,488 bits (470×). Sub-pixel depth gradients, high-frequency textures, precise object boundaries, and small/distant objects may fall below tokenization resolution.
+**Information Decay.** The tokenizer compresses 3.5M bits to 7,488 bits (470×). Sub-pixel depth gradients, high-frequency textures, precise object boundaries, and small/distant objects may fall below tokenization resolution.
 
 **The Semantic-Motor Gap.** GAIA-1 outputs video frames, not control commands. A complete system requires an additional perception-to-control policy that processes generated video, extracts state, plans trajectory, and outputs motor commands. As the authors state, GAIA-1 is intended as "a valuable neural simulator" for data generation—it is a **data augmentation tool**, not a **driving policy**.
 
@@ -245,7 +245,7 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 **Assumption 3: Proprietary UK Data Generalizes.** 4,700 hours of London driving (right-hand traffic, urban, UK climate) cannot cover left-hand-drive countries, highways, rural areas, or diverse driving cultures.
 
-**Assumption 4: Generation Quality → Policy Performance.** No evidence that GAIA-1 generations improve downstream driving. Domain gap and generation artifacts may harm transfer.
+**Assumption 4: Generation Quality to Policy Performance.** No evidence that GAIA-1 generations improve downstream driving. Domain gap and generation artifacts may harm transfer.
 
 ### 5.2 Reproducibility Assessment
 
@@ -350,12 +350,6 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 ## Summary
 
 Embodied agents require world models that capture the 3D structure of scenes to enable precise manipulation, yet existing world models operate in 2D pixel space, losing critical depth and pose information. TesserAct addresses this by learning a 4D embodied world model that predicts RGB-DN (RGB, Depth, Normal) videos, providing a compact yet geometrically rich representation of scene dynamics. The model fine-tunes CogVideoX on a curated dataset of ~285k robotic manipulation videos annotated with depth and normal maps, then reconstructs temporally and spatially consistent 4D point clouds via normal integration with novel consistency losses. TesserAct enables downstream action planning through an inverse dynamics model, outperforming 2D video-based approaches on RLBench manipulation tasks. However, the single-view RGB-DN representation captures only visible surfaces, and the approach inherits the inference cost limitations of video diffusion models.
-
----
-
-## Thesis
-
-[PLACEHOLDER: Insert thesis statement here]
 
 ---
 
