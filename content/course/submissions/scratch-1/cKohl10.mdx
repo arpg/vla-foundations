@@ -8,10 +8,8 @@ date: "2026-02-03"
 
 ## Loss Curve
 
-<figure>
-  <img src="imgs/loss_curve_2.png" alt="Training Loss" />
-  <figcaption>Figure 1: Training loss curve comparing RoPE and sinusoidal positional embeddings, showing RoPE converges faster to a lower final loss.</figcaption>
-</figure>
+![Training Loss](imgs/loss_curve_2.png)
+*Figure 1*: Training loss curve comparing RoPE and sinusoidal positional embeddings, showing RoPE converges faster to a lower final loss.
 
 The model converged to a training loss of ~1.95 after approximately 5 epochs when using RoPE, with a final loss of 1.94 after 20 epochs. This is a significant improvement of convergence time and loss when compared to the sinusoidal positional embedding from "Attention is All You Need," (Vaswani et al., 2017) which converged to a loss of ~2.0 after 10 epochs.
 
@@ -22,17 +20,13 @@ RoPE treats the positional information of tokens as a complex conjugate pair of 
 
 ## Attention Visualization
 
-<figure>
-  <img src="imgs/attention_layer_0_avg.png" alt="Attention Maps" />
-  <figcaption>Figure 2: Average attention pattern across all heads in layer 0, showing strong diagonal focus indicating attention to recent tokens.</figcaption>
-</figure>
+![Average Attention](imgs/attention_layer_0_avg.png)
+*Figure 2*: Average attention pattern across all heads in layer 0, showing strong diagonal focus indicating attention to recent tokens.
 
 The attention patterns attend strongly to recent tokens, indicated by the bright spots along the diagonal of the attention map for layer 0. 
 
-<figure>
-  <img src="imgs/attention_layer_2_heads.png" alt="Attention Heads" />
-  <figcaption>Figure 3: Individual attention heads in layer 2, showing diverse strategies with some heads capturing longer-range dependencies and key sequence moments.</figcaption>
-</figure>
+![Attention Heads](imgs/attention_layer_2_heads.png)
+*Figure 3*: Individual attention heads in layer 2, showing diverse strategies with some heads capturing longer-range dependencies and key sequence moments.
 
 If we look at the individual heads for a layer further in the chain, we can see that some heads attend to more distant tokens, suggesting that the model is learning to capture longer-range dependencies in the input sequence. Head 2 appears to be focused on key moments in the sequence, head 4 appears to be focused on either the starting token or last 25 tokens, and head 3 appears to be focused on the last token. This diversity in attention patterns across heads indicates that the model is leveraging multiple strategies to process the input data, and that the starting state and specific states are key information for the model's predictions. 
 
@@ -40,10 +34,8 @@ If we look at the individual heads for a layer further in the chain, we can see 
 
 When I removed the causal mask, the model is cheating and converges to a loss of ~0.5 after 6 epochs, indicating that future tokens can strongly inform the predictions of the model. We prefer not to use a model that does not have a causal mask because future tokens would not be known at inference time.
 
-<figure>
-  <img src="imgs/attention_layer_2_heads_no_mask.png" alt="Attention Map Cheating" />
-  <figcaption>Figure 4: Attention heads in layer 2 without causal masking, showing sharper attention weights and continued focus on recent tokens despite access to future information.</figcaption>
-</figure>
+![Attention Map Cheating](imgs/attention_layer_2_heads_no_mask.png)
+*Figure 4*: Attention heads in layer 2 without causal masking, showing sharper attention weights and continued focus on recent tokens despite access to future information.
 
 Surprisingly, I was expecting the attention heads to attend more broadly across the sequence without the causal mask, but the attention maps still show a strong focus on recent tokens. This suggests that even without the causal constraint, the model still finds it beneficial to prioritize recent context for making predictions. There is a noticibley stronger weight on each of the heads compared to the fuzzier results from the causal masked version. Since the model can leverage information from future tokens, it can make more confident predictions and thus focus its attention more sharply on the most relevant tokens.
 
