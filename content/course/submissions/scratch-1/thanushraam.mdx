@@ -1,0 +1,296 @@
+---
+title: "Scratch-1 Submission: Thanushraam Suresh Kumar"
+
+student: "Thanushraam Suresh Kumar"
+
+date: "2026-02-01"
+---
+
+# Scratch-1: The Transformer Backbone
+
+## Loss Curve
+
+![Training Loss](/content/course/submissions/scratch-1/images_tr/loss_curve.png)
+
+The model converged after 2820 iterations or 10 epochs with final training loss of 1.9652 and validation loss of 1.9769.
+
+## Attention Visualization
+
+![Attention Maps](/content/course/submissions/scratch-1/images_tr/attn_map.png)
+
+The attention map visualization shows clear lower-triangular structure which means that causal mask I applied was successful.
+Unlike the unmasked case where attention patterns appear scattered and tokens can attend to future positions, the masked model 
+restricts each token to attending only to itself and previous tokens. A strong diagonal band shows that tokens place high weight 
+on themselves and very recent context, while attention weights gradually decrease as distance from the diagonal increases.
+This fading pattern reflects a recency bias, which is expected in sequential modeling tasks.
+
+## The Audit: Removing the Causal Mask
+
+When comparing training behavior with and without the causal mask, the difference in loss dynamics is huge. Without the mask, 
+the training loss drops from an initial value of approximately 5.5 all the way down to ~0.05. This extremely low final loss 
+indicates that the model is effectively seeing the ground-truth future tokens during training, allowing it to trivially copy 
+the next token rather than predict it. Without the mask, attention is unrestricted, meaning token t can directly attend to 
+tokens t+1, t+2, and beyond. Since the training objective is next-token prediction, the model can simply read the ground-truth 
+answer from the future position and copy it. This creates information leakage, turning the task into trivial reconstruction 
+rather than autoregressive modeling.
+
+![Loss Curve](/content/course/submissions/scratch-1/images_tr/loss_curve_without_mask.png)
+
+![Attention Maps](/content/course/submissions/scratch-1/images_tr/attn_map_wo_mask.png)
+
+The attention visualization confirms this behavior. Instead of a lower-triangular structure, attention spreads across future 
+positions, showing that tokens strongly attend to positions to their right.
+
+### Why the Model "Cheats"
+Autoregressive models rely on the principle that each token must be predicted using only past context. 
+The causal mask enforces this by restricting attention to previous positions. Removing it breaks this constraint, 
+allowing the model to access the exact token it is supposed to predict. The resulting low loss therefore reflects 
+shortcut learning, not genuine sequence understanding.
+
+## Extras
+### KV Cache Inference 
+To evaluate the impact of KV caching I ran inference on two different input and compared the inference times.
+First, for a prompt length of 50 and 500 generated tokens, the no-cache configuration 
+averaged 2139.95 ms (ran 5 times), while with KV cache it averaged 1612.92 ms, yielding a 1.33× speedup. 
+For a longer rollout with prompt length 200 and 1000 generated tokens, the no-cache version averaged 4206.06 ms compared to 
+3234.18 ms with KV cache, corresponding to a 1.30× speedup. In both cases, KV cache consistently reduced inference time, 
+and the absolute time savings increased with longer sequences (about 0.53 seconds saved in the shorter setting versus 
+nearly 1 second saved in the longer one), this demonstrates that caching becomes increasingly beneficial as generation length grows.
+
+### Sinusoidal vs ROPE
+I tried to implement Sinusoidal and compare it with RoPE in terms of training and validation loss along with their inference time for 
+two different context length.
+At short context length (prompt = 50), sinusoidal positional encoding showed slightly lower inference time (1769.65 ms) 
+compared to RoPE (2078.67 ms). However, RoPE achieved better modeling performance, reaching a lower validation loss (1.9678) 
+than sinusoidal encoding (2.0447) and converging faster during training. 
+The sinusoidal loss curve shows slower convergence and consistently higher loss than RoPE
+![loss curve sinusoidal](/content/course/submissions/scratch-1/images_tr/loss_curve-sin.png)
+
+At longer context length (prompt = 200), RoPE outperformed sinusoidal encoding in both modeling quality and efficiency. 
+RoPE reached a validation loss of 1.9651, compared to 2.0348 for sinusoidal encoding. In inference without caching, RoPE 
+required 2089.14 ms, while sinusoidal encoding took 2782.25 ms (≈ 1.33× slower).
+
+## Code Highlights
+
+### Efficient QKV Projection and Multi-Head Reshaping
+
+Instead of separate layers for Q, K, and V, a single projection is used and then split:
+
+```
+qkv = self.qkv_proj(x)              # (B, T, 3D)
+q, k, v = qkv.chunk(3, dim=-1)
+
+q = q.reshape(B, T, H, Hd).transpose(1, 2)  # (B, H, T, Hd)
+k = k.reshape(B, T, H, Hd).transpose(1, 2)
+v = v.reshape(B, T, H, Hd).transpose(1, 2)
+```
+---
+
+### Rotary Positional Embeddings (RoPE)
+
+Positional information is injected by **rotating Q and K**, rather than adding absolute position vectors:
+
+```
+cos = self.cos_cached[position_offset:position_offset+seq_len]
+sin = self.sin_cached[position_offset:position_offset+seq_len]
+
+cos = cos[None, None, :, :]
+sin = sin[None, None, :, :]
+
+q_rot = (q * cos) + (self.rotate_half(q) * sin)
+k_rot = (k * cos) + (self.rotate_half(k) * sin)
+```
+
+This embeds **relative positional structure directly in attention**.
+
+---
+
+### Causal Masking
+
+A lower-triangular mask is applied before softmax:
+
+```
+causal = torch.tril(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool))
+scores = scores.masked_fill(~causal, float("-inf"))
+```
+---
+
+### Scaled Dot-Product Attention
+
+The attention core follows the standard Transformer pipeline:
+
+```
+scores = (q @ k.transpose(-2, -1)) * self.scale
+attn = F.softmax(scores, dim=-1)
+attn = self.attn_dropout(attn)
+
+out = attn @ v
+out = out.transpose(1, 2).contiguous().view(B, T, D)
+out = self.out_proj(out)
+```
+
+---
+
+### Attention Map
+
+For visualization the attention map:
+
+```
+if not self.training:
+    self.last_attn = attn.detach().cpu()
+```
+
+---
+
+### KV Cache Implementation
+
+Instead of recomputing attention over the entire prefix at every step, previously computed keys and values are stored and reused.
+
+#### Cache Allocation
+
+```
+if past_kv is None:
+    max_len = self.max_seq_len
+    k_cache = torch.empty(B, H, max_len, Hd, device=x.device)
+    v_cache = torch.empty_like(k_cache)
+    pos = 0
+else:
+    k_cache, v_cache, pos = past_kv
+```
+
+#### Writing New Tokens into Cache
+
+```
+k_cache[:, :, pos:pos+seq_len, :] = k
+v_cache[:, :, pos:pos+seq_len, :] = v
+```
+
+Only the new token projections are computed.
+
+
+#### Using Cached Prefix
+
+```
+k = k_cache[:, :, :pos+seq_len, :]
+v = v_cache[:, :, :pos+seq_len, :]
+scores = (q @ k.transpose(-2, -1)) * self.scale
+```
+
+Attention now runs against **all previous tokens** without recomputing their projections.
+
+
+
+#### Updated Cache Returned
+
+```
+present_kv = (k_cache, v_cache, pos + seq_len)
+return out, present_kv
+```
+---
+### Sinusoidal Positional Encoding Implementation
+
+
+In my sinusoidal positional encoding implementation, positional information is added **directly to token embeddings** before 
+the transformer blocks:
+
+```python
+x = self.token_embedding(input_ids)
+x = x + self.pos_emb[:x.size(1), :].unsqueeze(0)
+```
+
+The positional embedding matrix is precomputed once:
+
+```python
+self.pe = self.build_sinusoidal_pos_emb(max_seq_len, dim, device="cuda")
+self.register_buffer("pos_emb", self.pe, persistent=False)
+```
+
+**Important Behavior During Generation**
+
+During generation, I use a **cropped context window**:
+
+```python
+input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+```
+
+Because of this, the positional encoding applied at each forward pass is:
+
+```python
+self.pos_emb[:context_length]
+```
+
+This means that **position indices restart from 0** whenever the context window is cropped.
+So tokens at later stages of generation are assigned positions relative to the window rather than their absolute position in the full sequence.
+
+
+## Challenges and Solutions
+
+1. Dataset understanding: Initially, the structure of the dataset was confusing, 
+   particularly how states, actions, and targets aligned for next-token prediction. 
+   By printing tensor shapes and inspecting sample sequences, I verified the sequence 
+   dimensions and confirmed the correct autoregressive setup (predicting action t+1 from action t).
+
+2. KV cache performance: My first KV cache implementation was unexpectedly slower than the 
+   no-cache baseline. This was due to inefficiencies such as suboptimal mask computation and 
+   non-optimal buffer usage. After improving the masking logic and using pre-allocated key/value 
+   buffers correctly, KV caching produced consistent inference speedups, especially for longer 
+   sequences.
+
+3. Attention visualization: At first, I wasn’t sure how to visualize the attention maps. 
+   After referring to a few online resources, I learned how to extract and detach the attention 
+   weights from the model. By storing the detached attention matrix during a forward pass, 
+   I was able to visualize the attention patterns for a single input sequence. [reference blog](!https://alessiodevoto.github.io/vit-attention/)
+
+## References
+1. https://huggingface.co/blog/not-lain/kv-caching
+2. https://www.kaggle.com/code/aisuko/causal-self-attention
+3. https://alessiodevoto.github.io/vit-attention/
+4. https://medium.com/ai-insights-cobet/rotary-positional-embeddings-a-detailed-look-and-comprehensive-understanding-4ff66a874d83
+5. https://medium.com/@lepicardhugo/how-transformers-encode-position-pe-rope-made-simple-024d5e03fa03
+6. https://www.youtube.com/watch?v=GQPOtyITy54
+
+## Sample Output
+```
+Using device: cuda
+dataset keys dict_keys(['states', 'actions'])
+Epoch 0 | Batch 100/282 | Loss 3.4397 | perplexity 31.1783
+Epoch 0 | Batch 200/282 | Loss 2.5887 | perplexity 13.3130
+Epoch 1/10 - Loss: 3.2790
+Epoch 1: train 3.2790 | val 2.3331 | val_perplexity 10.3101
+Epoch 1 | Batch 100/282 | Loss 2.2714 | perplexity 9.6934
+Epoch 1 | Batch 200/282 | Loss 2.1437 | perplexity 8.5313
+Epoch 2/10 - Loss: 2.2153
+Epoch 2: train 2.2153 | val 2.0984 | val_perplexity 8.1527
+Epoch 2 | Batch 100/282 | Loss 2.0614 | perplexity 7.8570
+Epoch 2 | Batch 200/282 | Loss 2.0887 | perplexity 8.0743
+Epoch 3/10 - Loss: 2.0842
+Epoch 3: train 2.0842 | val 2.0381 | val_perplexity 7.6761
+Epoch 3 | Batch 100/282 | Loss 1.9957 | perplexity 7.3575
+Epoch 3 | Batch 200/282 | Loss 2.0274 | perplexity 7.5945
+Epoch 4/10 - Loss: 2.0412
+Epoch 4: train 2.0412 | val 2.0139 | val_perplexity 7.4923
+Epoch 4 | Batch 100/282 | Loss 2.0546 | perplexity 7.8034
+Epoch 4 | Batch 200/282 | Loss 2.0366 | perplexity 7.6647
+Epoch 5/10 - Loss: 2.0176
+Epoch 5: train 2.0176 | val 1.9938 | val_perplexity 7.3435
+Epoch 5 | Batch 100/282 | Loss 1.9758 | perplexity 7.2124
+Epoch 5 | Batch 200/282 | Loss 1.9989 | perplexity 7.3807
+Epoch 6/10 - Loss: 2.0011
+Epoch 6: train 2.0011 | val 1.9882 | val_perplexity 7.3026
+Epoch 6 | Batch 100/282 | Loss 2.0455 | perplexity 7.7333
+Epoch 6 | Batch 200/282 | Loss 1.9885 | perplexity 7.3045
+Epoch 7/10 - Loss: 1.9901
+Epoch 7: train 1.9901 | val 1.9798 | val_perplexity 7.2412
+Epoch 7 | Batch 100/282 | Loss 1.9672 | perplexity 7.1505
+Epoch 7 | Batch 200/282 | Loss 1.9944 | perplexity 7.3476
+Epoch 8/10 - Loss: 1.9802
+Epoch 8: train 1.9802 | val 1.9738 | val_perplexity 7.1983
+Epoch 8 | Batch 100/282 | Loss 1.9764 | perplexity 7.2166
+Epoch 8 | Batch 200/282 | Loss 1.9743 | perplexity 7.2013
+Epoch 9/10 - Loss: 1.9722
+Epoch 9: train 1.9722 | val 1.9699 | val_perplexity 7.1700
+Epoch 9 | Batch 100/282 | Loss 1.9751 | perplexity 7.2074
+Epoch 9 | Batch 200/282 | Loss 1.9751 | perplexity 7.2074
+Epoch 10/10 - Loss: 1.9662
+Epoch 10: train 1.9662 | val 1.9661 | val_perplexity 7.1426
+```
