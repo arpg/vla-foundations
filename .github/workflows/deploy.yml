@@ -23,7 +23,7 @@ jobs:
       - name: Deploy to Remote Server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ristoffer.ch
+          host: direct.ristoffer.ch
           username: crh
           key: ${{ secrets.SSH_DEPLOY_KEY }}
           script: |
