@@ -1,7 +1,7 @@
 # Technical Paper Audit: GAIA-1
 
 **Title**: GAIA-1: A Generative World Model for Autonomous Driving  
-**Authors**: Lorin Achey and Carson Kohlbrenner  
+**Authors**: Lorin Achey  
 **Paper**: GAIA-1 (Arxiv 2023)  
 **Topic**: World Models  
 
@@ -10,13 +10,6 @@
 ## Summary
 
 Autonomous driving requires the ability to predict future states of the world in order to plan safe actions, yet collecting real-world data for rare and dangerous scenarios is expensive, risky, and often impossible. GAIA-1 introduces a generative world model for autonomous driving that combines autoregressive sequence modeling with video diffusion decoding to generate controllable driving scenarios. The model accepts video, text, and action inputs, encoding them into discrete tokens and predicting future states autoregressively. GAIA-1 demonstrates the ability to generate coherent scenes with realistic object interactions that were not explicitly provided in the training data. However, the model does not run in real-time and lacks closed-loop evaluation, making its utility for actual autonomous driving control questionable.
-
----
-
-## Thesis
-
-Per Chris, the thesis should be a high-level thesis for the entire World Models category.
-[PLACEHOLDER: Insert thesis statement here]
 
 ---
 
@@ -47,7 +40,7 @@ Additionally, imitation learning cannot imagine scenarios beyond those present i
 
 **Video Generation and World Models.** The most recent evolution casts world modeling as a video generation problem. This approach builds on two parallel developments: sequence modeling formulations that treat control as token prediction (Decision Transformer [19], Trajectory Transformer [10]), and large-scale video generation systems that produce photorealistic content (Imagen Video [16], Make-A-Video [68]). GAIA-1 synthesizes these paradigms, using autoregressive sequence modeling for world dynamics and diffusion models for high-fidelity rendering. Concurrent work includes DriveGAN [62], which uses GANs for controllable driving simulation, and DriveDreamer [87], which applies diffusion models conditioned on 3D scene layouts.
 
-**Comparative Positioning.** GAIA-1 distinguishes itself from related work through scale (9.4B parameters vs. ~100M-1B for competitors), generation quality (video diffusion vs. VAE/GAN), and multimodal conditioning (text + action). However, it sacrifices real-time capability (unlike MILE, DriveGAN, Dreamer-v3) and closed-loop evaluation (unlike MILE, Dreamer-v3). MILE provides trajectory outputs evaluated on CARLA [cite] driving; GAIA-1 provides video outputs with qualitative evaluation only.
+**Comparative Positioning.** GAIA-1 distinguishes itself from related work through scale (9.4B parameters vs. ~100M-1B for competitors), generation quality (video diffusion vs. VAE/GAN), and multimodal conditioning (text + action). However, it sacrifices real-time capability (unlike MILE, DriveGAN, Dreamer-v3) and closed-loop evaluation (unlike MILE, Dreamer-v3). MILE provides trajectory outputs evaluated on CARLA driving; GAIA-1 provides video outputs with qualitative evaluation only.
 
 ### 1.3 The "Initial Dissolve"
 
@@ -171,7 +164,7 @@ GAIA-1's design makes three critical trade-offs that shape its capabilities and 
 
 **Discrete Tokens vs. Continuous Latents.** GAIA-1 uses discrete tokenization ($z \in \{1,...,K\}^n$) rather than continuous latent representations. This enables LLM-style next-token prediction and benefits from proven scaling laws, but introduces quantization error. Each image is compressed to 7,488 bits (576 tokens × 13 bits), a 470× compression that discards fine-grained spatial information. The DINO distillation loss biases tokens toward semantic categories over geometric precision—beneficial for high-level scene understanding but potentially harmful for safety-critical details like exact distances.
 
-**Autoregressive vs. Parallel Decoding.** The world model generates tokens sequentially rather than in parallel (like MaskGIT [cite] or BERT [cite]). This maximizes expressiveness—each token can depend on all previous tokens—but incurs 576 sequential forward passes per frame. A parallel decoder could achieve ~36× speedup but would sacrifice the ability to model complex inter-token dependencies. GAIA-1 prioritizes quality over inference speed, a choice aligned with research exploration rather than deployment.
+**Autoregressive vs. Parallel Decoding.** The world model generates tokens sequentially rather than in parallel (like MaskGIT or BERT [90]). This maximizes expressiveness—each token can depend on all previous tokens—but incurs 576 sequential forward passes per frame. A parallel decoder could achieve ~36× speedup but would sacrifice the ability to model complex inter-token dependencies. GAIA-1 prioritizes quality over inference speed, a choice aligned with research exploration rather than deployment.
 
 **Temporal Resolution (6.25 Hz vs. 25 Hz).** The world model operates at 6.25 Hz (160ms between frames) to keep sequence length tractable, with the video decoder upsampling to 25 Hz. This reduces attention memory by ~15× compared to native 25 Hz, enabling 4-second context windows. However, 160ms between predictions means a vehicle at highway speed moves 4.8m between frames—fine-grained motion and sudden events may be aliased away before the model sees them.
 
@@ -269,7 +262,7 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 ### 5.4 The Next 10,000 GPU-Hour Experiment
 
-**Proposed**: Closed-loop evaluation. Generate 1,000 hours of diverse scenarios with GAIA-1, train downstream policy on generated data, evaluate in CARLA [cite]/nuScenes [cite] (collision rate, route completion, comfort metrics), compare to real-data-only baseline. This would quantify the actual utility of world model generations for policy training.
+**Proposed**: Closed-loop evaluation. Generate 1,000 hours of diverse scenarios with GAIA-1, train downstream policy on generated data, evaluate in CARLA/nuScenes [2] (collision rate, route completion, comfort metrics), compare to real-data-only baseline. This would quantify the actual utility of world model generations for policy training.
 
 ### 5.5 Foundational vs. Incremental
 
@@ -306,6 +299,8 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 [1] A. Kendall et al. "Learning to drive in a day." ICRA 2019.
 
+[2] H. Caesar et al. "nuScenes: A multimodal dataset for autonomous driving." CVPR 2020.
+
 [7] D. Ha and J. Schmidhuber. "Recurrent world models facilitate policy evolution." NeurIPS 2018.
 
 [9] J. Schrittwieser et al. "Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model." Nature 2020.
@@ -336,12 +331,14 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 [87] X. Wang et al. "DriveDreamer: Towards Real-world-driven World Models for Autonomous Driving." arXiv 2023.
 
+[90] J. Devlin et al. "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding." NAACL 2019.
+
 ---
 
 # Technical Paper Audit: TesserAct
 
 **Title**: TesserAct: Learning 4D Embodied World Models  
-**Authors**: Lorin Achey and Carson Kohlbrenner  
+**Authors**: Lorin Achey  
 **Paper**: TesserAct (Arxiv 2025)  
 **Topic**: World Models  
 
@@ -359,7 +356,7 @@ Embodied agents require world models that capture the 3D structure of scenes to 
 
 **Core Problem**: TesserAct addresses the fundamental limitation that existing world models operate in 2D pixel space, which fails to capture the 3D spatial relationships essential for robotic manipulation. Without accurate depth and 6-DoF pose estimations, robotic systems struggle to determine the exact position and orientation of objects.
 
-**The 2D Representation Gap.** Prior video-based world models like UniPi [cite], Genie [cite], and Pandora [cite] generate future video frames conditioned on actions and text, but their 2D outputs suffer from several critical limitations for embodied tasks. First, they cannot provide metric depth information needed to plan precise grasping motions—a robot arm must know not just where an object appears in the image but how far it is and at what angle. Second, 2D models can produce geometrically inconsistent outputs where object sizes and shapes vary across frames, violating physical constraints. Third, converting 2D predictions back to 3D control signals requires additional perception modules (depth estimators, pose estimators) that introduce error accumulation and latency. The paper notes that "without accurate depth and 6-DoF pose estimations, robotic systems struggle to determine the exact position and orientation of objects."
+**The 2D Representation Gap.** Prior video-based world models like UniPi [15], Genie [8], and Pandora [64] generate future video frames conditioned on actions and text, but their 2D outputs suffer from several critical limitations for embodied tasks. First, they cannot provide metric depth information needed to plan precise grasping motions—a robot arm must know not just where an object appears in the image but how far it is and at what angle. Second, 2D models can produce geometrically inconsistent outputs where object sizes and shapes vary across frames, violating physical constraints. Third, converting 2D predictions back to 3D control signals requires additional perception modules (depth estimators, pose estimators) that introduce error accumulation and latency. The paper notes that "without accurate depth and 6-DoF pose estimations, robotic systems struggle to determine the exact position and orientation of objects."
 
 **The 4D Training Data Gap.** While 3D and 4D representations would better serve robotics, collecting large-scale datasets with ground-truth depth and normal maps is prohibitively expensive. Real-world depth sensors (LiDAR, structured light) have limited resolution and fail on reflective/transparent surfaces common in manipulation scenarios. Synthetic data provides perfect ground truth but suffers from sim-to-real gaps. This data scarcity has prevented prior work from training 4D world models at scale.
 
@@ -367,13 +364,13 @@ Embodied agents require world models that capture the 3D structure of scenes to 
 
 ### 1.2 Taxonomy of Approaches & Related Work
 
-**Embodied Foundation Models.** Recent work has focused on constructing foundation models for general-purpose agents through two main approaches. Vision-Language-Action (VLA) models like RT-2 [6] and OpenVLA [cite] directly output action tokens from image and text inputs, learning an end-to-end mapping from perception to control. Multimodal language models like PaLM-E [cite] output text describing actions. Both approaches aim to construct foundation model policies but do not model world dynamics explicitly. In contrast, TesserAct constructs a foundation world model that can be used for downstream planning and policy synthesis.
+**Embodied Foundation Models.** Recent work has focused on constructing foundation models for general-purpose agents through two main approaches. Vision-Language-Action (VLA) models like RT-2 [6] and OpenVLA [34] directly output action tokens from image and text inputs, learning an end-to-end mapping from perception to control. Multimodal language models like PaLM-E [13] output text describing actions. Both approaches aim to construct foundation model policies but do not model world dynamics explicitly. In contrast, TesserAct constructs a foundation world model that can be used for downstream planning and policy synthesis.
 
-**World Models for Control.** Learning dynamics models given control inputs has been studied extensively in model-based reinforcement learning and optimal control. Early approaches like Dreamer [cite] and IRIS [cite] learned world models in low-dimensional latent spaces, which are efficient but difficult to generalize across environments. Ha and Schmidhuber's [21] recurrent world models enabled policy learning in "dream" environments but operated on simple games. More recent work like UniPi [cite] and Pandora [cite] uses video diffusion models as world models, but these operate over 2D pixels. TesserAct extends this paradigm to 4D by jointly predicting depth and normal information.
+**World Models for Control.** Learning dynamics models given control inputs has been studied extensively in model-based reinforcement learning and optimal control. Early approaches like Dreamer [22] learned world models in low-dimensional latent spaces, which are efficient but difficult to generalize across environments. Ha and Schmidhuber's [21] recurrent world models enabled policy learning in "dream" environments but operated on simple games. More recent work like UniPi [15] and Pandora [64] uses video diffusion models as world models, but these operate over 2D pixels. TesserAct extends this paradigm to 4D by jointly predicting depth and normal information.
 
-**4D Video Generation.** The task of generating dynamic 3D content has gained attention through approaches combining diffusion models with NeRF [cite] or Gaussian splatting [33]. However, these methods suffer from slow optimization due to hybrid frameworks and SDS loss convergence challenges. TesserAct sidesteps these issues by representing 4D scenes as RGB-DN videos, which are more efficient to generate and provide high-accuracy 3D information. The paper notes that "our approach is the first to directly predict 4D scenes from the current frame and the embodied agent's action described in text."
+**4D Video Generation.** The task of generating dynamic 3D content has gained attention through approaches combining diffusion models with NeRF [44] or Gaussian splatting [33]. However, these methods suffer from slow optimization due to hybrid frameworks and SDS loss convergence challenges. TesserAct sidesteps these issues by representing 4D scenes as RGB-DN videos, which are more efficient to generate and provide high-accuracy 3D information. The paper notes that "our approach is the first to directly predict 4D scenes from the current frame and the embodied agent's action described in text."
 
-**Comparative Positioning.** TesserAct distinguishes itself from related work by: (1) providing explicit 3D geometry (depth, normal) rather than implicit 2D features; (2) enabling temporally consistent 4D reconstruction rather than frame-by-frame estimation; (3) demonstrating downstream utility for robotic manipulation rather than just generation quality. Compared to 3D-VLA [76] which predicts only goal states, TesserAct models the full trajectory. Compared to Aether [cite] which trains on synthetic data without language grounding, TesserAct supports language-conditioned control on real data.
+**Comparative Positioning.** TesserAct distinguishes itself from related work by: (1) providing explicit 3D geometry (depth, normal) rather than implicit 2D features; (2) enabling temporally consistent 4D reconstruction rather than frame-by-frame estimation; (3) demonstrating downstream utility for robotic manipulation rather than just generation quality. Compared to 3D-VLA [76] which predicts only goal states, TesserAct models the full trajectory. Compared to Aether [57] which trains on synthetic data without language grounding, TesserAct supports language-conditioned control on real data.
 
 ### 1.3 The "Initial Dissolve"
 
@@ -400,7 +397,7 @@ The data flow proceeds as follows: (1) RGB, depth, and normal videos are separat
 
 ### 2.2 RGB-DN Video Prediction
 
-**Core Innovation**: Rather than predicting explicit 3D representations (meshes, point clouds, NeRFs [cite]), TesserAct predicts RGB-DN (RGB, Depth, Normal) videos as a compact 4D proxy.
+**Core Innovation**: Rather than predicting explicit 3D representations (meshes, point clouds, NeRFs [44]), TesserAct predicts RGB-DN (RGB, Depth, Normal) videos as a compact 4D proxy.
 
 **Why RGB-DN?** This representation offers three advantages:
 - **Computational efficiency**: Same dimensionality as standard video, enabling use of pretrained video models
@@ -446,7 +443,7 @@ $$
 
 This spatial consistency loss $L_s$ enforces that depth gradients align with normal predictions.
 
-**Temporal Consistency Loss**: Frame-by-frame optimization lacks temporal coherence. TesserAct uses optical flow (RAFT [cite]) to enforce consistency:
+**Temporal Consistency Loss**: Frame-by-frame optimization lacks temporal coherence. TesserAct uses optical flow (RAFT [59]) to enforce consistency:
 - **Static regions**: Pixels with small optical flow magnitude ($\left\|F^i\right\| \leq c$)
 - **Dynamic regions**: Moving pixels
 - **Background**: Static regions consistent across frames
@@ -526,7 +523,7 @@ Unlike pure generation models, TesserAct demonstrates downstream utility through
 **Inverse Dynamics Architecture**:
 1. Reconstruct 4D point clouds from RGB-DN predictions
 2. Filter background/floor, sample 8192 points
-3. Encode point cloud via PointNet [cite]
+3. Encode point cloud via PointNet [49]
 4. Concatenate with instruction language embedding
 5. 4-layer MLP outputs 7-DoF actions
 
@@ -555,7 +552,7 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 **Depth Estimation Quality on Real Data**: Real-world depth annotations come from RollingDepth [31] (affine-invariant, not metric). Converting to metric depth for control requires scale disambiguation, which may introduce errors. The paper doesn't report metric depth accuracy on real data.
 
-**Inference Latency**: Video diffusion models are slow. TesserAct requires 50 DDPM sampling steps for 49-frame generation. The paper reports novel view synthesis in "~1 min" vs Shape of Motion's [cite] "~2 hours," but doesn't report end-to-end latency for closed-loop control. Real-time operation (10+ Hz) is likely infeasible.
+**Inference Latency**: Video diffusion models are slow. TesserAct requires 50 DDPM sampling steps for 49-frame generation. The paper reports novel view synthesis in "~1 min" vs Shape of Motion's [62] "~2 hours," but doesn't report end-to-end latency for closed-loop control. Real-time operation (10+ Hz) is likely infeasible.
 
 **Action Space Mismatch**: The inverse dynamics model predicts 7-DoF actions from point clouds, but this requires knowing keyframes a priori. The paper notes they "predict and record all future keyframes" then "query the inverse dynamic model"—this open-loop execution precludes reactive control.
 
@@ -635,9 +632,15 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 [6] A. Brohan et al. "RT-1: Robotics transformer for real-world control at scale." arXiv 2022.
 
+[8] J. Bruce et al. "Genie: Generative interactive environments." ICML 2024.
+
+[13] D. Driess et al. "Palm-e: An embodied multimodal language model." arXiv 2023.
+
 [15] Y. Du et al. "Learning universal policies via text-guided video generation." NeurIPS 2024.
 
 [21] D. Ha and J. Schmidhuber. "Recurrent world models facilitate policy evolution." NeurIPS 2018.
+
+[22] D. Hafner et al. "Mastering atari with discrete world models." ICLR 2021.
 
 [26] S. James et al. "RLBench: The robot learning benchmark." IEEE RAL 2020.
 
@@ -649,7 +652,21 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 [33] B. Kerbl et al. "3D Gaussian splatting for real-time radiance field rendering." ACM ToG 2023.
 
+[34] M. J. Kim et al. "OpenVLA: An open-source vision-language-action model." arXiv 2024.
+
+[44] B. Mildenhall et al. "Nerf: Representing scenes as neural radiance fields for view synthesis." Communications of the ACM 2021.
+
+[49] C. R. Qi et al. "Pointnet++: Deep hierarchical feature learning on point sets in a metric space." NeurIPS 2017.
+
+[57] Aether Team et al. "Aether: Geometric-aware unified world modeling." arXiv 2025.
+
+[59] Z. Teed and J. Deng. "Raft: Recurrent all-pairs field transforms for optical flow." ECCV 2020.
+
 [61] H. Walke et al. "BridgeData V2: A dataset for robot learning at scale." CoRL 2023.
+
+[62] Q. Wang et al. "Shape of motion: 4d reconstruction from a single video." arXiv 2024.
+
+[64] J. Xiang et al. "Pandora: Towards general world model with natural language actions and video states." arXiv 2024.
 
 [69] Z. Yang et al. "CogVideoX: Text-to-video diffusion models with an expert transformer." arXiv 2024.
 
