@@ -13,8 +13,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+<<<<<<< Updated upstream
 from typing import Optional, Tuple
 
+=======
+import time
+import pickle
+from typing import Optional, Tuple    
+>>>>>>> Stashed changes
 
 class RMSNorm(nn.Module):
     """
@@ -31,9 +37,9 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma)
-        # Hint: Use nn.Parameter with torch.ones
-        self.scale = None  # REPLACE THIS LINE
+        # Learnable scale parameter 'g' (gamma)
+        self.scale = nn.Parameter(torch.ones(dim))
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -42,15 +48,11 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm
-        # Step 1: Compute RMS (root mean square) along the last dimension
-        # Step 2: Normalize by dividing x by RMS
-        # Step 3: Apply learnable scale parameter
+        rms = torch.rsqrt(torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)) # permit broadcasting on last dim
+        x_normed = x * rms
+        x_scaled = x_normed * self.scale
 
-        # HINT: Use torch.mean, torch.rsqrt for efficiency
-        # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-        raise NotImplementedError("TODO: Implement RMSNorm forward pass")
+        return x_scaled
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -106,10 +108,16 @@ class RotaryPositionalEmbedding(nn.Module):
         sin = self.sin_cached[:seq_len, ...]
 
         # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
-        q_rot = (q * cos) + (self.rotate_half(q) * sin)
-        k_rot = (k * cos) + (self.rotate_half(k) * sin)
+        q = (q * cos) + (self.rotate_half(q) * sin)
+        k = (k * cos) + (self.rotate_half(k) * sin)
 
-        return q_rot, k_rot
+        # ALTERNATIVE: Absolute sinusoidal
+        # q[::2]  = (q + cos)[::2]
+        # q[1::2] = (q + sin)[1::2]
+        # k[::2]  = (k + cos)[::2]
+        # k[1::2] = (k + sin)[1::2]
+        
+        return q, k
 
 
 class CausalSelfAttention(nn.Module):
@@ -131,12 +139,17 @@ class CausalSelfAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
 
         # Linear projections for Q, K, V
-        self.qkv_proj = nn.Linear(dim, 3 * dim, bias=False)
+        self.q_proj = nn.Linear(dim, dim, bias=False)
+        self.kv_proj = nn.Linear(dim, 2 * dim, bias=False)
         self.out_proj = nn.Linear(dim, dim, bias=False)
 
         # Dropout
         self.attn_dropout = nn.Dropout(dropout)
         self.resid_dropout = nn.Dropout(dropout)
+
+        # KV cache
+        self.kvcache = None
+        self.cache_enabled = False
 
         # Rotary embeddings
         self.rope = RotaryPositionalEmbedding(self.head_dim)
@@ -151,40 +164,58 @@ class CausalSelfAttention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention
 
-        # Step 1: Project input to Q, K, V
-        # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
-        # Split into Q, K, V and reshape for multi-head attention
-        # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
+        # Project input to q, k, v
+        # Recall that `reshape` does `view` automatically if it's possible.
 
-        # Step 2: Apply RoPE to Q and K
-        # q, k = self.rope(q, k)
 
-        # Step 3: Compute attention scores
-        # scores = (Q @ K^T) / sqrt(d_k)
-        # Hint: Use torch.matmul or @ operator
-        # Shape should be (batch, num_heads, seq_len, seq_len)
+        if self.cache_enabled and self.kvcache is not None:
+            q = self.q_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim)).transpose(1, 2)
 
-        # Step 4: Apply causal mask
-        # The mask should prevent position i from attending to positions > i
-        # Hint: Create a lower-triangular matrix using torch.tril
-        # Set masked positions to -inf BEFORE softmax
-        # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
+            # Get k,v for only most recent token
+            x_recent = x[:, -1:, :]
+            kv_recent = self.kv_proj(x_recent)
+            kv_recent = kv_recent.reshape((batch_size, 1, self.num_heads, self.head_dim, 2)).transpose(1, 2)
 
-        # Step 5: Apply softmax and dropout
-        # attn_weights = F.softmax(scores, dim=-1)
-        # attn_weights = self.attn_dropout(attn_weights)
+            # Shorten the cache if necessary
+            # kv is of shape (batch, seq_len, dim, 2)
+            n = x.shape[1]
+            kv = torch.cat((self.kvcache, kv_recent), dim=2)[:, :, :seq_len, :, :]
+        else:
+            q = self.q_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim)).transpose(1, 2)  
+            kv = self.kv_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim, 2)).transpose(1, 2)
 
-        # Step 6: Apply attention to values
-        # out = attn_weights @ V
+        if self.cache_enabled:
+            self.kvcache = kv
+        
+        k = kv[:, :, :, :, 0]
+        v = kv[:, :, :, :, 1]
+        # Now (q, k, v) should all be of shape (batch, num_heads, seq_len, head_dim)
 
-        # Step 7: Reshape and project back
+
+        # Apply RoPE to Q and K
+        q, k = self.rope(q, k)
+
+        # Compute attention scores
+        scores = (q @ k.transpose(-1, -2)) / math.sqrt(self.head_dim) # (batch, num_heads, seq_len, seq_len)
+
+        # Apply causal mask
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+
+        # print(torch.exp(scores))
+
+        # Softmax
+        attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+
+        # Dropout
+        attn_weights = self.attn_dropout(attn_weights)
+
+        # Apply values
+        out = attn_weights @ v # (batch, num_heads, seq_len, head_dim)
+
         # Concatenate heads and apply output projection
-        # Hint: Use .transpose() and .contiguous().view() to reshape
-
-        raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
-
+        # Heads may or may not be contiguous - reshape should handle both cases
+        return out.transpose(1, 2).reshape((batch_size, seq_len, self.dim))
 
 class FeedForward(nn.Module):
     """
@@ -325,8 +356,8 @@ class DecoderOnlyTransformer(nn.Module):
         if targets is not None:
             # Flatten for cross-entropy
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                logits.reshape(-1, self.vocab_size),
+                targets.reshape(-1),
                 ignore_index=-1,  # Ignore padding tokens
             )
 
@@ -339,6 +370,7 @@ class DecoderOnlyTransformer(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
+        use_cache: bool = False
     ) -> torch.Tensor:
         """
         Autoregressive generation
@@ -351,6 +383,14 @@ class DecoderOnlyTransformer(nn.Module):
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
+
+        # KV caching: Use only when autoregressively generating (ie, right here)
+        #   Also, clear the cache on every call to `generate`.
+        if use_cache:
+            for block in self.blocks:
+                block.attention.cache_enabled = True
+                block.attention.kvcache = None
+
         for _ in range(max_new_tokens):
             # Crop context if too long
             input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
@@ -371,6 +411,10 @@ class DecoderOnlyTransformer(nn.Module):
             # Append to sequence
             input_ids = torch.cat([input_ids, next_token], dim=1)
 
+        if use_cache:
+            for block in self.blocks:
+                block.attention.cache_enabled = False
+
         return input_ids
 
 
@@ -379,7 +423,7 @@ def train_epoch(
     dataloader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    epoch: int,
+    epoch: int
 ) -> float:
     """
     Train for one epoch
@@ -397,20 +441,79 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
 
-    # TODO: Implement training loop
-    # For each batch:
-    #   1. Move data to device
-    #   2. Forward pass (get logits and loss)
-    #   3. Backward pass
-    #   4. Gradient clipping (max_norm=1.0)
-    #   5. Optimizer step
-    #   6. Zero gradients
-    #   7. Accumulate loss
+    for data in dataloader:
+        batch = data[0].to(device)
+        logits, loss = model(batch[:, 0:48], batch[:, 1:49])
 
-    # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
-    # Hint: Print progress every 100 batches
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        optimizer.zero_grad()
 
-    raise NotImplementedError("TODO: Implement training loop")
+        total_loss += loss
+        num_batches += 1
+
+    return total_loss / num_batches
+
+
+def test_performance(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device
+) -> float:
+    """
+    Test loss on a test dataset
+
+    Args:
+        model: The transformer model
+        dataloader: Test data loader
+        device: Device to test on
+    Returns:
+        Average loss for the test data
+    """
+
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
+
+    for data in dataloader:
+        batch = data[0].to(device)
+        logits, loss = model(batch[:, 0:48], batch[:, 1:49])
+
+        total_loss += loss
+        num_batches += 1
+    return total_loss / num_batches
+
+
+def test_inference_time(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device,
+    use_cache: bool = False
+) -> float:
+    """
+    Test inference time on the test dataset
+
+    Args:
+        model: The transformer model
+        dataloader: test data loader
+        device: Device to test on
+    Returns:
+        Average inference time for 10 steps of generation (with batching allowed) 
+    """
+
+    total_time = 0
+    num_samples = 0
+
+    for data in dataloader:
+        batch = data[0].to(device)
+
+        ago = time.perf_counter()
+        model.generate(batch, 100, use_cache=use_cache)
+        total_time += time.perf_counter() - ago
+        num_samples += 10
+
+    return total_time / num_samples
 
 
 def main():
@@ -427,33 +530,54 @@ def main():
     num_heads = 8  # Number of attention heads
     ff_hidden_dim = 1024  # Feed-forward hidden dimension
     max_seq_len = 50  # Maximum sequence length
-    batch_size = 32
+    batch_size = 64 # "if you have enough VRAM"
     learning_rate = 1e-4
-    num_epochs = 10
+    num_epochs = 40
 
-    # Device
+    # Set up device (CUDA used in development).
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # TODO: Load dataset
-    # Use the generate_data.py script to create synthetic trajectories
-    # Load from data/trajectories.pkl
+    # Load synthetic data from data/trajectories.pkl
+    with open("data/trajectories.pkl", 'rb') as f:
+        train_dataset = torch.utils.data.TensorDataset(pickle.load(f)['actions'][:9000, :])
 
-    # TODO: Create model
-    # model = DecoderOnlyTransformer(...)
+    with open("data/trajectories.pkl", 'rb') as f:
+        test_dataset = torch.utils.data.TensorDataset(pickle.load(f)['actions'][9000:, :])
 
-    # TODO: Create optimizer
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader  = torch.utils.data.DataLoader(test_dataset,  batch_size=batch_size, shuffle=True)
 
-    # TODO: Training loop
-    # for epoch in range(num_epochs):
-    #     train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
-    #     print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+    model = DecoderOnlyTransformer(
+        vocab_size,
+        dim,
+        num_layers,
+        num_heads,
+        ff_hidden_dim,
+        max_seq_len = max_seq_len,
+        dropout = 0.1,
+    ).to(device)
 
-    # TODO: Save checkpoint
-    # torch.save(model.state_dict(), "checkpoints/best_model.pt")
+    # If needed: Load model parameters from checkpoint
+    # model.load_state_dict(torch.load("checkpoints/epoch_40.pt", weights_only=False))
 
-    print("TODO: Complete the main training script")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+    # Train for many epochs
+    for epoch in range(num_epochs):
+        model.train()
+        train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
+
+        print(f"Epoch {epoch+1}/{num_epochs} - Training loss: {train_loss:.4f}")
+
+        torch.save(model.state_dict(), f"checkpoints/epoch_{epoch+1}.pt")
+
+    # Test: Loss and inference time
+    model.eval()
+    test_loss = test_performance(model, test_loader, device)
+    print(f"Testing loss: {test_loss:.4f}")
+    test_time = test_inference_time(model, test_loader, device, use_cache=True)
+    print(f"Inference time: {test_time:.4f}")
 
 
 if __name__ == "__main__":
