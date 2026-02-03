@@ -89,14 +89,22 @@ export default async function AuditPage({ params }: PageProps) {
   // Get chapters for sidebar
   const chapters = getAllChapters();
 
+  // Determine if we're in review mode based on environment
+  const isReviewMode = isStaging && process.env.STAGING_PR_NUMBER !== undefined;
+  const prNumber = process.env.STAGING_PR_NUMBER;
+
   return (
-    <AuditLayout chapters={chapters}>
+    <AuditLayout
+      chapters={chapters}
+      isReviewMode={isReviewMode}
+      prNumber={prNumber}
+    >
       <Link href="/textbook/audits" className="text-sm text-blue-600 hover:text-blue-800 mb-8 inline-block">
         ← Back to Audits
       </Link>
 
-      {/* Staging Banner */}
-      {isStaging && (
+      {/* Staging Banner (shown when in staging but not in review mode) */}
+      {isStaging && !isReviewMode && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 px-6 py-4 mb-8 rounded">
           <p className="font-bold text-lg">⚠️ DRAFT AUDIT - UNDER REVIEW</p>
           <p className="mt-2 text-sm">
