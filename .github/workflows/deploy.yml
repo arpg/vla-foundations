@@ -3,6 +3,18 @@ name: Deploy to Production
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      # Ignore changes that don't affect the site
+      - 'src/assignments/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'private/**'
+      - '**.md'
+      - '.github/**'
+      - 'data/**'
+      - 'pyproject.toml'
+      - 'pytest.ini'
+      - 'uv.lock'
 
 jobs:
   deploy:
