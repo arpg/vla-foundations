@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import matter from "gray-matter";
 import { AuditLayout } from "@/components/audit/AuditLayout";
 import { getAllChapters } from "@/lib/chapters";
+import { KatexStyles } from "@/components/KatexStyles";
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
@@ -99,6 +100,7 @@ export default async function AuditPage({ params }: PageProps) {
       isReviewMode={isReviewMode}
       prNumber={prNumber}
     >
+      <KatexStyles />
       <Link href="/textbook/audits" className="text-sm text-blue-600 hover:text-blue-800 mb-8 inline-block">
         ← Back to Audits
       </Link>
