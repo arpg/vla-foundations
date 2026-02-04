@@ -1,0 +1,8 @@
+# .continueignore
+**/datasets/**
+**/checkpoints/**
+**/node_modules/**
+*.pt
+*.pth
+*.png
+*.jpg
