@@ -1,9 +1,140 @@
+---
+title: "World Models"
+author: "Lorin Achey and Carson Kohlbrenner"
+paper: "GAIA-1, TesserAct, Genie, Cosmos"
+topic: "World Models"
+---
+
+# Technical Paper Audits: World Models
+
+## Table of Contents
+- World Models at a Glance
+- [GAIA-1: A Generative World Model for Autonomous Driving](#technical-paper-audit-gaia-1)
+- [TesserAct: Learning 4D Embodied World Models](#technical-paper-audit-tesseract)
+- [Cosmos: World Foundation Model Platform for Physical AI](#technical-paper-audit-cosmos)
+- [Genie: Generative Interactive Environments](#technical-paper-audit-genie)
+
+---
+# World Models at a Glance
+
+![World Models Overview](./figures-system-diagrams-images/robot_predictions.png)
+
+Figure 1: Proceding video frames are generated from a world model given the context of the robot's task. 
+
+### Robotics Problem Statement
+Classical simulators such as Isaac Sim \[1\] and Mujoco \[2\] capture the physical dynamics necessary for training embodied agents, however the hardcoded dynamics used in such simulators is not practical for large-scale data generation of nuanced physical phenemona and realistic rendering.
+World models (also refered to as World Foundation Models or WFMs) offer an alternative, data-driven approach to simulation and future state prediction that can capture more neuanced physical phenomena and render realistic video/image outputs.
+World models are trained to capture the underlying spatial and temporal dynamics in images and video to predict future states of the environment. 
+In this document, we will look at four prevalent world models: GAIA-1 \[3\], Genie \[4\], TesserAct \[5\], and Cosmos \[6\].
+
+### Model Highlights
+- **GAIA-1** (Wayve) \[3\]: A multimodal world model specifically tailored for **autonomous driving** scenarios.
+- **Genie** (Google Deepmind) \[4\]: Learning **interactive environments** and latent actions from unlabeled Internet video
+- **TesserAct** (UMass Amherst / et al.) \[5\]: A **4D embodied world model** that predicts geometry via RGB, depth, and normal maps.
+- **Cosmos** (NVIDIA) \[6\]: A unified platform for **Physical AI** supporting diffusion and autoregressive paradigms.
+
+## Architecture
+
+Each world model analyzed in this document fundamentally learns to predict the spatio-temporal dynamics of static frames. 
+Each model follows the encoder-decoder formulation where an encoder $\mathcal{E}$ ingests input frames $x$ from time $t=0:T$ and encodes them into latent tokens $z_{0:T}$, and a decoder $\mathcal{D}$ reconstructs the frames at time $t>T$. 
+
+$$\hat{x}_{T+1:} = \mathcal{D}(\mathcal{E}(x_{0:T}))$$
+
+### Features
+
+| Model | Input | Output |
+| :--- | :--- | :--- |
+| **Genie** | Unlabelled video frames; can be prompted with **text, synthetic images, photographs, or sketches**. | **Action-controllable virtual worlds** (video) generated on a frame-by-frame basis via a learned latent action space. |
+| **GAIA-1** | Multimodal inputs: **video, text, and actions** (specifically speed and curvature). | Realistic **driving scenario videos** that allow for fine-grained control over ego-vehicle behavior and scene features. |
+| **Cosmos** | Videos, text prompts, **camera poses, robotic instructions, and action vectors**. | **High-quality, 3D-consistent videos** with accurate physics for Physical AI applications. |
+| **TesserAct** | A single **input image and text instructions**. | **RGB-DN videos** (RGB, Depth, and Normal maps), 4D scene reconstructions (point clouds), and **7-DoF actions**. |
+
+### Scaling
+| Model | Max Parameter Count | Dataset Size | Training Hardware |
+| :--- | :--- | :--- | :--- |
+| **Cosmos** | **14 Billion** (Cosmos-Predict1-14B variant) | **~20 Million hours** of raw video ($10^8$ video clips) | 10,000 H100 GPUs (for 3 months) |
+| **Genie** | **11 Billion** | **30,000 hours** (6.8 Million video clips) | 256 TPUv5p |
+| **GAIA-1** | **6.5 Billion** (World Model variant) | **4,700 hours** of proprietary driving data (~420 Million images) | 64 A100 GPUs (World Model) |
+| **TesserAct** | *Not specified in sources* | **~285,000 videos** across synthetic and real domains | *Not specified in sources* |
+
+### Tokenization
+
+Tokenization is a critical component for world models as it compresses high-dimensional image data into a lower-dimensional latent space that the world model can efficiently reason over.
+The niave approach of sectioning images into patches and flattening them into vectors is often insufficient for capturing the complex spatial and temporal relationships in image data at a scale sufficiently efficient enough for practical use of a world model. 
+State of the art world models instead use a variety of **discrete** and **continuous** tokenization approaches as follows:
+
+| Model | Architecture Type | Quantization / Latent Method |
+| :--- | :--- | :--- |
+| **Genie** | **Discrete** | **VQ-VAE** with a spatiotemporal transformer used for both video tokenization and the Latent Action Model (LAM) \[4\], \[7\]. |
+| **GAIA-1** | **Discrete** | **VQ-VAE / VQ-GAN**; the encoder quantizes features using nearest-neighbor look-ups from a learnable embedding table \[3\], \[7\], \[8\]. |
+| **Cosmos (Discrete)** | **Discrete** | **Finite-Scalar-Quantization (FSQ)**; used to map latent space into discrete codes without requiring auxiliary commitment losses \[6\], \[9\]. |
+| **Cosmos (Continuous)** | **Continuous** | **Vanilla Autoencoder (AE)**; maps videos into a continuous latent space for use in diffusion-based WFMs \[6\]. |
+| **TesserAct** | **Continuous** | **3D Variational Autoencoder (VAE)**; leverages the pre-trained CogVideoX VAE to encode RGB, depth, and normal videos \[5\], \[10\]. |
+
+Continuous tokens excel at capturing fine-grained spatial details and smooth variations in image data, making them well-suited for tasks requiring high fidelity reconstruction. 
+Discrete tokens, on the other hand, provide a more compact representation that can facilitate efficient learning and generalization, particularly in scenarios with limited data.
+
+## Trade-Offs
+
+| Model | Excels at | Shortfalls | Why |
+| :--- | :--- | :--- | :--- |
+| **Genie** | **Unsupervised learning** of interactive environments from massive, action-free Internet video corpora. | Limited to **16 frames of memory** and an inference speed of approximately **1 FPS**. | Its **spatiotemporal transformer** architecture allows it to learn latent actions without labels, but compute intensity limits its context window and real-time viability. |
+| **GAIA-1** | **Multimodal understanding** and disentanglement of static and dynamic driving elements like pedestrians and road layouts. | Potential for **sampling errors** (loops or OOD artifacts) if autoregressive sampling strategies are not carefully tuned. | It uses a **unified representation** for video, text, and actions, but relies on a diffusion decoder to correct temporal inconsistencies in its latent predictions. |
+| **Cosmos** | Providing a **highly scalable platform** for Physical AI with state-of-the-art reconstruction quality. | Models still struggle with perfect **physics adherence** and object permanence in certain edge cases. | It offers both **diffusion and autoregressive paradigms**, but the heavy compression required for training on $10^8$ clips can introduce visual distortions. |
+| **TesserAct** | Capture of **fine-grained 3D geometry** and spatial relationships necessary for complex robotic manipulation. | High **computational cost** when generating sequences in three-dimensional space and time. | By predicting **RGB-DN maps**, it avoids the extreme expense of full 3D voxel dynamics while providing depth and surface normals for precise 6-DoF control. |
+
+
+## World Models for Robotics
+
+### **Advantages**
+
+World models act as the **digital twin of the world**, serving as a safe and efficient environment for simulating robot dynamics that can be used for:
+
+*   **Policy Evaluation and Initialization:** WFMs can evaluate the quality of a policy model in a cost-effective virtual environment, allowing developers to rule out incapable policies before using physical resources. They can also serve as a "pre-trained" initialization to address **data scarcity** in real-world robotics.
+*   **Safe Policy Training:** By pairing a WFM with a reward model, agents can gain proficiency through **reinforcement learning** in a simulated environment that faithfully adheres to physical laws.
+*   **Planning and Model-Predictive Control (MPC):** Robots can use world models to simulate multiple potential future states based on different action sequences, executing only the path that maximizes the predicted reward.
+*   **Synthetic Data Generation for Sim2Real:** WFMs can generate massive amounts of synthetic video data, including metadata like **depth or semantic maps**, to bridge the gap between simulation and real-world deployment.
+*   **Imitation from Observation:** Learned latent action spaces (as seen in Genie) allow agents to **imitate behaviors** from action-free videos found on the Internet, potentially providing unlimited training data for generalist agents.
+
+### **Limitations**
+
+WFMs have paved the way for practical robotics use-cases, but key limitations remain:
+
+*   **Data and observability limits**: embodied, contact-rich interactions are underrepresented in large-scale datasets, and video-only observations cannot capture hidden state (e.g., forces, friction), limiting physics-faithful rollouts \[11\].
+*   **Physical consistency failures**: long-horizon generations can violate object permanence and contact dynamics, making some models unreliable as safety-critical simulators \[6\].
+*   **Weak closed-loop evidence**: GAIA-1 is a driving-focused generator rather than a deployable controller and is not evaluated in closed-loop autonomy \[3\]. Cosmos emphasizes scalable generation but lacks demonstrated closed-loop robotics performance \[6\]. TesserAct reports downstream gains on manipulation benchmarks (e.g., RLBench) but remains compute-heavy and largely open-loop, leaving real-time/reactive control unresolved \[5\]. Genie learns interactive latent actions from web video but is not validated as a robotics world model for contact-rich control \[4\].
+
+## References
+
+\[1\] NVIDIA, "Isaac Sim," NVIDIA Omniverse. [Online]. Available: https://developer.nvidia.com/isaac/sim. Accessed: Feb. 3, 2026.
+
+\[2\] E. Todorov et al., "MuJoCo: A physics engine for model-based control," Proc. IEEE/RSJ Int. Conf. Intelligent Robots and Systems (IROS), 2012.
+
+\[3\] A. Hu et al., "GAIA-1: A Generative World Model for Autonomous Driving," arXiv, 2023.
+
+\[4\] J. Bruce et al., "Genie: Generative Interactive Environments," PMLR, 2024.
+
+\[5\] H. Zhen et al., "TesserAct: Learning 4D Embodied World Models," arXiv, 2025.
+
+\[6\] N. Agarwal et al., "Cosmos: World Foundation Model Platform for Physical AI," arXiv, 2025.
+
+\[7\] A. van den Oord et al., "Neural discrete representation learning," Advances in Neural Information Processing Systems (NeurIPS), 2017.
+
+\[8\] P. Esser et al., "Taming transformers for high-resolution image synthesis," Proc. IEEE/CVF Conf. Computer Vision and Pattern Recognition (CVPR), 2021.
+
+\[9\] F. Mentzer et al., "Finite Scalar Quantization: VQ-VAE Made Simple," Int. Conf. Learning Representations (ICLR), 2024.
+
+\[10\] Z. Yang et al., "CogVideoX: Text-to-Video Diffusion Models with an Expert Transformer," arXiv, 2024.
+
+\[11\] A. O'Neill et al., "Open X-Embodiment: Robotic Learning Datasets and RT-X Models," arXiv, 2023.
+
+---
+
 # Technical Paper Audit: GAIA-1
 
-**Title**: GAIA-1: A Generative World Model for Autonomous Driving  
-**Authors**: Lorin Achey  
-**Paper**: GAIA-1 (Arxiv 2023)  
-**Topic**: World Models  
+**Title**: GAIA-1: A Generative World Model for Autonomous Driving (Arxiv 2023) 
+**Authors**: Wayve
+**Audit Authors**: Lorin Achey   
 
 ---
 
@@ -337,10 +468,9 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 # Technical Paper Audit: TesserAct
 
-**Title**: TesserAct: Learning 4D Embodied World Models  
-**Authors**: Lorin Achey  
-**Paper**: TesserAct (Arxiv 2025)  
-**Topic**: World Models  
+**Title**: TesserAct: Learning 4D Embodied World Models (arxiv 2025) 
+**Authors**: Haoyu Zhen et al. 
+**Audit Authors**: Lorin Achey
 
 ---
 
@@ -675,3 +805,177 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 [77] Z. Zheng et al. "Open-Sora: Democratizing efficient video production for all." 2024.
 
 ---
+
+# Technical Paper Audit: Cosmos
+
+**Title**: Cosmos: World Foundation Model Platform for Physical AI (arXiv 2025)
+**Authors**: NVIDIA
+**Audit Author**: Carson Kohlbrenner 
+
+---
+
+## 1. Summary
+
+Cosmos is NVIDIA's proposed generalized solution for the lack of data available for physical systems that interact with the world.
+Cosmos is a generalized world foundation model that can be fine-tuned for specific use cases such as robotics, autonomous driving, and synthetic data generation by predicting future states of the systems.
+Cosmos uses a mixture of discrete and continuous latent representations to support transformer-based diffusion models and transformer-based autoregressive models, which each have trade-offs regarding the visual fidelity of predictions and symbolic reasoning.
+
+---
+
+## 2. Architectural Overview
+
+### 2.1 Platform Architecture
+
+Five distinct components make up the structure of Cosmos:
+
+| Component | Primary Functions and Parts |
+| :--- | :--- |
+| **Data Curation** | The video curation pipeline transforms raw video into high-quality training data through a five-step process: **splitting** videos into shots, **filtering** for rich dynamics, **annotating** via VLMs, performing **semantic deduplication**, and **sharding** clips for model consumption. |
+| **Tokenization** | This suite of **temporally causal tokenizers** uses an attention-based encoder-decoder architecture in **wavelet space** to compress raw pixels into either **continuous latent embeddings** for diffusion models or **discrete quantized tokens** for autoregressive models. |
+| **Pre-trained WFM** | These general-purpose simulators leverage scalable transformer architectures to perform **Video2World generation**, predicting future observations based on past sequences and perturbations using either **diffusion denoising** or **autoregressive next-token prediction**. |
+| **Post-training Adapters** | Pre-trained generalist models are fine-tuned on specialized datasets to create **specialized world models** capable of task-specific behaviors like **camera controllability**, **robotic instruction-following**, and **multi-view autonomous driving simulation**. |
+| **Guardrails and Safety** | The safety system provides a comprehensive defense through a **pre-Guard stage** that blocks harmful prompts using keyword lists and Aegis, and a **post-Guard stage** that filters unsafe visual outputs and applies face blurring. |
+
+### 2.2 Video Tokenization
+
+Similar to the other world models in this document, the spatio-temporal relationships of input frames is captured via tokens with spatial and temporal dimensions. 
+The Cosmos-Tokenizer1 was introduced in this paper to support both discrete and continuous causal latent representations embedded in a height ($H$), width ($W$), and channel ($C$) format.
+The input tokens are first transformed into wavelet space to downsample the dimensions, then passed into a 2D $k\times k\times 1$ convolution to capture spatial information, and finally passed into a causal $1\times 1\times 1 \times k$ convolution to capture temporal information.
+The convolution on wavelet-space tokens seperate Cosmos-Tokenizer1 from other standard architectures like VQ-VAE (CITE) by **removing redundancies** and **strictly maintaining a causal structure**.
+
+![Cosmos Tokenizer Architecture](./figures-system-diagrams-images/Cosmos-Tokenizer-Evaluation.png)
+
+The Cosmos-Tokenizer1 is trained using a two-stage training scheme, followed by a fine-tuning stage to capture the spatio-temporal information in the inputs.
+The following table summarizes the loss equations used during these stages:
+
+| Loss Name | Training Stage | Equation | Primary Purpose |
+| :--- | :--- | :--- | :--- |
+| **L1 Loss** | Stage 1 | $\mathcal{L}_1 = \|\hat{x}_{0:T} - x_{0:T}\|_1$ | Minimizes the **pixel-wise RGB difference** between the input and reconstructed video. |
+| **Perceptual Loss** | Stage 1 | $\mathcal{L}_{\text{Perceptual}} = \frac{1}{L} \sum_{l=1}^L \sum_{t} \alpha_l \|VGG_l(\hat{x}_t) - VGG_l(x_t)\|_1$ | Uses **VGG-19 network features** to ensure high-level semantic and visual information is preserved. |
+| **Optical Flow (OF) Loss** | Stage 2 | $\mathcal{L}_{\text{Flow}} = \frac{1}{T} \sum_{t=1}^T \|OF(\hat{x}_t, \hat{x}_{t-1}) - OF(x_t, x_{t-1})\|_1$ $+ \frac{1}{T} \sum_{t=0}^{T-1} \|OF(\hat{x}_t, \hat{x}_{t+1}) - OF(x_t, x_{t+1})\|_1$ | Handles the **temporal smoothness** of reconstructed videos across adjacent frames. |
+| **Gram-matrix (GM) Loss** | Stage 2 | $\mathcal{L}_{\text{Gram}} = \frac{1}{L} \sum_{l=1}^L \sum_{t} \alpha_l \|GM_l(\hat{x}_t) - GM_l(x_t)\|_1$ | Specifically designed to **enhance the sharpness** of the reconstructed images,. |
+| **Adversarial Loss** | Fine-tuning | *(Equation not explicitly provided in text)* | Applied during the fine-tuning stage to **enhance reconstruction details**, especially at high compression rates. |
+
+The only other causal tokenizer that was compared to Cosmos-Tokenizer1 was the CogVideoX-Tokenizer (CITE) that was used in TesserAct, and Cosmos-Tokenizer1 outperformed it by on the peak signal to noise (PSNR) reconstruction quality metric by ~3 points at comparible compression ratios when tested on the DAVIS dataset.
+NVIDIA also performed an ablation of their tokenizer at different compression rates which revealed that their tokenizer decreases in reocnstruction quality with higher compression rates (as expected), but notably maintained higher than state of the art performance with up to 8x higher compression.
+
+### 2.3 Pre-trained World Foundation Models
+
+#### Diffusion WFMs
+Diffusion-based WFMs utilize **continuous latent embeddings**. The architecture is a **transformer-based denoiser** (DiT) modified for controllable generation through 3D patchification.
+* **Conditioning Strategy**: Supports image and video conditioning by concatenating frames along the temporal dimension during denoising.
+* **Performance**: Yields the highest visual fidelity and 3D consistency in the Cosmos suite.
+
+#### Autoregressive WFMs
+AR models formulate world simulation as a **next-token prediction** task using **discrete quantized tokens**. 
+* **Inference Optimization**: Utilizes **Medusa heads** for parallel token prediction to reach **10 FPS** on 8x H100 GPUs.
+* **Visual Refinement**: Often paired with a diffusion-based decoder to mitigate artifacts from discrete compression.
+
+### 2.5 Architectural Trade-Offs
+
+| Feature | Diffusion WFMs | Autoregressive WFMs |
+| :--- | :--- | :--- |
+| **Visual Fidelity** | **High**: Photorealistic outputs. | **Moderate**: Prone to blur without a decoder. |
+| **Generation Speed** | **Slow**: Iterative denoising. | **Fast**: Real-time (10 FPS) via KV-caching. |
+| **Representations** | Continuous latents. | Discrete quantized tokens. |
+
+---
+
+## 3. Data & Scaling
+
+### 3.1 Data Curation Pipeline
+The pipeline processed **20 million hours of raw video** to yield **100 million high-quality clips**. 
+
+1. **Shot Detection**: Ensures no scene changes within samples.
+2. **Dynamic Filtering**: Removes static or low-quality content.
+3. **VLM Annotation**: Generates captions to provide text-grounding for Text2World tasks.
+
+### 3.2 Scale Claims
+* **Compute**: ~10,000 H100 GPUs for ~3 months.
+* **Parameters**: Multi-billion parameter variants (up to 14B).
+* **Missing Analysis**: The paper lacks explicit scaling laws for data diversity vs. downstream robotic success.
+
+### 3.3 What Scales and What Does Not
+* **Scales**: Visual consistency and scene complexity scale with parameter count.
+* **Does Not Scale**: Fundamental physics alignment (e.g., fluid dynamics) does not emerge purely from video-only scaling; models still "fall short" as reliable physics simulators.
+
+---
+
+## 4. Downstream Application
+
+### 4.1 Robotics
+Cosmos models are fine-tuned on video-action sequences (e.g., **Bridge dataset**). 
+Action-conditioned next-frame prediction outperforms diffusion baselines like IRASim, suggesting pre-trained generalist knowledge provides a high ceiling for manipulation tasks.
+
+### 4.2 Missing Closed-Loop Evidence
+A critical audit finding: there is **no empirical evidence for closed-loop performance**. 
+Sim-to-real transfer remains theoretical, as the authors have not yet verified the models within a live control loop.
+
+### 4.3 The Video-Only Assumption
+The platform assumes visual observations are sufficient. 
+However, models suffer from a lack of **object permanence** and inaccuracies in **contact-rich dynamics**, suggesting video alone cannot capture hidden states like force or friction.
+
+---
+
+## 5. Critical Synthesis & Sign-Off
+
+### 5.1 Load-Bearing Assumptions
+* **Assumption 1**: Visual fidelity is a sufficient proxy for physical fidelity in a downstream policy.
+* **Assumption 2**: Generalist models can be specialized for complex control signals with minimal data.
+
+### 5.2 Reproducibility Assessment
+- Code publicly available? **Yes**
+- Pre-trained models released? **Yes**  
+- Dataset accessible? **No** (proprietary)
+- Hyperparameters specified? **No**
+- Quantitative evaluation? **Yes**
+
+**Score: 3/5 - Somewhat reproducible.**
+
+### 5.3 Failure Modes
+* **Object Permanence**: Objects disappear or morph when occluded.
+* **Physics Violations**: Gravity and light interaction errors are common in long-horizon generations.
+
+### 5.4 Sign-Off Criteria
+**Decision:** NO (for safety-critical deployment) / YES (for synthetic data generation).
+The Cosmos paper reports that considerable errors in object permeance in contact rich environments persist. However, for augmenting training sets with photorealistic synthetic data, it is the current state-of-the-art.
+
+---
+
+## References
+
+(WIP)
+
+---
+
+# Technical Paper Audit: Genie
+
+**Title**: Genie: Generative Interactive Environments (arxiv 2024)
+**Authors**: Google DeepMind
+**Audit Author**: Carson Kohlbrenner 
+
+---
+
+## 1. Summary
+
+---
+
+## 2. Architectural Overview
+
+---
+
+## 3. Data & Scaling
+
+---
+
+## 4. Downstream Application
+
+---
+
+## 5. Critical Synthesis & Sign-Off
+
+---
+
+## References
+
+(WIP)
