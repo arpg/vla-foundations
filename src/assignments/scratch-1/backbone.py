@@ -17,6 +17,7 @@ from typing import Optional, Tuple
 from pathlib import Path
 import pickle
 from torch.utils.data import DataLoader, TensorDataset
+import matplotlib.pyplot as plt
 
 class RMSNorm(nn.Module):
     """
@@ -48,8 +49,10 @@ class RMSNorm(nn.Module):
         # Step 2: Normalize by dividing x by RMS
         # Step 3: Apply learnable scale parameter
 
-        # HINT: Use torch.mean, torch.rsqrt for efficiency
+        # 1/RMS = sqrt(mean(x^2) + eps)
         rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+        # a_bar_i = (a_i / RMS(a)) * g_i
         return x * rms * self.scale
 
 
@@ -397,21 +400,80 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
 
-    # TODO: Implement training loop
+    # PART 4: Training loop
     # For each batch:
-    #   1. Move data to device
-    #   2. Forward pass (get logits and loss)
-    #   3. Backward pass
-    #   4. Gradient clipping (max_norm=1.0)
-    #   5. Optimizer step
-    #   6. Zero gradients
-    #   7. Accumulate loss
+    for batch_idx, (states, actions) in enumerate(dataloader):
+        # 1. Move data to device
+        actions = actions.to(device)
 
-    # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
-    # Hint: Print progress every 100 batches
+        # Prepare inputs and targets for next-token prediction
+        # Input: timestamps 0 to T-1
+        # Target: timestamps 1 to T (to predict next token)
+        inputs = actions[:, :-1]
+        targets = actions[:, 1:]
 
-    raise NotImplementedError("TODO: Implement training loop")
+        # 2. Forward pass (get logits and loss)
+        logits, loss = model(inputs, targets=targets)
+        
+        # 3. Backward pass
+        loss.backward()
 
+        # 4. Gradient clipping (max_norm=1.0)
+        # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+        # 5. Optimizer step
+        optimizer.step()
+
+        # 6. Zero gradients
+        optimizer.zero_grad(set_to_none=True)
+
+        # 7. Accumulate loss
+        total_loss += loss.item()
+        num_batches += 1
+
+        # 8. Print progress every 100 batches
+        # Hint: Print progress every 100 batches
+        if (batch_idx + 1) % 100 == 0:
+            avg_loss = total_loss / num_batches
+            print(f"Epoch {epoch}, Batch {batch_idx + 1}, Avg Loss: {avg_loss:.4f}")
+    
+    # Return average loss for the epoch
+    return total_loss / num_batches
+
+# Evaluation Function
+def evaluate(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device,
+) -> float:
+    """
+    Evaluate the model on validation data
+
+    Args:
+        model: The transformer model
+        dataloader: Validation data loader
+        device: Device to evaluate on
+    Returns:
+        Average loss on validation set
+    """
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
+
+    with torch.no_grad():
+        for states, actions in dataloader:
+            actions = actions.to(device)
+
+            inputs = actions[:, :-1]
+            targets = actions[:, 1:]
+
+            logits, loss = model(inputs, targets=targets)
+
+            total_loss += loss.item()
+            num_batches += 1
+
+    return total_loss / num_batches
 
 def main():
     """
@@ -502,22 +564,56 @@ def main():
                 f"J6: {traj_point[1][6]: .2f}, X: {traj_point[1][7]: .2f}, "
                 f"Y: {traj_point[1][8]: .2f}, Z: {traj_point[1][9]: .2f}"
             )
-    # TODO: PART 2: Create model
-    # model = DecoderOnlyTransformer(...)
+        # Plot the End Effector Position over the trajectory as points in 3D space
+        states = trajectory_data['states'][train_indices[0]].numpy()
+        x = states[:, 7]
+        y = states[:, 8]
+        z = states[:, 9]
 
-    # TODO: PART 3: Create optimizer
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        # plot as points from in rainbow color map
+        ax.scatter(x, y, z, c=range(len(x)), cmap='rainbow', marker='o')
+        # ax.plot(x, y, z, label='End Effector Trajectory')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('End Effector Position Over Trajectory')
+        plt.show()
 
-    # TODO: PART 4: Training loop
-    # for epoch in range(num_epochs):
-    #     train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
-    #     print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
 
-    # TODO: PART 5: Save checkpoint
-    # torch.save(model.state_dict(), "checkpoints/best_model.pt")
+    # PART 2: Create model
+    model = DecoderOnlyTransformer(
+        vocab_size=vocab_size,
+        dim=dim,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        ff_hidden_dim=ff_hidden_dim,
+        max_seq_len=max_seq_len,
+        dropout=0.1,
+    )
+    model.to(device)
+    print(f"Model created with {sum(p.numel() for p in model.parameters() if p.requires_grad):,} trainable parameters.")
 
-    print("TODO: Complete the main training script")
+    # PART 3: Create optimizer
+    # Weight decay of 1e-2 for regularization on small models
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-2)
 
+    # PART 4: Training loop
+    for epoch in range(num_epochs):
+        # Train for one epoch
+        train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
+
+        # Evaluate on validation set
+        val_loss = evaluate(model, val_loader, device)
+        print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+
+        # PART 5: Save checkpoint every 1000 steps
+        checkpoint_dir = Path("checkpoints")
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = checkpoint_dir / f"model_epoch_{epoch+1}.pt"
+        torch.save(model.state_dict(), checkpoint_path)
+        print(f"Saved checkpoint to {checkpoint_path}")
 
 if __name__ == "__main__":
     main()
