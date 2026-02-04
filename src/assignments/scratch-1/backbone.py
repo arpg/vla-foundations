@@ -40,8 +40,7 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma) DONE
-        # Hint: Use nn.Parameter with torch.ones
+        # Initialize a learnable scale parameter of length dim with ones
         self.scale = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -51,16 +50,13 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm DONE
+        # Implementation of RMSNorm
         # Step 1: Compute RMS (root mean square) along the last dimension
         # Step 2: Normalize by dividing x by RMS
         # Step 3: Apply learnable scale parameter
         rms = torch.rsqrt(x.pow(2).mean(dim = -1, keepdim = True) + self.eps)
         xnorm = x* rms
         return xnorm * self.scale
-        # HINT: Use torch.mean, torch.rsqrt for efficiency
-        # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
 
 class RotaryPositionalEmbedding(nn.Module):
     """
@@ -123,16 +119,23 @@ class RotaryPositionalEmbedding(nn.Module):
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, dim, max_len=2048):
         super().__init__()
+        # Create a positional encoding matrix of shape (max_len, dim)
         pe = torch.zeros(max_len, dim)
         position = torch.arange(0, max_len).unsqueeze(1)
+
+        # Compute the frequency scaling factor for each even dimension 
+        # This controls how fast the sinusoids oscillate at different dimensions
         div_term = torch.exp(
             torch.arange(0, dim, 2) * (-math.log(10000.0) / dim)
         )
+
+        # Apply sine to even and cos to odd indices in the embedding dimension
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         self.register_buffer("pe", pe)
 
     def forward(self, x):
+        # Add positional embeddings to token embeddings
         return x + self.pe[:x.size(1)]
 
 class CausalSelfAttention(nn.Module):
@@ -181,12 +184,11 @@ class CausalSelfAttention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention DONE
+        # Implementation of Causal Self-Attention
 
         # Step 1: Project input to Q, K, V
         qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
         # Split into Q, K, V and reshape for multi-head attention
-        # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
         qkv = qkv.view((batch_size, seq_len, 3, self.num_heads, self.head_dim))
         qkv = qkv.permute(2, 0, 3, 1, 4)
 
@@ -208,15 +210,10 @@ class CausalSelfAttention(nn.Module):
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
-        # Hint: Use torch.matmul or @ operator
-        # Shape should be (batch, num_heads, seq_len, seq_len)
         scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
 
         # Step 4: Apply causal mask
         # The mask should prevent position i from attending to positions > i
-        # Hint: Create a lower-triangular matrix using torch.tril
-        # Set masked positions to -inf BEFORE softmax
-        # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
         # Check if cache is used, if not used, then create mask 
         if not use_cache and CAUSAL_MASKING:
             if mask is None:
@@ -524,17 +521,11 @@ def train_epoch(
         total_loss += loss.item()
         num_batches += 1
 
-        # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
-        # Hint: Print progress every 100 batches
         if (batch_idx + 1) % 100 == 0:
             avg = total_loss / num_batches if num_batches > 0 else float('nan')
             print(f"Epoch {epoch + 1} Batch {batch_idx + 1}: avg_loss = {avg:.6f}")
 
     return total_loss/num_batches if num_batches> 0 else 0.0
-
-
-    # raise NotImplementedError("TODO: Implement training loop") DONE
-
 
 def main():
     """
@@ -561,9 +552,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # TODO: Load dataset
-    # Use the generate_data.py script to create synthetic trajectories
-    # Load from data/trajectories.pkl
+    # Load dataset
     df = pd.read_pickle('data/trajectories.pkl')
     states = df['states']
     actions = df['actions']
@@ -581,7 +570,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    # TODO: Create model
+    # Create model
     model = DecoderOnlyTransformer(
         vocab_size,
         dim,
@@ -591,18 +580,18 @@ def main():
         max_seq_len
     )
 
-    # TODO: Create optimizer
+    # Create optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     tr_loss_list = []
 
-    # TODO: Training loop
+    # Training loop
     for epoch in range(num_epochs):
         train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
         print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
         tr_loss_list.append(train_loss)
 
-    # TODO: Save checkpoint
+    # Save checkpoint
     torch.save(model.state_dict(), "checkpoints/best_model.pt")
 
     # Loss curve plotting
