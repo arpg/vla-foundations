@@ -2,11 +2,7 @@
 title: "Technical Paper Audits: World Models"
 author: "Lorin Achey; Carson Kohlbrenner"
 topic: "World models / world foundation models for embodied AI"
-paper: |
-  GAIA-1: https://arxiv.org/abs/2309.17080
-  TesserAct: https://arxiv.org/abs/2504.20995
-  Cosmos: https://arxiv.org/abs/2501.03575
-  Genie: https://arxiv.org/abs/2402.15391
+paper: "Genie, Cosmos, TesserAct, and GAIA-1"
 ---
 
 # Technical Paper Audits: World Models
@@ -211,7 +207,8 @@ This approach builds on two parallel developments: sequence modeling formulation
 GAIA-1 synthesizes these paradigms, using autoregressive sequence modeling for world dynamics and diffusion models for high-fidelity rendering.
 Concurrent work includes DriveGAN [62], which uses GANs for controllable driving simulation, and DriveDreamer [87], which applies diffusion models conditioned on 3D scene layouts.
 
-**Comparative Positioning.** GAIA-1 distinguishes itself from related work through scale (9.4B parameters vs. ~100M-1B for competitors), generation quality (video diffusion vs. VAE/GAN), and multimodal conditioning (text + action).
+**Comparative Positioning.**
+GAIA-1 distinguishes itself from related work through scale (9.4B parameters vs. ~100M-1B for competitors), generation quality (video diffusion vs. VAE/GAN), and multimodal conditioning (text + action).
 However, it sacrifices real-time capability (unlike MILE, DriveGAN, Dreamer-v3) and closed-loop evaluation (unlike MILE, Dreamer-v3).
 MILE provides trajectory outputs evaluated on CARLA driving; GAIA-1 provides video outputs with qualitative evaluation only.
 
