@@ -1,8 +1,12 @@
 ---
-title: "World Models"
-author: "Lorin Achey and Carson Kohlbrenner"
-paper: "GAIA-1, TesserAct, Genie, Cosmos"
-topic: "World Models"
+title: "Technical Paper Audits: World Models"
+author: "Lorin Achey; Carson Kohlbrenner"
+topic: "World models / world foundation models for embodied AI"
+paper: |
+  GAIA-1: https://arxiv.org/abs/2309.17080
+  TesserAct: https://arxiv.org/abs/2504.20995
+  Cosmos: https://arxiv.org/abs/2501.03575
+  Genie: https://arxiv.org/abs/2402.15391
 ---
 
 # Technical Paper Audits: World Models
@@ -44,10 +48,14 @@ $$\hat{x}_{T+1:} = \mathcal{D}(\mathcal{E}(x_{0:T}))$$
 
 | Model | Input | Output |
 | :--- | :--- | :--- |
-| **Genie** | Unlabelled video frames; can be prompted with **text, synthetic images, photographs, or sketches**. | **Action-controllable virtual worlds** (video) generated on a frame-by-frame basis via a learned latent action space. |
+| **Genie** | Unlabelled video frames; promptable with text or images. | Action-controllable videos (frame-by-frame). |
 | **GAIA-1** | Multimodal inputs: **video, text, and actions** (specifically speed and curvature). | Realistic **driving scenario videos** that allow for fine-grained control over ego-vehicle behavior and scene features. |
 | **Cosmos** | Videos, text prompts, **camera poses, robotic instructions, and action vectors**. | **High-quality, 3D-consistent videos** with accurate physics for Physical AI applications. |
 | **TesserAct** | A single **input image and text instructions**. | **RGB-DN videos** (RGB, Depth, and Normal maps), 4D scene reconstructions (point clouds), and **7-DoF actions**. |
+
+Genie can be prompted with text, synthetic images, photographs, or sketches.
+It learns latent actions from unlabeled Internet video.
+It generates action-controllable virtual worlds as videos.
 
 ### Scaling
 | Model | Max Parameter Count | Dataset Size | Training Hardware |
@@ -682,7 +690,11 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 **Depth Estimation Quality on Real Data**: Real-world depth annotations come from RollingDepth [31] (affine-invariant, not metric). Converting to metric depth for control requires scale disambiguation, which may introduce errors. The paper doesn't report metric depth accuracy on real data.
 
-**Inference Latency**: Video diffusion models are slow. TesserAct requires 50 DDPM sampling steps for 49-frame generation. The paper reports novel view synthesis in "~1 min" vs Shape of Motion's [62] "~2 hours," but doesn't report end-to-end latency for closed-loop control. Real-time operation (10+ Hz) is likely infeasible.
+**Inference Latency**: Video diffusion models are slow.
+TesserAct requires 50 DDPM sampling steps for 49-frame generation.
+The paper reports novel view synthesis in "~1 min" vs Shape of Motion's [62] "~2 hours."
+It does not report end-to-end latency for closed-loop control.
+Real-time operation (10+ Hz) is likely infeasible.
 
 **Action Space Mismatch**: The inverse dynamics model predicts 7-DoF actions from point clouds, but this requires knowing keyframes a priori. The paper notes they "predict and record all future keyframes" then "query the inverse dynamic model"—this open-loop execution precludes reactive control.
 
@@ -692,7 +704,10 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 ### 5.1 Load-Bearing Assumptions
 
-**Assumption 1: RGB-DN is Sufficient for 4D Understanding.** The paper assumes that RGB, depth, and normal maps from a single viewpoint provide enough geometric information for manipulation. This fails for tasks requiring occluded geometry, multi-view reasoning, or volumetric understanding. The ~10% of tasks where TesserAct underperforms may reveal these limits.
+**Assumption 1: RGB-DN is Sufficient for 4D Understanding.**
+The paper assumes that RGB, depth, and normal maps from a single viewpoint provide enough geometric information for manipulation.
+This assumption may fail for occluded geometry and tasks that require multi-view reasoning.
+The ~10% of tasks where TesserAct underperforms may reveal these limits.
 
 **Assumption 2: Estimated Depth/Normal is Accurate Enough.** Real-world training uses RollingDepth and Marigold estimates, not ground truth.
 Systematic estimation errors will be learned by the model.
