@@ -168,7 +168,6 @@ class CausalSelfAttention(nn.Module):
         if not SINUSOIDAL:
             self.rope = RotaryPositionalEmbedding(self.head_dim)
 
-    # def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
     def forward(self,
             x: torch.Tensor,
             mask: Optional[torch.Tensor] = None,
@@ -238,14 +237,11 @@ class CausalSelfAttention(nn.Module):
 
         # Step 7: Reshape and project back
         # Concatenate heads and apply output projection
-        # Hint: Use .transpose() and .contiguous().view() to reshape
         out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.dim)
         out = self.out_proj(out)
         out = self.resid_dropout(out)
 
         return out, present_kv
-
-        # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass") DONE
 
 
 class FeedForward(nn.Module):
@@ -491,7 +487,7 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
 
-    # TODO: Implement training loop DONE
+    # Implementation of training loop
     # For each batch:
     for batch_idx, batch in enumerate(dataloader):
         states, actions = batch
