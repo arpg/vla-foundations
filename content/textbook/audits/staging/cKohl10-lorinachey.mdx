@@ -243,7 +243,10 @@ Genie learns interactive latent actions from web video but is not validated as a
 
 \[7\] A. van den Oord et al., "Neural discrete representation learning," Advances in Neural Information Processing Systems (NeurIPS), 2017.
 
-\[8\] P. Esser et al., "Taming transformers for high-resolution image synthesis," Proc. IEEE/CVF Conf. Computer Vision and Pattern Recognition (CVPR), 2021.
+\[8\] P. Esser et al.,
+"Taming transformers for high-resolution image synthesis,"
+Proc. IEEE/CVF Conf.
+Computer Vision and Pattern Recognition (CVPR), 2021.
 
 \[9\] F. Mentzer et al., "Finite Scalar Quantization: VQ-VAE Made Simple," Int. Conf. Learning Representations (ICLR), 2024.
 
@@ -320,10 +323,12 @@ However, as discussed above, these approaches typically operate in low-dimension
 **Video Generation and World Models.** The most recent evolution casts world modeling as a video generation problem.
 This approach builds on two parallel developments: sequence modeling formulations that treat control as token prediction (Decision Transformer [19], Trajectory Transformer [10]), and large-scale video generation systems that produce photorealistic content (Imagen Video [16], Make-A-Video [68]).
 GAIA-1 synthesizes these paradigms, using autoregressive sequence modeling for world dynamics and diffusion models for high-fidelity rendering.
-Concurrent work includes DriveGAN [62], which uses GANs for controllable driving simulation, and DriveDreamer [87], which applies diffusion models conditioned on 3D scene layouts.
+Concurrent work includes DriveGAN [62], which uses GANs for controllable driving simulation, and DriveDreamer [87],
+which applies diffusion models conditioned on 3D scene layouts.
 
 **Comparative Positioning.**
-GAIA-1 distinguishes itself from related work through scale (9.4B parameters vs. ~100M-1B for competitors), generation quality (video diffusion vs. VAE/GAN), and multimodal conditioning (text + action).
+GAIA-1 distinguishes itself from related work through scale (9.4B parameters vs. ~100M-1B for competitors),
+generation quality (video diffusion vs. VAE/GAN), and multimodal conditioning (text + action).
 However, it sacrifices real-time capability (unlike MILE, DriveGAN, Dreamer-v3) and closed-loop evaluation (unlike MILE, Dreamer-v3).
 MILE provides trajectory outputs evaluated on CARLA driving; GAIA-1 provides video outputs with qualitative evaluation only.
 
