@@ -363,7 +363,7 @@ The paper provides no quantitative metrics: no FID, FVD, LPIPS, collision rate, 
 
 ### 5.1 Load-Bearing Assumptions
 
-**Assumption 1: Discrete Tokenization Preserves Driving-Critical Information.** The 576 tokens with K=8192 vocabulary are claimed to sufficiently represent driving scenes, but DINO distillation biases toward semantic categories over geometric precision, and 16× downsampling destroys sub-16-pixel details. A pedestrian 50m away may occupy <16 pixels and be compressed away entirely.
+**Assumption 1: Discrete Tokenization Preserves Driving-Critical Information.** The 576 tokens with K=8192 vocabulary are claimed to sufficiently represent driving scenes, but DINO distillation biases toward semantic categories over geometric precision, and 16× downsampling destroys sub-16-pixel details. A pedestrian 50m away may occupy &lt;16 pixels and be compressed away entirely.
 
 **Assumption 2: Next-Token Prediction = World Understanding.** The paper claims emergent "understanding of geometry" and "scene dynamics," but provides no quantitative validation. Perceptual realism does not equal physical accuracy; the model may memorize dataset patterns rather than learn causal dynamics.
 
@@ -694,7 +694,9 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 **Assumption 1: RGB-DN is Sufficient for 4D Understanding.** The paper assumes that RGB, depth, and normal maps from a single viewpoint provide enough geometric information for manipulation. This fails for tasks requiring occluded geometry, multi-view reasoning, or volumetric understanding. The ~10% of tasks where TesserAct underperforms may reveal these limits.
 
-**Assumption 2: Estimated Depth/Normal is Accurate Enough.** Real-world training uses RollingDepth and Marigold estimates, not ground truth. Systematic estimation errors will be learned by the model. No analysis of how estimation quality affects downstream performance is provided.
+**Assumption 2: Estimated Depth/Normal is Accurate Enough.** Real-world training uses RollingDepth and Marigold estimates, not ground truth.
+Systematic estimation errors will be learned by the model.
+No analysis of how estimation quality affects downstream performance is provided.
 
 **Assumption 3: Cross-Embodiment Transfer Works.** Training on 4 robot types is claimed to enable generalization, but all evaluation is on seen embodiments (Franka Panda on RLBench). True cross-embodiment generalization to novel robots is unvalidated.
 
@@ -722,7 +724,9 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 ### 5.4 The Next 10,000 GPU-Hour Experiment
 
-**Proposed**: Multi-view RGB-DN generation. Train a model to predict RGB-DN from multiple viewpoints simultaneously, enabling full 3D reconstruction rather than single-surface capture. This directly addresses the paper's stated limitation and would enable reasoning about occluded regions.
+**Proposed**: Multi-view RGB-DN generation.
+Train a model to predict RGB-DN from multiple viewpoints simultaneously, enabling full 3D reconstruction rather than single-surface capture.
+This directly addresses the paper's stated limitation and would enable reasoning about occluded regions.
 
 **Alternative**: Real-time distillation. Distill TesserAct into a smaller model capable of 10+ Hz inference for closed-loop control, then evaluate reactive manipulation performance.
 
