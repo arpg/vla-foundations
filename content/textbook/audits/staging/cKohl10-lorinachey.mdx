@@ -42,12 +42,38 @@ $$\hat{x}_{T+1:} = \mathcal{D}(\mathcal{E}(x_{0:T}))$$
 
 ### Features
 
-| Model | Input | Output |
-| :--- | :--- | :--- |
-| **Genie** | Unlabelled video frames; promptable with text or images. | Action-controllable videos (frame-by-frame). |
-| **GAIA-1** | Multimodal inputs: **video, text, and actions** (specifically speed and curvature). | Realistic **driving scenario videos** that allow for fine-grained control over ego-vehicle behavior and scene features. |
-| **Cosmos** | Videos, text prompts, **camera poses, robotic instructions, and action vectors**. | **High-quality, 3D-consistent videos** with accurate physics for Physical AI applications. |
-| **TesserAct** | A single **input image and text instructions**. | **RGB-DN videos** (RGB, Depth, and Normal maps), 4D scene reconstructions (point clouds), and **7-DoF actions**. |
+<table>
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th>Input</th>
+      <th>Output</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Genie</strong></td>
+      <td>Unlabelled video frames;
+        promptable with text or images.</td>
+      <td>Action-controllable videos (frame-by-frame).</td>
+    </tr>
+    <tr>
+      <td><strong>GAIA-1</strong></td>
+      <td>Multimodal inputs: <strong>video, text, and actions</strong> (specifically speed and curvature).</td>
+      <td>Realistic <strong>driving scenario videos</strong> that allow for fine-grained control over ego-vehicle behavior and scene features.</td>
+    </tr>
+    <tr>
+      <td><strong>Cosmos</strong></td>
+      <td>Videos, text prompts, <strong>camera poses, robotic instructions, and action vectors</strong>.</td>
+      <td><strong>High-quality, 3D-consistent videos</strong> with accurate physics for Physical AI applications.</td>
+    </tr>
+    <tr>
+      <td><strong>TesserAct</strong></td>
+      <td>A single <strong>input image and text instructions</strong>.</td>
+      <td><strong>RGB-DN videos</strong> (RGB, Depth, and Normal maps), 4D scene reconstructions (point clouds), and <strong>7-DoF actions</strong>.</td>
+    </tr>
+  </tbody>
+</table>
 
 Genie can be prompted with text, synthetic images, photographs, or sketches.
 It learns latent actions from unlabeled Internet video.
