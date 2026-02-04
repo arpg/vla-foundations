@@ -16,6 +16,14 @@ import math
 from typing import Optional, Tuple
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+import os
+
+# When SINUSOIDAL is False, RoPE embeddings are used and when SINUSOIDAL = True, absolute sinusoidal embeddings are passed to the model.
+SINUSOIDAL = False
+# Flag to turn ON/OFF the causal masking. when CAUSAL_MASKING = True causal masking is applied.
+CAUSAL_MASKING = True
 
 class RMSNorm(nn.Module):
     """
@@ -112,6 +120,20 @@ class RotaryPositionalEmbedding(nn.Module):
 
         return q_rot, k_rot
 
+class SinusoidalPositionalEmbedding(nn.Module):
+    def __init__(self, dim, max_len=2048):
+        super().__init__()
+        pe = torch.zeros(max_len, dim)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, dim, 2) * (-math.log(10000.0) / dim)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        return x + self.pe[:x.size(1)]
 
 class CausalSelfAttention(nn.Module):
     """
@@ -140,9 +162,16 @@ class CausalSelfAttention(nn.Module):
         self.resid_dropout = nn.Dropout(dropout)
 
         # Rotary embeddings
-        self.rope = RotaryPositionalEmbedding(self.head_dim)
+        if not SINUSOIDAL:
+            self.rope = RotaryPositionalEmbedding(self.head_dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    # def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self,
+            x: torch.Tensor,
+            mask: Optional[torch.Tensor] = None,
+            past_kv: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+            use_cache: bool = False,
+        ):
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
@@ -160,10 +189,22 @@ class CausalSelfAttention(nn.Module):
         # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
         qkv = qkv.view((batch_size, seq_len, 3, self.num_heads, self.head_dim))
         qkv = qkv.permute(2, 0, 3, 1, 4)
+
         Q, K, V = qkv[0], qkv[1], qkv[2]
 
-        # Step 2: Apply RoPE to Q and K
-        Q, K = self.rope(Q, K)
+        # # Step 2: Apply RoPE to Q and K
+        # Apply RoPE only to current tokens
+        if not SINUSOIDAL:
+            Q, K = self.rope(Q, K)
+
+        # KV caching
+        if past_kv is not None:
+            past_K, past_V = past_kv
+            K = torch.cat([past_K, K], dim=2)
+            V = torch.cat([past_V, V], dim=2)
+
+        present_kv = (K, V) if use_cache else None
+
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
@@ -176,17 +217,23 @@ class CausalSelfAttention(nn.Module):
         # Hint: Create a lower-triangular matrix using torch.tril
         # Set masked positions to -inf BEFORE softmax
         # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
-        if mask is None:
-            mask = torch.tril(torch.ones(seq_len, seq_len, device = x.device, dtype = torch.bool))
-
-        if mask.dim() == 2:
-            mask = mask.unsqueeze(0).unsqueeze(0)
+        # Check if cache is used, if not used, then create mask 
+        if not use_cache and CAUSAL_MASKING:
+            if mask is None:
+                mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+            if mask.dim() == 2:
+                mask = mask.unsqueeze(0).unsqueeze(0)
+            scores = scores.masked_fill(mask == 0, -1e9)
         
-        scores = scores.masked_fill(mask == 0, -1e9)
 
         # Step 5: Apply softmax and dropout
         attn_weights = F.softmax(scores, dim=-1)
         attn_weights = self.attn_dropout(attn_weights)
+
+        try:
+            self.last_attn = attn_weights.detach().cpu()
+        except Exception:
+            self.last_attn = None
 
         # Step 6: Apply attention to values
         # out = attn_weights @ V
@@ -199,7 +246,8 @@ class CausalSelfAttention(nn.Module):
         out = self.out_proj(out)
         out = self.resid_dropout(out)
 
-        return out
+        return out, present_kv
+
         # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass") DONE
 
 
@@ -247,7 +295,7 @@ class TransformerBlock(nn.Module):
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x, mask=None, past_kv=None, use_cache=False):
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
@@ -255,11 +303,16 @@ class TransformerBlock(nn.Module):
         Returns:
             Output tensor (batch, seq_len, dim)
         """
+        attn_out, present_kv = self.attention(
+            self.norm1(x),
+            mask=mask,
+            past_kv=past_kv,
+            use_cache=use_cache,
+        )
         # Pre-norm architecture (norm before attention/FF)
-        x = x + self.attention(self.norm1(x), mask)
+        x = x + attn_out
         x = x + self.feed_forward(self.norm2(x))
-        return x
-
+        return x, present_kv
 
 class DecoderOnlyTransformer(nn.Module):
     """
@@ -298,6 +351,9 @@ class DecoderOnlyTransformer(nn.Module):
 
         # Initialize weights
         self.apply(self._init_weights)
+        if SINUSOIDAL:
+            self.pos_embedding = SinusoidalPositionalEmbedding(dim, max_seq_len)
+
 
     def _init_weights(self, module):
         """Initialize weights following standard Transformer initialization"""
@@ -325,13 +381,18 @@ class DecoderOnlyTransformer(nn.Module):
 
         # Embed tokens
         x = self.token_embedding(input_ids)  # (batch, seq_len, dim)
+        if SINUSOIDAL:
+            x = self.pos_embedding(x)
 
         # Create causal mask (lower triangular)
-        mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        if CAUSAL_MASKING:
+            mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        else:
+            mask = None
 
         # Apply transformer blocks
         for block in self.blocks:
-            x = block(x, mask)
+            x, _ = block(x, mask)
 
         # Final norm and projection
         x = self.norm_final(x)
@@ -358,7 +419,7 @@ class DecoderOnlyTransformer(nn.Module):
         top_k: Optional[int] = None,
     ) -> torch.Tensor:
         """
-        Autoregressive generation
+        Autoregressive generation with KV caching
 
         Args:
             input_ids: Starting tokens (batch, seq_len)
@@ -368,20 +429,38 @@ class DecoderOnlyTransformer(nn.Module):
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
-        for _ in range(max_new_tokens):
-            # Crop context if too long
-            input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+        batch_size = input_ids.size(0)
 
-            # Forward pass
-            logits, _ = self.forward(input_context)
-            logits = logits[:, -1, :] / temperature  # Get last token logits
+        # One KV cache per transformer layer
+        past_kvs = [None] * len(self.blocks)
+
+        for _ in range(max_new_tokens):
+            # Only embed the *new* token
+            x = self.token_embedding(input_ids[:, -1:])  # (batch, 1, dim)
+
+            new_past_kvs = []
+
+            # Pass through transformer blocks with KV caching
+            for i, block in enumerate(self.blocks):
+                x, present_kv = block(
+                    x,
+                    past_kv=past_kvs[i],
+                    use_cache=True,
+                )
+                new_past_kvs.append(present_kv)
+
+            past_kvs = new_past_kvs
+
+            # Final norm + LM head
+            x = self.norm_final(x)
+            logits = self.lm_head(x[:, -1, :]) / temperature  # (batch, vocab)
 
             # Optional top-k sampling
             if top_k is not None:
                 values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < values[:, [-1]]] = -float('Inf')
+                logits[logits < values[:, [-1]]] = -float("inf")
 
-            # Sample from distribution
+            # Sample next token
             probs = F.softmax(logits, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1)
 
@@ -389,6 +468,7 @@ class DecoderOnlyTransformer(nn.Module):
             input_ids = torch.cat([input_ids, next_token], dim=1)
 
         return input_ids
+
 
 
 def train_epoch(
@@ -472,7 +552,10 @@ def main():
     max_seq_len = 50  # Maximum sequence length
     batch_size = 32
     learning_rate = 1e-4
-    num_epochs = 10
+    num_epochs = 20
+
+    project_root = Path(__file__).resolve().parents[3]
+    outputs_dir = project_root / "content" / "course" / "submissions" / "scratch-1" / "images"
 
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -511,16 +594,66 @@ def main():
     # TODO: Create optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+    tr_loss_list = []
+
     # TODO: Training loop
     for epoch in range(num_epochs):
         train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
         print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+        tr_loss_list.append(train_loss)
 
     # TODO: Save checkpoint
     torch.save(model.state_dict(), "checkpoints/best_model.pt")
 
-    # print("TODO: Complete the main training script")  DONE
+    # Loss curve plotting
+    epochs = list(range(1, len(tr_loss_list) + 1))
+    plt.figure()
+    plt.plot(epochs, tr_loss_list, label="train")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training and Validation Loss")
+    plt.legend()
+    loss_path = str(outputs_dir / "loss_curve_sinusoidal.png")
+    plt.savefig(loss_path, dpi=150)
+    print(f"Saved loss curve to {loss_path}")
+    plt.close()
 
+    # Attention visualization
+    try:
+        model.eval()
+        sample_batch = next(iter(val_loader))
+        _, sample_actions = sample_batch
+        sample_actions = sample_actions.to(device)
+        input_ids = sample_actions[:, :-1].long()
+        with torch.no_grad():
+            _logits, _ = model(input_ids)
 
+        # pick layer and head to visualize
+        layer_idx = 0
+        head_idx = 0
+        attn_tensor = None
+        if 0 <= layer_idx < len(model.blocks):
+            attn_module = model.blocks[layer_idx].attention
+            attn_tensor = getattr(attn_module, "last_attn", None)
+
+        if attn_tensor is None:
+            print("No attention stored for visualization.")
+        else:
+            # attn_tensor shape: (batch, num_heads, seq_len, seq_len)
+            attn_img = attn_tensor[0, head_idx].numpy()  # visualize first sample, chosen head
+            plt.figure(figsize=(6,6))
+            plt.imshow(attn_img, aspect='auto', cmap='viridis')
+            plt.colorbar()
+            plt.xlabel("Key position")
+            plt.ylabel("Query position")
+            plt.title(f"Attention heatmap")
+            attn_path = str(outputs_dir / "attention_maps_sinusoidal.png")
+            plt.tight_layout()
+            plt.savefig(attn_path, dpi=150)
+            plt.close()
+            print(f"Saved attention heatmap to {attn_path}")
+    except Exception as e:
+        print(f"Could not create attention visualization: {e}")
+    
 if __name__ == "__main__":
     main()
