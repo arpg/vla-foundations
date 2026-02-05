@@ -10,13 +10,9 @@ date: "2026-02-05"
 
 ![Training Loss](./images/causal_mask_on/training_loss.png)
 
-The model was trained for **10 epochs** on a dataset of **9,000 samples** using a batch size of **32**, resulting in a total of
+The model was trained for **10 epochs** on a dataset of **9,000 samples** using a batch size of **32**, resulting in a total of **ceil(9000 / 32) × 10 = 2820** training iterations.
 
-\[
-\lceil 9000 / 32 \rceil \times 10 = 2820
-\]
-
-training iterations. Training converged smoothly over these iterations.
+Training converged smoothly over these iterations.
 
 The training loss decreased from an initial value of **5.57** to a final value of **1.96**. The relatively high initial loss reflects the difficulty of the task at random initialization and exceeds the expected entropy of random guessing for a **256-token** vocabulary. Most of the loss reduction occurs during the first epoch, followed by more gradual improvement as the model learns longer-range temporal dependencies.
 
@@ -46,9 +42,27 @@ Several consistent patterns emerge:
 
 ![Training Loss](./images/causal_mask_off/training_loss.png)
 
-When I removed the causal mask, the following happened:
+When I removed the causal mask and retrained, the following happened:
 
-[Your analysis here]
+The results were dramatic:
+
+| Setting | Final Loss |
+|------|-----------|
+| Causal mask enabled | **1.96** |
+| Causal mask removed | **0.04** |
+
+The unmasked model reaches near-zero loss within 800-1000 iterations (4-5 epochs), despite using the same architecture and data.
+
+### What’s Going On?
+
+The attention matrices from the four transformer layer, across all **8 attention heads** are attached below.
+
+#### Attention Visualization (when Causal Mask ON)
+
+![Attention Maps (Layer 0)](./images/attention_mask_off/attention_layer0.png)
+![Attention Maps (Layer 1)](./images/attention_mask_ff/attention_layer1.png)
+![Attention Maps (Layer 2)](./images/attention_mask_off/attention_layer2.png)
+![Attention Maps (Layer 3)](./images/attention_mask_off/attention_layer3.png)
 
 ### Why the Model "Cheats"
 
