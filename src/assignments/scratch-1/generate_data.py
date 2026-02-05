@@ -12,6 +12,20 @@ Dataset format:
   'trajectories': torch.Tensor,  # (N, T, 10) float32   [7 joints + 3 ee_pos]
   'tokenized': torch.LongTensor  # (N, T) long         action tokens in [0..255]
 }
+- 10,000 trajectories
+- 50 timesteps per trajectory
+- 7-DOF joint angles + 3D end-effector position (10 dimensions total)
+- Actions encode direction + magnitude toward target (256 bins)
+
+Action Encoding (structured and learnable):
+- Direction: 8 octants (±X, ±Y, ±Z combinations) → 3 bits
+- Magnitude: Distance to target in 32 bins → 5 bits
+- Total: 8 * 32 = 256 discrete actions
+
+This encoding makes actions LEARNABLE from state because:
+- Model sees current position and target
+- Can compute error vector
+- Can predict corresponding action
 
 Usage:
   python generate_data.py --num_trajectories 10000 --seq_length 50 --output data/trajectories.pkl

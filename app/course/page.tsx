@@ -64,9 +64,14 @@ export default function CoursePage() {
                 <p className="text-gray-600 mb-4">
                   Critical analysis of VLA research papers (1 required).
                 </p>
-                <Link href="/course/assignments/paper-audit" className="text-blue-600 hover:text-blue-800 font-medium">
-                  View Assignment →
-                </Link>
+                <div className="flex gap-4">
+                  <Link href="/course/assignments/paper-audit" className="text-blue-600 hover:text-blue-800 font-medium">
+                    View Assignment →
+                  </Link>
+                  <Link href="/textbook/audits" className="text-green-600 hover:text-green-800 font-medium">
+                    View Student Audits →
+                  </Link>
+                </div>
               </div>
 
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">

@@ -1,0 +1,22 @@
+{
+  "prNumber": 23,
+  "auditSlug": "multimodality_audit",
+  "comments": [
+    {
+      "id": "demo-comment-1",
+      "sectionId": "introduction",
+      "text": "Great start! The overview of multimodal evolution is clear. Consider adding more detail about why visual instruction tuning was a breakthrough compared to previous methods.",
+      "author": "instructor",
+      "timestamp": "2026-01-21T20:00:00.000Z",
+      "resolved": false
+    },
+    {
+      "id": "demo-comment-2",
+      "sectionId": "architecture",
+      "text": "Excellent mathematical formalization. The rank bound theorem is well explained. Consider adding a diagram showing the information flow through the projection layer.",
+      "author": "instructor",
+      "timestamp": "2026-01-21T20:05:00.000Z",
+      "resolved": false
+    }
+  ]
+}

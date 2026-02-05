@@ -3,18 +3,152 @@ on:
   pull_request:
     branches: [ staging, main ]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for diff
+
       - uses: pnpm/action-setup@v2
         with:
           version: 8
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
+
       - run: pnpm install
-      - name: Build Check
+
+      - name: Standards Linter
+        id: linter
+        run: python3 scripts/audit_linter.py
+        continue-on-error: true
+
+      - name: Comment on Linter Failure
+        if: steps.linter.outcome == 'failure'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            ## ❌ Engineering Standards Check Failed
+
+            Your audit does not meet the required "Senior Staff" engineering standards. Please address the following issues before requesting instructor review:
+
+            ### Common Issues:
+
+            **1. Required Frontmatter Fields**
+            - Every audit MDX file must include these fields:
+              - `title`: Paper title
+              - `author`: Paper author(s)
+              - `topic`: Research topic/category
+              - `paper`: Link to paper or citation
+            - All fields must have non-empty values (no placeholders like "TBD" or "TODO")
+
+            **2. Semantic Line Breaks**
+            - Each sentence should be on its own line
+            - This makes PR commenting and reviewing much easier
+            - Example:
+              ```diff
+              - This is a very long sentence with multiple ideas. It continues on the same line. This makes PR review difficult.
+              + This is a sentence on its own line.
+              + Each idea gets its own line.
+              + This makes PR review much easier.
+              ```
+
+            **3. Clean Git History**
+            - No "Merge branch 'main'" commits allowed
+            - Use `git rebase main` instead of `git merge main`
+            - Keep your commit history linear and clean
+
+            ### How to Fix:
+
+            **For semantic line breaks:**
+            1. Edit your MDX file to put each sentence on a new line
+            2. Commit and push the changes
+
+            **For git history:**
+            1. Run: `git rebase main` (or `git rebase staging`)
+            2. Resolve any conflicts if needed
+            3. Run: `git push --force-with-lease`
+
+            ---
+            *The linter will run automatically on your next push. Once all checks pass, your preview will deploy.*
+
+      - name: Fail Build if Linter Failed
+        if: steps.linter.outcome == 'failure'
+        run: exit 1
+
+      - name: Build with PR Preview
+        env:
+          STAGING_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm build
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: out
+          target-folder: staging/pulls/${{ github.event.pull_request.number }}
+          clean: false
+
+      - name: Detect Content Type
+        id: detect
+        run: |
+          # Get files changed in this PR
+          git fetch origin ${{ github.base_ref }}
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          if echo "$FILES" | grep -q "content/textbook/audits/staging/"; then
+            echo "type=audit" >> $GITHUB_OUTPUT
+            # Extract the audit filename
+            AUDIT_FILE=$(echo "$FILES" | grep "content/textbook/audits/staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            echo "slug=textbook/audits/staging/${AUDIT_FILE}" >> $GITHUB_OUTPUT
+          elif echo "$FILES" | grep -q "content/textbook/audits/.*\.mdx"; then
+            echo "type=audit" >> $GITHUB_OUTPUT
+            # Extract the audit filename (production location)
+            AUDIT_FILE=$(echo "$FILES" | grep "content/textbook/audits/.*\.mdx" | grep -v "staging/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            echo "slug=textbook/audits/${AUDIT_FILE}" >> $GITHUB_OUTPUT
+          elif echo "$FILES" | grep -q "content/contributors/"; then
+            echo "type=contributor" >> $GITHUB_OUTPUT
+            # Extract the contributor filename
+            CONTRIB_FILE=$(echo "$FILES" | grep "content/contributors/" | head -1 | xargs basename | sed 's/\.mdx$//')
+            echo "slug=contributors/${CONTRIB_FILE}" >> $GITHUB_OUTPUT
+          else
+            echo "type=other" >> $GITHUB_OUTPUT
+            echo "slug=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment PR with Preview Link
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            🚀 **Preview Deployed**
+
+            Your preview is ready for review!
+
+            🔗 **Preview URL:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/staging/pulls/${{ github.event.pull_request.number }}/${{ steps.detect.outputs.slug }}/
+
+            ${{ steps.detect.outputs.type == 'audit' && '### Review Checklist
+            - [ ] LaTeX equations render correctly
+            - [ ] All sections are complete per the template
+            - [ ] References are formatted properly
+            - [ ] Figures/diagrams display correctly' || '' }}
+
+            ${{ steps.detect.outputs.type == 'contributor' && '### Review Checklist
+            - [ ] Profile information is complete
+            - [ ] Image displays correctly
+            - [ ] Links are working' || '' }}
+
+            ### Next Steps
+            1. Review your rendered content using the preview link above
+            2. Tag @crheckman when ready for instructor review
+            3. Push updates to auto-refresh the preview
+
+            ---
+            *This preview will be removed when the PR is closed.*

@@ -44,6 +44,7 @@ next-env.d.ts
 /public_html/
 /logs/
 /database/
+!database/comments/
 
 # python
 /venv/
@@ -53,3 +54,13 @@ __pycache__/
 
 # project-specific
 /arxiv-digest/
+
+# Private solution infrastructure (NEVER commit to public branches)
+*.backup.py
+
+# Claude Code skill outputs (generated reports)
+.claude/releases/*.md
+.claude/sync-reports/*.md
+!.claude/releases/.gitkeep
+!.claude/sync-reports/.gitkeep
+!tests/internal/reports/.gitkeep

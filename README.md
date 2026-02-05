@@ -1,350 +1,87 @@
-# VLA Foundations
+# VLA Foundations: Course Repository
 
-Vision-Language-Action Foundations: A living textbook and course repository.
+Vision-Language-Action Foundations for Robotics - CSCI 7000, Spring 2026
 
 **Live Site**: https://www.vlm-robotics.dev
-**GitHub**: https://github.com/arpg/vla-foundations
 
-## Project Overview
+This repository contains the framework for CSCI 7000: VLA Foundations for Robotics.
 
-This repository serves as the source of truth for:
-
-1. **The Living Textbook**: An 8-chapter technical reference on VLAs for Robotics
-2. **CSCI 7000 Course Portal**: Course logistics, assignments, and student contributions
-
-**Tech Stack**: Next.js 16, TypeScript, Tailwind CSS, MDX, Contentlayer
-
-## Repository Structure
-
-This repository is organized into three main categories: **Web Content** (rendered as pages), **Source Code** (executable assignments), and **Build Infrastructure** (deployment and tooling).
-
-```
-vla-foundations/
-├── app/                           # Next.js App Router (web framework)
-│   ├── page.tsx                   # Landing page
-│   ├── textbook/[slug]/           # Dynamic chapter pages
-│   ├── course/                    # Course overview page
-│   │   └── assignments/[slug]/    # Dynamic assignment pages
-│   ├── contributors/[slug]/       # Dynamic contributor profile pages
-│   └── reference/                 # Reference implementations page
-│
-├── content/                       # All MDX content (rendered as web pages)
-│   ├── textbook/                  # 8-chapter VLA textbook (MDX files)
-│   │   ├── foundations/           # Chapter 0: Core concepts
-│   │   ├── architectures/         # Chapter 1: Model designs
-│   │   ├── data/                  # Chapter 2: Dataset construction
-│   │   ├── training/              # Chapter 3: Optimization methods
-│   │   ├── evaluation/            # Chapter 4: Metrics and benchmarks
-│   │   ├── deployment/            # Chapter 5: Production systems
-│   │   ├── applications/          # Chapter 6: Real-world use cases
-│   │   └── future/                # Chapter 7: Open problems
-│   │
-│   ├── course/                    # Course materials (MDX files)
-│   │   ├── Syllabus.mdx           # Course syllabus
-│   │   ├── assignments/           # Assignment specifications (instructor-written)
-│   │   │   ├── scratch-0.mdx      # Environment setup assignment
-│   │   │   ├── scratch-1.mdx      # Transformer backbone assignment
-│   │   │   ├── paper-audit.mdx    # Paper analysis assignment
-│   │   │   └── capstone.mdx       # Final project specification
-│   │   └── submissions/           # Student submission reports (student-written)
-│   │       └── scratch-1/         # Example: student reports for Scratch-1
-│   │           └── [student].mdx  # Individual student writeups
-│   │
-│   └── contributors/              # Contributor profiles (student-written)
-│       └── [github-handle].mdx    # One profile per contributor
-│
-├── src/                           # Executable source code (NOT rendered as web pages)
-│   └── assignments/               # Assignment code templates and solutions
-│       └── scratch-1/             # Example: Transformer implementation
-│           ├── README.md          # Minimal README (points to assignment page)
-│           ├── backbone.py        # Implementation template with TODOs
-│           ├── generate_data.py   # Dataset generator script
-│           └── data/              # Generated training data
-│
-├── components/                    # React UI components
-│   └── textbook/                  # Textbook-specific components
-│       ├── Sidebar.tsx            # Navigation sidebar
-│       └── TextbookLayout.tsx     # Layout wrapper
-│
-├── lib/                           # Utility libraries
-│   └── chapters.ts                # Chapter metadata and utilities
-│
-├── scripts/                       # Deployment and automation
-│   └── deploy.sh                  # Production deployment script
-│
-├── .github/                       # GitHub configuration
-│   └── workflows/
-│       └── vla-audit.yml          # CI/CD: PR validation, build checks
-│
-├── next.config.ts                 # Next.js configuration
-├── tailwind.config.ts             # Tailwind CSS configuration
-├── package.json                   # Node.js dependencies
-└── README.md                      # This file
-```
-
-### Directory Purpose Guidelines
-
-**`content/`** - Source of truth for all web content
-- Written in MDX (Markdown + JSX)
-- Rendered as web pages on vlm-robotics.dev
-- Instructor writes: textbook chapters, assignment specs, syllabus
-- Students write: contributor profiles, submission reports
-
-**`src/`** - Executable code (Python, etc.)
-- Assignment implementation templates
-- Utility scripts and data generators
-- NOT rendered as web pages
-- READMEs are minimal and point to assignment pages (single source of truth)
-
-**`app/`** - Next.js routing and page components
-- Defines URL structure and page layouts
-- Connects routes to content in `content/`
-- Modified when adding new page types or routes
-
-### Important: README Policy for `src/assignments/`
-
-**All READMEs in `src/assignments/` are intentionally minimal.** They contain only:
-1. Link to the canonical assignment page on vlm-robotics.dev
-2. Quick start commands
-3. File list
-
-**Full assignment details (requirements, debugging tips, resources, submission checklists) are maintained exclusively in `content/course/assignments/*.mdx`.** This ensures a single source of truth and prevents documentation drift.
-
-## The 8-Chapter Textbook
-
-0. **Foundations** - Core concepts and problem formulation
-1. **Architectures** - Model designs and network topologies
-2. **Data** - Dataset construction and curation strategies
-3. **Training** - Optimization and fine-tuning methods
-4. **Evaluation** - Metrics and benchmarking protocols
-5. **Deployment** - Production systems and scaling
-6. **Applications** - Real-world use cases and case studies
-7. **Future Directions** - Open problems and research frontiers
-
-## Development Workflow
-
-### Initial Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/arpg/vla-foundations.git
-cd vla-foundations
-
-# Install dependencies
-pnpm install
-
-# Run development server
-pnpm dev
-```
-
-Navigate to `http://localhost:3000` to see the site.
-
-### Adding Content
-
-#### New Textbook Section
-
-```bash
-# Create a new MDX file in the appropriate chapter
-touch content/textbook/[chapter-name]/new-section.mdx
-```
-
-```mdx
----
-title: "Section Title"
-chapter: 1
-subsection: 5
 ---
 
-# Your Content Here
+## Workflow for Students
 
-Include LaTeX: $f(x) = x^2$
+### Setup
+Follow the Scratch-0 assignment to configure your environment.
 
-\`\`\`python
-# Include code examples
-def example():
-    pass
-\`\`\`
-```
+### Branching
+All work must be done on a branch named `[assignment]-[username]`.
 
-#### New Assignment
+**Example**: `scratch-1-heckman`
 
 ```bash
-touch content/course/assignments/assignment-name.mdx
+git checkout -b scratch-1-johndoe
 ```
 
-### Building and Deploying
+### Implementation
+- Code stubs are in `src/assignments/`
+- Documentation and reports belong in `content/course/submissions/`
 
-#### Local Build
+### Submission
+Open a Pull Request to the `staging` branch. **Do not target `main`**.
 
-```bash
-# Build the static site
-pnpm build
+1. Go to https://github.com/arpg/vla-foundations
+2. Click "Pull requests" → "New pull request"
+3. **Base branch**: `staging` (NOT `main`)
+4. **Compare branch**: your branch name
+5. Title: `Assignment X: Your Name`
+6. Add a description of your work
 
-# Preview the production build
-pnpm start
-```
-
-#### Deploy to Production
-
-```bash
-# Automated deployment to vlm-robotics.dev
-./scripts/deploy.sh
-```
-
-This will:
-1. Build the Next.js site locally
-2. Sync to the remote server via rsync
-3. Deploy to `https://www.vlm-robotics.dev`
-
-**Requirements**: SSH access with the automation key (`~/.ssh/id_ed25519_automation`)
-
-## Course Workflow
-
-### For Students
-
-**IMPORTANT**: All students must follow this workflow for assignment submissions.
-
-1. **Create your own branch**:
-   ```bash
-   git checkout -b assignment-name-yourname
-   ```
-   Example: `git checkout -b scratch-1-johndoe`
-
-2. **Make your changes**:
-   - Add your code to `src/assignments/`
-   - Create your submission report in `content/course/submissions/`
-   - Update your contributor profile if needed
-
-3. **Commit your work**:
-   ```bash
-   git add .
-   git commit -m "Complete Assignment X: Your Name"
-   git push origin assignment-name-yourname
-   ```
-
-4. **Open a Pull Request**:
-   - Go to https://github.com/arpg/vla-foundations
-   - Click "Pull requests" → "New pull request"
-   - **Base branch**: `staging` (NOT `main`)
-   - **Compare branch**: your branch name
-   - Title: `Assignment X: Your Name`
-   - Add a description of your work
-
-5. **Wait for CI checks** to pass (GitHub Actions will validate your submission)
-
-6. **Wait for instructor review**:
-   - **ONLY the instructor can merge pull requests**
-   - The instructor will review your code and report
-   - You may be asked to make changes
-   - Once approved, the instructor will merge to `staging`, then to `main`
+### Review Process
+1. Wait for CI checks to pass (GitHub Actions will validate your submission)
+2. Wait for instructor review
+3. Address any requested changes
+4. **ONLY the instructor can merge pull requests**
+5. Once approved, the instructor will merge to `staging`, then to `main`
 
 **You do NOT have permission to merge your own PRs. All merges are done by the instructor.**
 
-### For the Instructor
+---
 
-1. **Review student PRs** on the `staging` branch
-2. **Provide feedback** and request changes if needed
-3. **Merge to `staging`** when approved
-4. **Periodically merge `staging` to `main`**
-5. **Deploy to production** using `./scripts/deploy.sh`
+## Engineering Standards
 
-## CI/CD Automation
+### Semantic Line Breaks
+Use semantic line breaks (one sentence per line) in all MDX files.
 
-### GitHub Actions Workflow
-
-The `vla-audit.yml` workflow runs on all PRs to `staging` and `main`:
-
-- ✅ Contentlayer build validation
-- ✅ MDX syntax checking
-- ✅ LaTeX rendering verification
-- ✅ Full site build
-
-**Location**: `.github/workflows/vla-audit.yml`
-
-### Branch Protection
-
-- `main`: Requires passing CI checks and instructor approval
-- `staging`: Student PR target, requires passing CI
-
-## Branching Strategy
-
-- **`main`**: Production branch (deployed to live site)
-- **`staging`**: Student PR target (integration testing)
-- **Feature branches**: `feature/assignment-name`, `paper-audit-N-yourname`
-
-## Technologies
-
-### Core
-- **Next.js 16**: Static site generation
-- **TypeScript**: Type safety
-- **Tailwind CSS**: Styling
-- **MDX**: Markdown with JSX
-
-### Content Processing
-- **Contentlayer**: Content validation
-- **gray-matter**: Frontmatter parsing
-- **remark-math** + **rehype-katex**: LaTeX rendering
-- **remark-gfm**: GitHub-flavored Markdown
-
-### Deployment
-- **Apache**: Web server on DigitalOcean
-- **rsync**: File synchronization
-- **SSH**: Secure remote access
-
-## Development Tools
-
-### Local Commands
-
-```bash
-# Development
-pnpm dev              # Start dev server (hot reload)
-pnpm build            # Build production site
-pnpm build-content    # Validate content only
-pnpm lint             # Run ESLint
-
-# Deployment
-./scripts/deploy.sh   # Deploy to production
+**Bad:**
+```markdown
+This is a very long sentence with multiple ideas. It continues on the same line. This makes PR review difficult.
 ```
 
-### Remote Server Access
-
-```bash
-# SSH into production server
-ssh -i ~/.ssh/id_ed25519_automation crh@ristoffer.ch
-
-# Navigate to project
-cd /var/www/vlm-robotics.dev
-
-# Manual deployment (if needed)
-npm run build
-cp -r out/* public_html/
+**Good:**
+```markdown
+This is a sentence on its own line.
+Each idea gets its own line.
+This makes PR review much easier.
 ```
 
-## Contributing
+### Linear Git History
+Maintain a linear git history.
+Use `git rebase staging` instead of `git merge staging`.
 
-### Content Guidelines
+**Example:**
+```bash
+# Update your branch with latest staging changes
+git fetch origin
+git rebase origin/staging
 
-- **Technical accuracy**: Ensure all claims are well-supported
-- **Clear writing**: Avoid jargon unless necessary
-- **LaTeX formatting**: Use `$inline$` and `$$display$$` syntax
-- **Code examples**: Include runnable code snippets
-- **References**: Cite papers using numbered references
+# If conflicts occur, resolve them and continue
+git rebase --continue
 
-### Code Guidelines
+# Force push your rebased branch
+git push --force-with-lease
+```
 
-- **TypeScript**: Use types for all functions
-- **ESLint**: Follow the configured linting rules
-- **Components**: Keep components small and focused
-- **Naming**: Use descriptive variable and function names
-
-### Pull Request Process
-
-1. Create a descriptive branch name
-2. Write clear commit messages
-3. Ensure all CI checks pass
-4. Request review from instructor
-5. Address feedback and update PR
-6. Merge when approved
+---
 
 ## Resources
 
@@ -360,29 +97,7 @@ cp -r out/* public_html/
 - [Open-X Embodiment](https://robotics-transformer-x.github.io/)
 - [DROID Dataset](https://droid-dataset.github.io/)
 
-## Instructor TODO List
-
-**Course Content Completion Tasks**:
-
-- [ ] **Scratch-0 Assignment**: Create full assignment specification in `content/course/assignments/scratch-0.mdx`
-- [ ] **Scratch-1 Assignment**: Create full assignment specification in `content/course/assignments/scratch-1.mdx`
-- [ ] **Paper Audit Assignment**: Create full assignment specification in `content/course/assignments/paper-audit.mdx`
-- [ ] **Capstone Assignment**: Create full assignment specification in `content/course/assignments/capstone.mdx`
-- [ ] **Update /course page**: Link assignments once content is ready (remove "Coming soon" placeholders)
-- [ ] **Syllabus**: Upload current syllabus to Canvas and verify link works
-- [ ] **Textbook Chapters**: Begin writing content for 8 chapters
-- [ ] **Example Paper Audit**: Create sample audit for students to reference
-- [ ] **Setup Branch Protection**: Configure GitHub branch protection rules (students require PRs, instructor can bypass)
-
-**Deployment**:
-- [ ] Test assignment submission workflow end-to-end
-- [ ] Verify CI/CD pipeline catches common errors
-- [ ] Create assignment grading rubric
-
-**Notes**:
-- Syllabus is currently linked to Canvas: https://canvas.colorado.edu/courses/134529/files/82424359/download?download_frd=1
-- Students must submit 1 paper audit (not 4)
-- Capstone tracks: Research or Engineering (no survey track)
+---
 
 ## Contact
 
@@ -390,6 +105,8 @@ cp -r out/* public_html/
 - **Email**: christoffer.heckman@colorado.edu
 - **Course**: CSCI 7000, Spring 2026
 - **GitHub**: https://github.com/arpg/vla-foundations
+
+---
 
 ## License
 
