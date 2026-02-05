@@ -19,6 +19,12 @@ import pickle
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 
+# Debug Info Flag
+# Shows some steps along the way of understanding the data and printing additional information 
+# during solution development.
+
+debug_info = True
+
 class RMSNorm(nn.Module):
     """
     Root Mean Square Layer Normalization
@@ -145,6 +151,7 @@ class CausalSelfAttention(nn.Module):
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        global debug_info
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
@@ -154,39 +161,89 @@ class CausalSelfAttention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention
+        # PART Implement Causal Self-Attention
 
         # Step 1: Project input to Q, K, V
-        # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
+        qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
+
         # Split into Q, K, V and reshape for multi-head attention
         # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
+        qkv = qkv.view(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+
+        # Print shapes for debugging
+        if debug_info:
+            print(f"qkv shape: {qkv.shape}")  # (batch, seq_len, 3, num_heads, head_dim)
+
+        # Break out Q, K, V
+        q, k, v = qkv[:, :, 0], qkv[:, :, 1], qkv[:, :, 2]  # Each is (batch, seq_len, num_heads, head_dim)
+
+        # Query: What is position 'i' looking for?
+        q = q.transpose(1, 2)  # (batch, num_heads, seq_len, head_dim)
+
+        # Key: What does position 'j' advertise?
+        k = k.transpose(1, 2)  # (batch, num_heads, seq_len, head_dim)
+
+        # Value: "What does position 'j' contribute if selected?"
+        v = v.transpose(1, 2)  # (batch, num_heads, seq_len, head_dim)
 
         # Step 2: Apply RoPE to Q and K
-        # q, k = self.rope(q, k)
+        q, k = self.rope(q, k)
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
         # Hint: Use torch.matmul or @ operator
         # Shape should be (batch, num_heads, seq_len, seq_len)
+        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # (batch, num_heads, seq_len, seq_len)
 
         # Step 4: Apply causal mask
         # The mask should prevent position i from attending to positions > i
         # Hint: Create a lower-triangular matrix using torch.tril
+        # Looks like something higher up will pass in the mask, so use that, otherwise redefine
+        if mask is None:
+            print("Had to create mask inside CausalSelfAttention because none was passed in.")
+            mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        
+        if debug_info:
+            print(f"Mask shape: {mask.shape}")  # (seq_len, seq_len)
+            # Print 5x5 top-left corner of the mask
+            print("Mask (top-left 5x5):")
+            print(mask[:5, :5])
+            debug_info = False  # So we don't spam the output
+
         # Set masked positions to -inf BEFORE softmax
         # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
+        # Use mask to fill future information from current information
+        scores = scores.masked_fill(mask == 0, float('-inf'))
 
         # Step 5: Apply softmax and dropout
-        # attn_weights = F.softmax(scores, dim=-1)
-        # attn_weights = self.attn_dropout(attn_weights)
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.attn_dropout(attn_weights)
+        # attn_weights_dropout = self.attn_dropout(attn_weights)
+        
+        # This was for verifying dropout behavior
+        # This memory was stored on cuda so I couldn't afford to keep both. Reverted back to single version.
+        # if debug_info:
+        #     # Compare non dropout and dropout attention weights
+        #     print("Attention Weights (top-left 5x5) without dropout:")
+        #     print(attn_weights[0, 0, :5, :5])
+        #     print("Attention Weights (top-left 5x5) with dropout:")
+        #     print(attn_weights_dropout[0, 0, :5, :5])
+        #     attn_weights = attn_weights_dropout
+        #     del attn_weights_dropout
 
         # Step 6: Apply attention to values
-        # out = attn_weights @ V
+        out = torch.matmul(attn_weights, v)  # (batch, num_heads, seq_len, head_dim)
 
         # Step 7: Reshape and project back
         # Concatenate heads and apply output projection
         # Hint: Use .transpose() and .contiguous().view() to reshape
+        out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.dim)  # (batch, seq_len, dim)
+        out = self.out_proj(out)
 
-        raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
+        # Step 8: Apply residual dropout
+        out = self.resid_dropout(out)
+
+        return out
 
 
 class FeedForward(nn.Module):
@@ -327,9 +384,10 @@ class DecoderOnlyTransformer(nn.Module):
         loss = None
         if targets is not None:
             # Flatten for cross-entropy
+            # Bug: need contigous memory here for view to work
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                logits.contiguous().view(-1, self.vocab_size),
+                targets.contiguous().view(-1),
                 ignore_index=-1,  # Ignore padding tokens
             )
 
@@ -476,6 +534,7 @@ def evaluate(
     return total_loss / num_batches
 
 def main():
+    global debug_info
     """
     Main training script
 
@@ -492,8 +551,6 @@ def main():
     batch_size = 32
     learning_rate = 1e-4
     num_epochs = 10
-
-    debug_info = True
 
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -600,6 +657,12 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-2)
 
     # PART 4: Training loop
+    best_model = None
+    best_val_loss = float('inf')
+
+    # Additional requirements for submission:
+    loss_curve_values = []
+    number_of_iterations = []
     for epoch in range(num_epochs):
         # Train for one epoch
         train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
@@ -607,13 +670,39 @@ def main():
         # Evaluate on validation set
         val_loss = evaluate(model, val_loader, device)
         print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-
+        loss_curve_values.append((train_loss, val_loss))
+        number_of_iterations.append((epoch + 1)*(len(train_loader)))
         # PART 5: Save checkpoint every 1000 steps
-        checkpoint_dir = Path("checkpoints")
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        checkpoint_path = checkpoint_dir / f"model_epoch_{epoch+1}.pt"
-        torch.save(model.state_dict(), checkpoint_path)
-        print(f"Saved checkpoint to {checkpoint_path}")
+        # Small deviation: Only save the best model
+        # This accounts for when a training produces a worse model than before
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model = model.state_dict()
+            print(f"New best model found at epoch {epoch+1} with val loss {best_val_loss:.4f}")
+            checkpoint_dir = Path("checkpoints")
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            checkpoint_path = checkpoint_dir / f"best_model.pt"
+            torch.save(best_model, checkpoint_path)
+            print(f"Saved checkpoint to {checkpoint_path}")
+
+
+    # Plot loss curves versus number of iterations
+    train_losses, val_losses = zip(*loss_curve_values)
+    plt.plot(number_of_iterations, train_losses, label='Train Loss')
+    plt.plot(number_of_iterations, val_losses, label='Validation Loss')
+    plt.xlabel('Number of Iterations')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss Curves')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # Save the plots
+    plots_dir = Path("images")
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    plot_path = plots_dir / "default_loss_curves.png"
+    plt.savefig(plot_path)
+    print(f"Saved loss curves plot to {plot_path}")
 
 if __name__ == "__main__":
     main()
