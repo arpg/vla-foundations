@@ -1,0 +1,157 @@
+
+# Action and Policy Benchmarks Group
+
+**Team members**: Soorej, Thanush, Lorin, Mel
+*Scribed by Mel; presented by Lorin. No generative tools used to produce this document.*
+
+
+## Lorin: Risk tolerance in VLAs
+### Goal
+Change action outputs based on a risk profile. This profile should be encoded in an RL policy so the stack is risk aware. 
+
+**Example**: Get X close to a person without entering a "risk zone." 
+
+
+### Details
+
+**Data**: The data mix will be an "OpenVLA or Octo type dataset" - possibly OpenX. To be feasible, a small collection of simulation data on robot arm will be required for fine tuning.
+
+**Training**: Scaling is a major concern. It will be necessary to train an RL policy and then evaluate, which will take a while. It's not necessarily compute heavy to collect a small dataset and demonstrate one safe / one unsafe trajectory that are meaningfully different. 
+
+### Discussion
+
+**Thanush**: What are the dataset details? 
+
+Ideally it'd be mix of internet scale and fine tuning data [but the exact mix was not specified]. If there are computational issues, it'd be necessary to try to scale down to minimum.
+
+The project will start with very simple task: designating a risk zone and a safe zone. The simpler the better!
+
+**Soorej**: How will the safe / unsafe zone be validated?
+
+Yes, there's a binary classification there - but it'd also be good to quantify how far inside safe zone the robot is.
+
+**Mel**: What's the base VLA?
+
+It's unclear - likely whatever combination of dataset and model has a simulation implementation for IsaacSim.
+
+**Mel**: Safe RL's a pretty big field. Is there a particular work or niche of works you're drawing from? 
+
+There are statistical analysis tools on the RL training stage that would be applicable: some risk-aware PPO implementations, some value iteration / Bellman adjustments, and so on. The approach will tend towards a simple, tabular value iteration based approach to start. 
+
+**Thanush**: Would it be better to have a sensor on the arm to help produce data / safety measurements? [unclear]
+
+When actually deploying policies in real life, if the on-arm camera goes out, we still need to determine what’s safe. 
+
+## Thanush
+
+### Goal
+Based on TinyVLA, build a VLA stack with a new policy head to learn multiple expert action modules for different manipulation behaviors. Train this on a fragment of MetaWorld tasks, and evaluate it on related but unseen tasks, to determine generalization capabilities.
+
+### Details
+
+**Data**: Sourced from MetaWorld.
+
+**Training**: On a consumer GPU, hopefully.
+
+### Discussion
+
+**Soorej**: How do we define the "difficulty" of these tasks?
+
+There should be some cases where we train on an easy task and test on a difficult one, and vice versa. There are ten tasks total in MetaWorld - if, for instance, the model is trained to open a drawer and can’t open a fridge, we consider that a generalization failure.
+
+**Lorin**: What’s the compute setup?
+
+TinyVLA has a number of parameters on the order of millions. Hopefully this can all be done on a consumer GPU.
+
+**Lorin**: Are you going to plan on picking a base architecture from a model that’s already available, like TinyVLA?
+
+The goal is to build something from scratch and train on dataset [unclear relationship to TinyVLA]. Then we can do a comparison on adding a new policy head, which needs to be custom built.
+
+## Soorej
+
+### Goal
+The goal here is more theoretical: compare a diffusion policy approach, an autoregressive approach, and an RL approach to visuomotor control with _identical_ datasets and architectures: essentially, an ablation.
+
+### Details
+
+**Data**: Unknown - likely OpenX.
+
+**Training**: 5-10 GPU hours for each model.
+
+### Discussion
+
+**Lorin**: For RL, what method are you using?
+
+PPO or GRPO.
+
+**Lorin**: Have you considered flow matching?
+
+No! But it's an interesting possibility.
+
+**Mel**: What are your compute requirements? And your considerations for backbone?
+
+We might need 5-10 GPU hours for each model. The backbone for diffusion will be based on the vision model control paper [unclear reference]. For autoregression, it'll just be a transformer.
+
+**Thanush**: Will the training setups be different across methods?
+
+Ideally no. 
+
+**Mel**: What dataset will that be?
+
+OpenX maybe?
+
+**Lorin**: What are your major concerns? What is plan B?
+
+It might be necessary to move to smaller models or a smaller dataset, and just compare RL and autoregression. 
+
+**Lorin**: How will you compare the outputs in the action space?
+
+Unsure. 
+
+
+## Mel
+*(Scribed by Soorej)*
+
+### Goal
+
+This is an adversarial multiagent project. In these situations, the correct, least exploitable action outputs are stochastic - but the stochasticity output by a VLA might not at all match the correct action weights. We want to generate analytically correct trajectories using existing methods to align them.
+
+### Details
+
+**Root model**: MiniVLA (or TinyVLA, VQ-BeT, ...)
+
+**Data**: Partially world model data [source unclear], partially single-agent robot data, partially generated adversarial data
+
+
+### Discussion
+**Lorin**: Is there training required here?
+
+Yes - we have to fine-tune with the adversarial data. I think the opponent in all cases will be a fixed policy (not a second VLA), to simplify things. The goal will be to avoid being exploited by that fixed opponent.
+
+**Lorin**: What's the expected computational cost?
+
+There are GPUs available for this project, but the capabilities are unclear. Apparently OpenVLA can be finetuned in a dozen hours, and the robot data we're using will be substantially narrower, which might reduce need of training hours. 
+
+**Lorin**: What's the simplest possible demonstration?
+
+A common example is tag, but it'd be great to get more complicated or general than that. Tag is good because it's very easy to analytically generate mixed probabilistic trajectories.
+
+**Lorin**: This project seems more complicated than the others. Is there a simpler backup plan?
+
+Yes, one option was to just focus on action tokenization: there's a potential modification of VQ-BeT where the latent action space focuses on encoding the most strategically relevant actions first. 
+
+## Overarching commentary
+
+### What are the load bearing walls?
+* **Data**. For Lorin and Mel, data generation will be required and difficult to get right. Dhanish and Soorej will be using exclusively existing data - which is maybe easier but still a problem.
+* **Simulation**. None of these projects will be deployed on hardware.
+* **Information decay**. We’re all simplifying more complex problems - so we will naturally lose action information. Likely we will all be moving to rather discrete action spaces, which is a particularly weird problem for Soorej, where action spaces will be different across methods.
+ 
+### What engineering question remains unresolved?
+We struggled to identify a single unifying engineering question as our projects were quite diverse. **Generating data in simulation** will be a central problem for the action-centric projects (Lorin and Mel). **Defining standards for apples-to-apples comparisons** is the focus for the benchmarking-centric projects (Thanush and Soorej).
+
+While sharing a data pipeline would be ideal - as was commented during the presentation - all four projects have quite difference data needs. Possibly the more general parts of the pipelines (for general internet-scale and robot data) could be reused.
+
+
+### Which initial dissolve was most robust?
+We did not name a single most-robust *"initial dissolve."* 
