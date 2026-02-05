@@ -6,21 +6,36 @@ date: "2026-02-05"
 
 # Scratch-1: The Transformer Backbone
 
-## Loss Curve
+## Loss Curve (when Causal Mask ON)
 
 ![Training Loss](./images/causal_mask_on/training_loss.png)
 
-I ran the training for 10 epochs. Since there are 9000 samples and my batch size is 32, I ran a total of ceil(9000/32)*10 = 2820 iterations.
-Training converged smoothly that many iterations over the dataset.
-The loss decreased from an initial value of 5.57 to a final value of 1.96.
-The high starting loss reflects the difficulty of the task at initialization, exceeding the expected entropy of random guessing for a 256-token vocabulary. Most of the improvement occurs during the first epoch, followed by slower refinement as the model learns longer-range dependencies in the sequence.
-Overall, the loss curve suggests stable optimization and successful learning of temporal structure in the data.
+The model was trained for **10 epochs** on a dataset of **9,000 samples** using a batch size of **32**, resulting in a total of
 
-## Attention Visualization
+\[
+\lceil 9000 / 32 \rceil \times 10 = 2820
+\]
 
-![Attention Maps](./images/attention_maps.png)
+training iterations. Training converged smoothly over these iterations.
 
-The attention patterns show...
+The training loss decreased from an initial value of **5.57** to a final value of **1.96**. The relatively high initial loss reflects the difficulty of the task at random initialization and exceeds the expected entropy of random guessing for a **256-token** vocabulary. Most of the loss reduction occurs during the first epoch, followed by more gradual improvement as the model learns longer-range temporal dependencies.
+
+Overall, the loss curve indicates stable optimization and successful learning of the temporal structure present in the trajectory data.
+
+## Attention Visualization (when Causal Mask ON)
+
+![Attention Maps (Layer 0)](./images/attention_mask_on/attention_layer0.png)
+![Attention Maps (Layer 1)](./images/attention_mask_on/attention_layer1.png)
+![Attention Maps (Layer 2)](./images/attention_mask_on/attention_layer2.png)
+![Attention Maps (Layer 3)](./images/attention_mask_on/attention_layer3.png)
+
+To better understand how the model processes context, I visualized the attention matrices from the four transformer layer, across all **8 attention heads**.
+
+Several consistent patterns emerge:
+
+- **Strict causality**: All attention weights above the main diagonal are zero, confirming that the causal mask is correctly enforced.
+The dashed diagonal line highlights the causal boundary; attention is only permitted to earlier positions in the sequence.
+
 
 ## The Audit: Removing the Causal Mask
 
