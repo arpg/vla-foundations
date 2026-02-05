@@ -8,9 +8,13 @@ date: "2026-02-05"
 
 ## Loss Curve
 
-![Training Loss](../src/assignments/scratch-1/images/causal_mask_on/training_loss.png)
+![Training Loss](./images/causal_mask_on/training_loss.png)
 
-The model converged after X iterations with final loss of Y.
+I ran the training for 10 epochs. Since there are 9000 samples and my batch size is 32, I ran a total of ceil(9000/32)*10 = 2820 iterations.
+Training converged smoothly that many iterations over the dataset.
+The loss decreased from an initial value of 5.57 to a final value of 1.96.
+The high starting loss reflects the difficulty of the task at initialization, exceeding the expected entropy of random guessing for a 256-token vocabulary. Most of the improvement occurs during the first epoch, followed by slower refinement as the model learns longer-range dependencies in the sequence.
+Overall, the loss curve suggests stable optimization and successful learning of temporal structure in the data.
 
 ## Attention Visualization
 
