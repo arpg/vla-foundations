@@ -34,10 +34,17 @@ To better understand how the model processes context, I visualized the attention
 Several consistent patterns emerge:
 
 - **Strict causality**: All attention weights above the main diagonal are zero, confirming that the causal mask is correctly enforced.
-The dashed diagonal line highlights the causal boundary; attention is only permitted to earlier positions in the sequence.
+
+- **Specialized heads**:
+  - Most heads concentrate attention near the diagonal, emphasizing temporally local context and recent tokens.
+  - Some attention heads consistently focus on the first token, which may act as a fixed reference point that helps the model keep track of the overall sequence.
 
 
 ## The Audit: Removing the Causal Mask
+
+## Loss Curve (when Causal Mask OFF)
+
+![Training Loss](./images/causal_mask_off/training_loss.png)
 
 When I removed the causal mask, the following happened:
 
