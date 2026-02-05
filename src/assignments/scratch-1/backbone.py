@@ -150,14 +150,17 @@ class CausalSelfAttention(nn.Module):
         # Rotary embeddings
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None,
+                return_attention: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         global debug_info
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask (seq_len, seq_len)
+            return_attention: If True, return attention weights for visualization
         Returns:
             Output tensor (batch, seq_len, dim)
+            Attention weights (batch, num_heads, seq_len, seq_len) if return_attention=True, else None
         """
         batch_size, seq_len, _ = x.shape
 
@@ -217,6 +220,8 @@ class CausalSelfAttention(nn.Module):
 
         # Step 5: Apply softmax and dropout
         attn_weights = F.softmax(scores, dim=-1)
+        # Save attention weights before dropout for visualization
+        attn_weights_for_viz = attn_weights if return_attention else None
         attn_weights = self.attn_dropout(attn_weights)
         # attn_weights_dropout = self.attn_dropout(attn_weights)
         
@@ -243,7 +248,7 @@ class CausalSelfAttention(nn.Module):
         # Step 8: Apply residual dropout
         out = self.resid_dropout(out)
 
-        return out
+        return out, attn_weights_for_viz
 
 
 class FeedForward(nn.Module):
@@ -290,18 +295,22 @@ class TransformerBlock(nn.Module):
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None,
+                return_attention: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask
+            return_attention: If True, return attention weights
         Returns:
             Output tensor (batch, seq_len, dim)
+            Attention weights if return_attention=True, else None
         """
         # Pre-norm architecture (norm before attention/FF)
-        x = x + self.attention(self.norm1(x), mask)
+        attn_out, attn_weights = self.attention(self.norm1(x), mask, return_attention)
+        x = x + attn_out
         x = x + self.feed_forward(self.norm2(x))
-        return x
+        return x, attn_weights
 
 
 class DecoderOnlyTransformer(nn.Module):
@@ -355,14 +364,17 @@ class DecoderOnlyTransformer(nn.Module):
         self,
         input_ids: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        return_attention: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[list]]:
         """
         Args:
             input_ids: Input token indices (batch, seq_len)
             targets: Target token indices for training (batch, seq_len)
+            return_attention: If True, return attention weights from all layers
         Returns:
             logits: Output logits (batch, seq_len, vocab_size)
             loss: Cross-entropy loss if targets provided, else None
+            attention_weights: List of attention weights per layer if return_attention=True
         """
         batch_size, seq_len = input_ids.shape
 
@@ -372,9 +384,12 @@ class DecoderOnlyTransformer(nn.Module):
         # Create causal mask (lower triangular)
         mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
-        # Apply transformer blocks
+        # Apply transformer blocks and collect attention weights
+        all_attention_weights = [] if return_attention else None
         for block in self.blocks:
-            x = block(x, mask)
+            x, attn_weights = block(x, mask, return_attention)
+            if return_attention:
+                all_attention_weights.append(attn_weights)
 
         # Final norm and projection
         x = self.norm_final(x)
@@ -391,7 +406,7 @@ class DecoderOnlyTransformer(nn.Module):
                 ignore_index=-1,  # Ignore padding tokens
             )
 
-        return logits, loss
+        return logits, loss, all_attention_weights
 
     @torch.no_grad()
     def generate(
@@ -471,8 +486,8 @@ def train_epoch(
         targets = actions[:, 1:]
 
         # 2. Forward pass (get logits and loss)
-        logits, loss = model(inputs, targets=targets)
-        
+        logits, loss, _ = model(inputs, targets=targets)
+
         # 3. Backward pass
         loss.backward()
 
@@ -526,12 +541,100 @@ def evaluate(
             inputs = actions[:, :-1]
             targets = actions[:, 1:]
 
-            logits, loss = model(inputs, targets=targets)
+            logits, loss, _ = model(inputs, targets=targets)
 
             total_loss += loss.item()
             num_batches += 1
 
     return total_loss / num_batches
+
+
+def plot_end_effector_trajectory(
+    states: torch.Tensor,
+    save_path: Optional[Path] = None,
+    title: str = "End Effector Position Over Trajectory",
+    elev: float = 30,
+    azim: float = 45,
+    multi_view: bool = False,
+):
+    """
+    Plot the end effector position (X, Y, Z) over a trajectory in 3D space.
+
+    Args:
+        states: State tensor of shape (seq_len, state_dim) where state_dim >= 10
+                Columns 7, 8, 9 are expected to be X, Y, Z end effector positions
+        save_path: Path to save the figure (optional)
+        title: Title for the plot
+        elev: Elevation angle in degrees (vertical rotation, default 30)
+        azim: Azimuth angle in degrees (horizontal rotation, default 45)
+        multi_view: If True, show 4 different viewpoints in subplots
+    """
+    # Convert to numpy if tensor
+    if isinstance(states, torch.Tensor):
+        states = states.cpu().numpy()
+
+    x = states[:, 7]
+    y = states[:, 8]
+    z = states[:, 9]
+
+    if multi_view:
+        # Create 4 subplots with different viewing angles
+        fig = plt.figure(figsize=(14, 12))
+        views = [
+            (30, 45, "Default (elev=30, azim=45)"),
+            (90, 0, "Top-down (XY plane)"),
+            (0, 0, "Front (XZ plane)"),
+            (0, 90, "Side (YZ plane)"),
+        ]
+
+        for idx, (e, a, view_title) in enumerate(views):
+            ax = fig.add_subplot(2, 2, idx + 1, projection='3d')
+            scatter = ax.scatter(x, y, z, c=range(len(x)), cmap='rainbow', marker='o', s=30)
+            ax.scatter([x[0]], [y[0]], [z[0]], color='green', s=100, marker='^', label='Start')
+            ax.scatter([x[-1]], [y[-1]], [z[-1]], color='red', s=100, marker='s', label='End')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_title(view_title)
+            ax.view_init(elev=e, azim=a)
+            if idx == 0:
+                ax.legend()
+
+        fig.suptitle(title, fontsize=14)
+        plt.tight_layout()
+
+    else:
+        # Single view with specified angles
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot as points with rainbow colormap to show temporal progression
+        scatter = ax.scatter(x, y, z, c=range(len(x)), cmap='rainbow', marker='o', s=50)
+
+        # Add colorbar to show time progression
+        cbar = plt.colorbar(scatter, ax=ax, shrink=0.6, pad=0.1)
+        cbar.set_label('Timestep')
+
+        # Mark start and end points
+        ax.scatter([x[0]], [y[0]], [z[0]], color='green', s=150, marker='^', label='Start')
+        ax.scatter([x[-1]], [y[-1]], [z[-1]], color='red', s=150, marker='s', label='End')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title(title)
+        ax.legend()
+
+        # Set the viewing angle
+        ax.view_init(elev=elev, azim=azim)
+
+        plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved end effector trajectory plot to {save_path}")
+
+    plt.show()
 
 def main():
     global debug_info
@@ -550,7 +653,7 @@ def main():
     max_seq_len = 50  # Maximum sequence length
     batch_size = 32
     learning_rate = 1e-4
-    num_epochs = 10
+    num_epochs = 50
 
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -660,6 +763,12 @@ def main():
     best_model = None
     best_val_loss = float('inf')
 
+    # Early stopping with patience
+    patience = 5
+    min_delta = 1e-4
+    epochs_without_improvement = 0
+    best_epoch = 0
+
     # Additional requirements for submission:
     loss_curve_values = []
     number_of_iterations = []
@@ -675,32 +784,45 @@ def main():
         # PART 5: Save checkpoint every 1000 steps
         # Small deviation: Only save the best model
         # This accounts for when a training produces a worse model than before
-        if val_loss < best_val_loss:
+        if val_loss < best_val_loss - min_delta:
             best_val_loss = val_loss
             best_model = model.state_dict()
+            best_epoch = epoch + 1
+            epochs_without_improvement = 0
             print(f"New best model found at epoch {epoch+1} with val loss {best_val_loss:.4f}")
             checkpoint_dir = Path("checkpoints")
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             checkpoint_path = checkpoint_dir / f"best_model.pt"
             torch.save(best_model, checkpoint_path)
             print(f"Saved checkpoint to {checkpoint_path}")
+        else:
+            epochs_without_improvement += 1
 
+        # Early stopping check
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping: no improvement for {patience} epochs")
+            break
+
+    # Report convergence statistics
+    best_iteration = best_epoch * len(train_loader)
+    print(f"Best model at {best_iteration} iterations (epoch {best_epoch})")
+    print(f"Best validation loss: {best_val_loss:.4f}")
 
     # Plot loss curves versus number of iterations
     train_losses, val_losses = zip(*loss_curve_values)
     plt.plot(number_of_iterations, train_losses, label='Train Loss')
     plt.plot(number_of_iterations, val_losses, label='Validation Loss')
+    plt.plot(best_iteration, best_val_loss, marker='*', markersize=15, color='green', label=f'Best Model at Epoch {best_epoch})')
     plt.xlabel('Number of Iterations')
     plt.ylabel('Loss')
     plt.title('Training and Validation Loss Curves')
     plt.legend()
     plt.grid()
-    plt.show()
 
     # Save the plots
     plots_dir = Path("images")
     plots_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = plots_dir / "default_loss_curves.png"
+    plot_path = plots_dir / "loss_curves.png"
     plt.savefig(plot_path)
     print(f"Saved loss curves plot to {plot_path}")
 
