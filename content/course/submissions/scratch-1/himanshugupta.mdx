@@ -6,7 +6,7 @@ date: "2026-02-05"
 
 # Scratch-1: The Transformer Backbone
 
-## Loss Curve (when Causal Mask ON)
+## Loss Curve (when Causal Mask is ON)
 
 ![Training Loss](./images/causal_mask_on/training_loss.png)
 
@@ -18,7 +18,7 @@ The training loss decreased from an initial value of **5.57** to a final value o
 
 Overall, the loss curve indicates stable optimization and successful learning of the temporal structure present in the trajectory data.
 
-## Attention Visualization (when Causal Mask ON)
+## Attention Visualization (when Causal Mask is ON)
 
 ![Attention Maps (Layer 0)](./images/attention_mask_on/attention_layer0.png)
 ![Attention Maps (Layer 1)](./images/attention_mask_on/attention_layer1.png)
@@ -38,7 +38,7 @@ Several consistent patterns emerge:
 
 ## The Audit: Removing the Causal Mask
 
-## Loss Curve (when Causal Mask OFF)
+## Loss Curve (when Causal Mask is OFF)
 
 ![Training Loss](./images/causal_mask_off/training_loss.png)
 
@@ -57,21 +57,27 @@ The unmasked model reaches near-zero loss within 800-1000 iterations (4-5 epochs
 
 The attention matrices from the four transformer layer, across all **8 attention heads** are attached below.
 
-#### Attention Visualization (when Causal Mask ON)
+#### Attention Visualization (when Causal Mask is OFF)
 
 ![Attention Maps (Layer 0)](./images/attention_mask_off/attention_layer0.png)
 ![Attention Maps (Layer 1)](./images/attention_mask_off/attention_layer1.png)
 ![Attention Maps (Layer 2)](./images/attention_mask_off/attention_layer2.png)
 ![Attention Maps (Layer 3)](./images/attention_mask_off/attention_layer3.png)
 
+Based on these attention maps, we can see that when the causal mask is disabled, the attention matrices change significantly.
+In this setting, tokens are no longer restricted to attending only to past positions and are free to attend to future tokens as well.
+As a result, non-zero attention values appear in the **upper triangular region** of the attention matrices.
+
 ### Why the Model "Cheats"
 
-[Your explanation here]
+When the causal mask is turned off, the model is able to attend to future tokens during training.
+This allows each token to directly access the ground-truth token it is supposed to predict, or tokens that are highly correlated with it.
+As a result, the prediction task becomes trivial.
+Instead of learning to infer the next token from past context, the model can simply copy information from future positions through the attention mechanism. This leads to artificially low training loss, even though the model has not learned meaningful temporal relationships.
+This behavior is often described as the model “cheating” because it exploits information that would not be available at inference time.
+With the causal mask enabled, this shortcut is removed, forcing the model to rely only on past tokens and learn valid autoregressive behavior.
 
 ## Code Highlights
 
-[Optional: Highlight interesting implementation details]
+I enjoyed learning different ways of doing the same thing and understanding how each and every small component is implemented in the Transformer architecture.
 
-## Challenges and Solutions
-
-[Optional: Discuss difficulties you encountered]
