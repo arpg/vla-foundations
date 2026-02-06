@@ -102,13 +102,13 @@ $$\hat{x}_{T+1:} = \mathcal{D}(\mathcal{E}(x_{0:T}))$$
       <td><strong>GAIA-1</strong></td>
       <td><strong>6.5 Billion</strong> (World Model variant)</td>
       <td><strong>4,700 hours</strong> of proprietary driving data (~420 Million images)</td>
-      <td>64 A100 GPUs (World Model)</td>
+      <td>64 A100 GPUs for 15 days (World Model); 32 A100 GPUs for 4 days (Image Tokenizer); 32 A100 GPUs for 15 days (Video Decoder)</td>
     </tr>
     <tr>
       <td><strong>TesserAct</strong></td>
       <td><em>Not specified in sources</em></td>
       <td><strong>~200,000 videos</strong> across synthetic and real domains</td>
-      <td><em>Not specified in sources</em></td>
+      <td><em>Not specified in sources but it's based on a CogVideoX backbone so it's at least 2 billion parameters</em></td>
     </tr>
   </tbody>
 </table>
@@ -254,9 +254,9 @@ Computer Vision and Pattern Recognition (CVPR), 2021.
 
 # Technical Paper Audit: GAIA-1
 
-**Title**: GAIA-1: A Generative World Model for Autonomous Driving (Arxiv 2023) 
-**Authors**: Wayve
-**Audit Authors**: Lorin Achey   
+**Title**: GAIA-1: A Generative World Model for Autonomous Driving (Arxiv 2023)  
+**Authors**: Wayve  
+**Audit Authors**: Lorin Achey  
 
 ---
 
@@ -280,7 +280,7 @@ Autonomous driving requires a model that can imagine futures given a proposed ac
 The authors claim that neither traditional world models (which capture dynamics but lack visual fidelity) nor generative video models (which achieve realism but lack dynamics understanding) can solve this problem alone.
 
 **Traditional World Models and Realism.** Prior world models such as MuZero [9], Dreamer [13], and MILE [11] have demonstrated success in simulated environments but struggle to capture the full complexity of real-world driving.
-These approaches typically rely on labeled data—segmentation masks, depth maps, 3D bounding boxes—which is expensive to obtain and difficult to scale to the millions of hours needed for robust autonomous driving.
+These approaches typically rely on labeled data (e.g. segmentation masks, depth maps, 3D bounding boxes) which is expensive to obtain and difficult to scale to the millions of hours needed for robust autonomous driving.
 Furthermore, models trained primarily on synthetic data suffer from a simulation-to-real gap, where the policies they learn fail when deployed on actual vehicles encountering real-world nuances like unusual lighting, weather, or road conditions.
 Perhaps most critically, these models compress visual scenes into low-dimensional latent representations (typically 256-512 dimensions), which cannot faithfully reconstruct fine details such as distant pedestrians or subtle road textures.
 VAE-based approaches in particular tend to produce blurry outputs due to optimizing a lower bound on the likelihood rather than the true distribution.
@@ -298,7 +298,7 @@ This architectural separation allows each component to benefit from its respecti
 ### 1.2 Taxonomy of Approaches & Related Work
 
 **Classical Planning Methods.** Early autonomous driving systems relied on rule-based approaches where engineers attempted to manually specify the complete set of driving behaviors.
-These systems encode expert knowledge as explicit if-then rules—for example, "if a pedestrian is detected within 10 meters, apply brakes."
+These systems encode expert knowledge as explicit if-then rules - for example, "if a pedestrian is detected within 10 meters, apply brakes."
 While interpretable, such approaches are fundamentally brittle: the complexity of real-world driving makes it impossible to anticipate every scenario in advance.
 Model Predictive Control (MPC) offered a more principled alternative by optimizing trajectories over a finite horizon using hand-crafted cost functions and dynamics models.
 However, MPC requires accurate models of vehicle dynamics and the environment, struggles with the computational demands of real-time replanning, and cannot easily incorporate learned priors about human behavior or scene semantics.
@@ -475,16 +475,16 @@ GAIA-1's design makes three critical trade-offs that shape its capabilities and 
 **Discrete Tokens vs. Continuous Latents.** GAIA-1 uses discrete tokenization ($z \in \{1,...,K\}^n$) rather than continuous latent representations.
 This enables LLM-style next-token prediction and benefits from proven scaling laws, but introduces quantization error.
 Each image is compressed to 7,488 bits (576 tokens × 13 bits), a 470× compression that discards fine-grained spatial information.
-The DINO distillation loss biases tokens toward semantic categories over geometric precision—beneficial for high-level scene understanding but potentially harmful for safety-critical details like exact distances.
+The DINO distillation loss biases tokens toward semantic categories over geometric precision - beneficial for high-level scene understanding but potentially harmful for safety-critical details like exact distances.
 
 **Autoregressive vs. Parallel Decoding.** The world model generates tokens sequentially rather than in parallel (like MaskGIT or BERT [90]).
-This maximizes expressiveness—each token can depend on all previous tokens—but incurs 576 sequential forward passes per frame.
+This maximizes expressiveness - each token can depend on all previous tokens - but incurs 576 sequential forward passes per frame.
 A parallel decoder could achieve ~36× speedup but would sacrifice the ability to model complex inter-token dependencies.
 GAIA-1 prioritizes quality over inference speed, a choice aligned with research exploration rather than deployment.
 
 **Temporal Resolution (6.25 Hz vs. 25 Hz).** The world model operates at 6.25 Hz (160ms between frames) to keep sequence length tractable, with the video decoder upsampling to 25 Hz.
 This reduces attention memory by ~15× compared to native 25 Hz, enabling 4-second context windows.
-However, 160ms between predictions means a vehicle at highway speed moves 4.8m between frames—fine-grained motion and sudden events may be aliased away before the model sees them.
+However, 160ms between predictions means a vehicle at highway speed moves 4.8m between frames - fine-grained motion and sudden events may be aliased away before the model sees them.
 
 ---
 
@@ -549,7 +549,7 @@ Models from 0.65M to 6.5B parameters (10,000× range) follow smooth power-law cu
 - **Inference latency** worsens with scale due to autoregressive generation
 
 **Data Wall.** Unlike LLMs with near-infinite web text, driving video is scarce.
-GAIA-1's 4,700 hours represents ~94,000 miles—containing essentially zero safety-critical events (accidents occur at ~$10^{-6}$/mile).
+GAIA-1's 4,700 hours represents ~94,000 miles - containing essentially zero safety-critical events (accidents occur at ~$10^{-6}$/mile).
 No amount of scaling can teach the model to predict scenarios absent from training.
 
 ---
@@ -585,7 +585,7 @@ Sub-pixel depth gradients, high-frequency textures, precise object boundaries, a
 
 **The Semantic-Motor Gap.** GAIA-1 outputs video frames, not control commands.
 A complete system requires an additional perception-to-control policy that processes generated video, extracts state, plans trajectory, and outputs motor commands.
-As the authors state, GAIA-1 is intended as "a valuable neural simulator" for data generation—it is a **data augmentation tool**, not a **driving policy**.
+As the authors state, GAIA-1 is intended as "a valuable neural simulator" for data generation - it is a **data augmentation tool**, not a **driving policy**.
 
 ---
 
@@ -728,7 +728,7 @@ However, the single-view RGB-DN representation captures only visible surfaces, a
 Without accurate depth and 6-DoF pose estimations, robotic systems struggle to determine the exact position and orientation of objects.
 
 **The 2D Representation Gap.** Prior video-based world models like UniPi [15], Genie [8], and Pandora [64] generate future video frames conditioned on actions and text, but their 2D outputs suffer from several critical limitations for embodied tasks.
-First, they cannot provide metric depth information needed to plan precise grasping motions—a robot arm must know not just where an object appears in the image but how far it is and at what angle.
+First, they cannot provide metric depth information needed to plan precise grasping motions - a robot arm must know not just where an object appears in the image but how far it is and at what angle.
 Second, 2D models can produce geometrically inconsistent outputs where object sizes and shapes vary across frames, violating physical constraints.
 Third, converting 2D predictions back to 3D control signals requires additional perception modules (depth estimators, pose estimators) that introduce error accumulation and latency.
 The paper notes that "without accurate depth and 6-DoF pose estimations, robotic systems struggle to determine the exact position and orientation of objects."
@@ -794,7 +794,7 @@ The data flow proceeds as follows: (1) RGB, depth, and normal videos are separat
 
 **Why RGB-DN?** This representation offers three advantages:
 - **Computational efficiency**: Same dimensionality as standard video, enabling use of pretrained video models
-- **Geometric completeness**: Depth provides metric distance; normals provide surface orientation—together sufficient for 3D reconstruction
+- **Geometric completeness**: Depth provides metric distance; normals provide surface orientation - together sufficient for 3D reconstruction
 - **Temporal modeling**: Video diffusion naturally captures dynamics, unlike per-frame 3D estimation
 
 **Diffusion Formulation**: The model learns the joint distribution $p(v, d, n | v_0, d_0, n_0, T)$ where $v, d, n$ are the predicted RGB, depth, and normal video latents, and the conditions are the first frame's latents plus text instruction $T$.
@@ -860,7 +860,7 @@ $$
 ### 2.5 Key Architectural Trade-Offs
 
 **Joint vs. Separate Modality Prediction.** TesserAct predicts RGB, depth, and normal jointly through a shared backbone rather than using separate models for each.
-This enables cross-modal reasoning—depth predictions can leverage RGB texture cues, normals can condition on depth edges—but creates a more complex training objective.
+This enables cross-modal reasoning - depth predictions can leverage RGB texture cues, normals can condition on depth edges - but creates a more complex training objective.
 The alternative (separate estimators applied post-hoc) would lose temporal consistency and cross-modal coherence.
 
 **Pretrained Video Model vs. Training from Scratch.** With only ~285k training videos (far less than the billions used for CogVideoX), training from scratch is infeasible.
@@ -1049,7 +1049,7 @@ TesserAct outperforms 2D baselines on 7/9 tasks, with largest gains on tasks req
 
 **Where 4D Doesn't Help**: Open microwave and weighing off show comparable or worse performance than UniPi*.
 The paper suggests "these tasks already have sufficient information in the 2D front image."
-This reveals that 4D is not universally beneficial—some tasks are solvable from 2D cues.
+This reveals that 4D is not universally beneficial - some tasks are solvable from 2D cues.
 
 ### 4.3 Engineering Bottlenecks
 
@@ -1068,7 +1068,7 @@ It does not report end-to-end latency for closed-loop control.
 Real-time operation (10+ Hz) is likely infeasible.
 
 **Action Space Mismatch**: The inverse dynamics model predicts 7-DoF actions from point clouds, but this requires knowing keyframes a priori.
-The paper notes they "predict and record all future keyframes" then "query the inverse dynamic model"—this open-loop execution precludes reactive control.
+The paper notes they "predict and record all future keyframes" then "query the inverse dynamic model" - this open-loop execution precludes reactive control.
 
 ---
 
