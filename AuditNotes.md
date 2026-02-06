@@ -76,16 +76,19 @@ This approach is still subject to the physicality gaps of using a VLA-only appro
 
 ## Jimmy Project Discussion
 
-### Pitch: 
-Current research: Deployment of VLMs on constrained hardware. Attempting to add in the VLAs. Hoping to see high latency information like potential hazards. Using captures at a single time stamp to project trajectories for obects in the scene such as humans. Provide some understanding that this is a fire or walking around people in chairs to determine better trajectories. Diffusion models with static observer try to roll out the trajectory for 4 seconds and see what might happen.
+### Pitch / Initial Dissolve:
+The core idea is safety alignment of VLAs and VLMs - particularly, training VLAs that can work with only partially observable states (high latency sensor data) by having some sort of understanding of safety hazards in scene that are both currently present, or might in the future be present. Simple case example would be robot in dynamic environments (dynamic in the sense of moving objects, or scenes that are temporally changing ~ like a fire that is developing, or an object that could move within some semantic understanding of how it moves). The approach would be to have the model take a snapshot, query a VLM to create a high level topological map of features in the scene (like object detection), then using a diffusion model to roll out trajectories for objects or features in the scene either via some estimator/controller type of framework, or purely just safety bounding based on semantic cues. E.g. take a snapshot, query the VLM for scene understanding - including some information about each detected feature on where it could be heading (output could be like object A looks like it is moving right at a slow rate, then we send that information to some diffusion model to project forward in time). In low latency maybe we can just continually take the straight path until the occlusion forces you to move around it, this approach hopes to get an agent (the robot) to pre-emptively move around the region that could be in the future occluded. Plan is to assume worst case, even if it means having to stop to reassess. Outputs would be simple and agnostic like move right, left, forwards, diagonal, etc. with some magnitude, which can be converted to robot motor commands.
 
-### Questions:
-Are you looking for the worst case?
-Yes, for example moving in one direction with other people walking through, will the VLA be able to inform the system to stop or will it prevent collisions.
-Tehcnical Delta: high liatency safety allignment of vlms vlas where the hazard is detected using diffusion based trajectory collision or object detection.
-How will you identify this stuff? Diffusion models mostly based on what it is trained on. How do you align the VLA and diffusion model training?
-Roll out diffusion policy and check for collision? Do you try multiple settings for the diffusion model? Planning on an abstraction and then diffuse out nitty gritty control. Good for non standard robotic platforms like insects.
-At first thinking a block that can move in any direction
+### Training
+Still not a fully formed idea, but would need to have some internet priors to understand what exactly constitutes as a hazard in the specific environment of choice. After that, most training would need some sort of labelled dataset for estimate of trajectory of features or development of features in scene...this is likely a problem not widely solved yet and not sure if datasets for this exist. Object detection is already solved, but need this extra layer to feed into a diffusion model.
+
+### Technical Delta:
+Safety alignment of VLAs with understanding of hazards in scene, as well as a diffusion-based rollout of scene development (trajectories) to add bounding overhead for robot navigation. Aimed towards more resource constained platforms with high latency that can not continually resense, and need to have a good enough semantic grasp of worst case scenarios so we can inflate safety bounds for planning.
+
+### Load-Bearing Walls and Failure Points:
+1. Data training - where exactly can I find data for this sort of training
+2. Scene understanding - generalization can only be as good as understanding what sort of hazards are present in scene type. Could also just stick to one type of environment and tailor narrative towards that (like human-dense environment, etc.)
+3. A lot of the inputs and outputs are abstractions and not very discrete, how does this ensure safety or generalization to safety? Will have sensors more than just RGB so we can do physical alignment, but trajectories for example are hard to scale for prediction.
 
 ## Zack Project Discussion
 
