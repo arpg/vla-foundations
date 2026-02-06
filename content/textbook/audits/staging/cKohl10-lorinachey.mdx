@@ -402,7 +402,7 @@ The tokenizer incorporates inductive biases from DINO [30] (self-supervised visi
 
 For input image $x_t$, the encoder produces discrete tokens:
 $$
-z_t = E_\theta(x_t) \in \{1, ..., K\}^{n}
+z_t = E_\theta(x_t) \in \left\{1, ..., K\right\}^{n}
 $$
 
 where quantization uses nearest-neighbor lookup from learnable embedding table.
@@ -438,7 +438,7 @@ This interleaving enables the model to learn cross-modal dependencies: image tok
 
 **Per-Modality Specifications**:
 - Text tokens: $c_t \in \mathbb{R}^{32 \times 4096}$ (T5-Large embeddings, frozen)
-- Image tokens: $z_t \in \{1,...,8192\}^{576}$ (discrete VQ codes, learned embedding)
+- Image tokens: $z_t \in \left\{1,...,8192\}^{576}$ (discrete VQ codes, learned embedding)
 - Action tokens: $a_t \in \mathbb{R}^{2 \times 4096}$ (speed + curvature, linear projection)
 
 **Sequence Scale**:
@@ -451,6 +451,16 @@ This interleaving enables the model to learn cross-modal dependencies: image tok
 $$
 \mathcal{L}_{\text{world model}} = -\sum_{t=1}^{T} \sum_{i=1}^{n} \log p(z_{t,i} | z_{<t}, z_{t,j<i}, c_{\leq t}, a_{<t})
 $$
+
+where:
+- $T$: Total number of frames in the video sequence
+- $t$: Current timestep/frame index
+- $n$: Number of tokens per image (576)
+- $z_{t,i}$: $i$-th image token at timestep $t$
+- $z_{<t}$: All image tokens before timestep $t$
+- $z_{t,j<i}$: Image tokens at timestep $t$ with index less than $i$ (causal masking)
+- $c_{\leq t}$: Text tokens up to and including timestep $t$
+- $a_{<t}$: Action tokens before timestep $t$
 
 **Conditioning Dropout** (for multi-task generation): Unconditional 20%, Action-conditioned 40%, Text-conditioned 40%
 
@@ -466,13 +476,21 @@ $$
 \mathcal{L}_{\text{video}} = \mathbb{E}_{\epsilon, t'} \left[ \left\|\epsilon_\theta(x_{t'}, t', z, m) - \epsilon\right\|_2^2 \right]
 $$
 
+where:
+- $\epsilon$: the denoising target
+- $t'$: the sampled discrete diffusion timestep
+- $x_{t'}$: Noisy video frame at diffusion timestep $t'$
+- $z$: Sequence of conditioning image tokens from the world model
+- $m$: Conditioning mask (specified by the training task)
+- $\epsilon_\theta$: Denoising video model parameterized by $\theta$
+
 **Inference Pipeline**: Decode first 7 frames from tokens, autoregressively decode remaining frames (2-frame overlap), temporal upsample 6.25 Hz to 25 Hz, DDIM sampler with 50 steps.
 
 ### 2.5 Key Architectural Trade-Offs
 
 GAIA-1's design makes three critical trade-offs that shape its capabilities and limitations:
 
-**Discrete Tokens vs. Continuous Latents.** GAIA-1 uses discrete tokenization ($z \in \{1,...,K\}^n$) rather than continuous latent representations.
+**Discrete Tokens vs. Continuous Latents.** GAIA-1 uses discrete tokenization ($z \in \left\{1,...,K\right\}^n$) rather than continuous latent representations.
 This enables LLM-style next-token prediction and benefits from proven scaling laws, but introduces quantization error.
 Each image is compressed to 7,488 bits (576 tokens × 13 bits), a 470× compression that discards fine-grained spatial information.
 The DINO distillation loss biases tokens toward semantic categories over geometric precision - beneficial for high-level scene understanding but potentially harmful for safety-critical details like exact distances.
@@ -704,9 +722,9 @@ It proves world models can scale but doesn't solve the grounding problem.
 
 # Technical Paper Audit: TesserAct
 
-**Title**: TesserAct: Learning 4D Embodied World Models (arxiv 2025) 
-**Authors**: Haoyu Zhen et al. 
-**Audit Authors**: Lorin Achey
+**Title**: TesserAct: Learning 4D Embodied World Models (arxiv 2025)  
+**Authors**: Haoyu Zhen et al.  
+**Audit Authors**: Lorin Achey  
 
 ---
 
@@ -819,7 +837,7 @@ This enables cross-embodiment generalization.
 
 **Output Design**: RGB uses the original CogVideoX output projector. Depth and normal use additional modules:
 $$
-\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \{v,d,n\}}))
+\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \left\{v,d,n\right\}}))
 $$
 
 The Conv3D layer encodes the concatenation of input latents with predicted RGB output, enabling depth/normal predictions to condition on the RGB prediction.
