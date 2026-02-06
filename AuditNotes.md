@@ -1,6 +1,6 @@
 # Group D: The Planning and Safety Lab
 
-## Aritra
+## Aritra Project Discussion
 
 ### Pitch / Initial Dissolve
 **Question:** Are token-level uncertainty signals (entropy, perplexity) from a VLA’s action distribution *sufficient* indicators that the agent is near an **irreversible/critical state**?
@@ -49,7 +49,7 @@ Learn an explicit **safe/unsafe boundary** from rollouts (e.g., constraint model
 
 
 
-## Zakariya
+## Zakariya Project Discussion
 
 ### Pitch: 
 Inspired by partially observable markov decision processes how to assign value the information for long horizon planning. How to fine tune a VLA to quantify information value. “Emergent Temporal Abstractions inform Learing” train it on, train RL on it, instead of output of the tokens, they perform RL on the residual activation stream in each layer. Where does this application work best? You can discover this temporal abstraction works best in the middle layers.
@@ -65,7 +65,7 @@ Sometimes these outcomes are completely unnecessary observation branching to mak
 ### Techincal Delta: (not discussed)
 
 
-## Jimmy
+## Jimmy Project Discussion
 
 ### Pitch: 
 Current research: Deployment of VLMs on constrained hardware. Attempting to add in the VLAs. Hoping to see high latency information like potential hazards. Using captures at a single time stamp to project trajectories for obects in the scene such as humans. Provide some understanding that this is a fire or walking around people in chairs to determine better trajectories. Diffusion models with static observer try to roll out the trajectory for 4 seconds and see what might happen.
@@ -78,22 +78,28 @@ How will you identify this stuff? Diffusion models mostly based on what it is tr
 Roll out diffusion policy and check for collision? Do you try multiple settings for the diffusion model? Planning on an abstraction and then diffuse out nitty gritty control. Good for non standard robotic platforms like insects.
 At first thinking a block that can move in any direction
 
-## Zack
+## Zack Project Discussion
 
 ### Pitch / Initial Dissolve:
-Structured robotic autonomy systems based on Behavior Trees collapse rich execution outcomes into a binary success/failure signal. This creates an information bottleneck where the cause of failure—such as occlusion, degraded sensing, millimeter-scale pose error, or contact/torque anomalies—is lost before the policy can adapt. As a result, systems fail on minor, unforeseen conditions that should be recoverable, leading to brittle retry loops or aborts.
+Behavior Tree–based autonomy collapses rich execution outcomes into a binary success/failure signal, discarding the cause of failure (occlusion, degraded sensing, millimeter-scale pose error, contact/torque anomalies). This information decay occurs precisely where structured autonomy meets the physical world, making minor, recoverable failures indistinguishable from logical task failure and resulting in brittle retries or aborts under partial observability. This is the correct bottleneck to solve because the missing information already exists in the system but is not preserved or reasoned over.
 
 ### Technical Delta:
-I introduce a failure-triggered Vision–Language–Action overviewer that activates only when a BT action fails. The overviewer consumes raw visual observations and structured execution context to semantically interpret the failure and propose a constrained recovery action, which is compiled into a temporary parameterized BT subtree. This preserves the safety and interpretability of Behavior Trees while restoring the semantic information necessary to recover from unforeseen failures under partial observability.
+I introduce a failure-triggered Vision–Language–Action overviewer that activates only when a BT action fails. The overviewer consumes raw visual observations and physics-preserving execution context to semantically interpret the failure and propose a constrained recovery action, which is compiled into a temporary parameterized BT subtree. This restores semantic information at the failure boundary while preserving the safety, interpretability, and certifiability of Behavior Trees.
+
+### Information Decay
+Information is lost when continuous physical signals (contact state, torque trends, expected vs. observed motion) are projected into coarse symbolic failure tokens. If these signals are not preserved—along with minimal temporal context—the model cannot reason about physical causality and is dead on arrival. The proposed system explicitly encodes physics-relevant context and limits Internet priors to semantic interpretation rather than control.
+
+### Physicality Gap
+In messy, high-dynamic environments, the first failure mode is Internet priors overpowering physical reality under degraded sensing (occlusion, dust, blur). Without strong physical grounding, visually plausible but physically impossible recoveries are proposed. This is mitigated by freezing or low-rank tuning the vision backbone, enforcing BT safety guards, and grounding recovery decisions in embodied failure outcomes.
 
 ### Load-Bearing Walls and Failure Points:
-1. Can failure modes be meaningfully categorized in a way that links to distinct recoveries?
-2. The recovery primitive set must be expressive enough to fix failures but small enough to be safe and learnable. Does this constraint prevent recovery success?
-3. Information preservation in context encoding. Can you effectively convert the system state information into a useful context encoding?
-4. Internet Priors Overpowering Physical reality. When physics (context embedding) and vision disagree, priors will confidently lie. 
+1. Failure modes must map to distinct, actionable recoveries.
+2. Recovery primitives must be expressive yet safety-constrained.
+3. Execution context must preserve physical and temporal information.
+4. Physics must dominate semantics when priors and reality disagree.
 
 
-## Himanshu Gupta  
+## Himanshu Gupta Project Discussion 
 **(Vision + Particle Filter Belief Encoding → Action Decoder)**
 ---
 ### Pitch / Initial Dissolve
