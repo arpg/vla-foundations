@@ -1,0 +1,139 @@
+name: Shadow Tester
+
+on:
+  repository_dispatch:
+    types: [run-shadow-tests]
+
+permissions:
+  contents: read
+  pull-requests: write  # Needed to comment on PRs
+
+jobs:
+  shadow-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Private Repo
+        uses: actions/checkout@v4
+        with:
+          repository: crheckman/private-vla-foundations
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # PAT with access to private repo
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Dependencies
+        run: |
+          pip install pytest torch numpy
+
+      - name: Fetch Student Code from Public PR
+        env:
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
+          HEAD_SHA: ${{ github.event.client_payload.head_sha }}
+          REPO_URL: ${{ github.event.client_payload.repo_url }}
+        run: |
+          echo "Fetching student code from PR #${PR_NUMBER}"
+
+          # Clone the public repo
+          git clone https://github.com/arpg/vla-foundations.git /tmp/public-repo
+          cd /tmp/public-repo
+
+          # Fetch the PR branch
+          git fetch origin pull/${PR_NUMBER}/head:pr-${PR_NUMBER}
+          git checkout pr-${PR_NUMBER}
+
+          # Copy student code to our testing directory
+          # Copy src/assignments to the current repo
+          if [ -d "src/assignments" ]; then
+            cp -r src/assignments/* $GITHUB_WORKSPACE/src/assignments/ || true
+          fi
+
+          echo "Student code fetched successfully"
+
+      - name: Run Internal Rigorous Tests
+        id: tests
+        continue-on-error: true
+        run: |
+          # Run pytest with internal tests
+          pytest tests/internal/ -v --tb=short --maxfail=5 > test_output.txt 2>&1
+          TEST_EXIT_CODE=$?
+
+          # Capture output
+          cat test_output.txt
+
+          # Save exit code for later
+          echo "exit_code=${TEST_EXIT_CODE}" >> $GITHUB_OUTPUT
+
+          # Exit with the actual test result
+          exit $TEST_EXIT_CODE
+
+      - name: Prepare Test Summary
+        if: always()
+        id: summary
+        run: |
+          if [ -f test_output.txt ]; then
+            # Extract summary from pytest output
+            SUMMARY=$(tail -20 test_output.txt | grep -E "(PASSED|FAILED|ERROR)" || echo "Test execution completed")
+
+            # Escape newlines for GitHub output
+            SUMMARY="${SUMMARY//$'\n'/'%0A'}"
+            echo "summary=${SUMMARY}" >> $GITHUB_OUTPUT
+          else
+            echo "summary=No test output available" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on Public PR - Pass
+        if: steps.tests.outcome == 'success'
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # Default token works for same repo
+          repository: arpg/vla-foundations
+          issue-number: ${{ github.event.client_payload.pr_number }}
+          body: |
+            ## ✅ Shadow CI: Internal Tests Passed
+
+            Your submission passed all internal rigorous tests!
+
+            <details>
+            <summary>Test Summary</summary>
+
+            ```
+            ${{ steps.summary.outputs.summary }}
+            ```
+
+            </details>
+
+            ---
+            *These are hidden internal tests run by the instructor. Your code meets the required standards.*
+
+      - name: Comment on Public PR - Fail
+        if: steps.tests.outcome == 'failure'
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # Default token works for same repo
+          repository: arpg/vla-foundations
+          issue-number: ${{ github.event.client_payload.pr_number }}
+          body: |
+            ## ❌ Shadow CI: Internal Tests Failed
+
+            Your submission did not pass all internal tests. Please review the feedback and make necessary corrections.
+
+            <details>
+            <summary>Test Summary</summary>
+
+            ```
+            ${{ steps.summary.outputs.summary }}
+            ```
+
+            </details>
+
+            ### Next Steps:
+            1. Review the test failures above
+            2. Make corrections to your code
+            3. Push updates to your PR branch
+            4. Tests will automatically re-run
+
+            ---
+            *These are hidden internal tests run by the instructor. Contact @crheckman if you need clarification on the failures.*
