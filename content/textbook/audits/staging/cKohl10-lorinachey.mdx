@@ -2,7 +2,7 @@
 title: "Technical Paper Audits: World Models"
 author: "Lorin Achey; Carson Kohlbrenner"
 topic: "World models / world foundation models for embodied AI"
-paper: "Genie, Cosmos, TesserAct, and GAIA-1"
+papers: "Genie, Cosmos, TesserAct, and GAIA-1"
 ---
 
 # Technical Paper Audits: World Models
@@ -19,11 +19,11 @@ paper: "Genie, Cosmos, TesserAct, and GAIA-1"
 
 ![World Models Overview](./figures-system-diagrams-images/robot_predictions.png)
 
-Figure 1: Proceding video frames are generated from a world model given the context of the robot's task. 
+Figure 1: Proceeding video frames are generated from a world model given the context of the robot's task. 
 
 ### Robotics Problem Statement
-Classical simulators such as Isaac Sim \[1\] and Mujoco \[2\] capture the physical dynamics necessary for training embodied agents, however the hardcoded dynamics used in such simulators is not practical for large-scale data generation of nuanced physical phenemona and realistic rendering.
-World models (also refered to as World Foundation Models or WFMs) offer an alternative, data-driven approach to simulation and future state prediction that can capture more neuanced physical phenomena and render realistic video/image outputs.
+Classical simulators such as Isaac Sim \[1\] and Mujoco \[2\] capture the physical dynamics necessary for training embodied agents, however the hardcoded dynamics used in such simulators is not practical for large-scale data generation of nuanced physical phenomena and realistic rendering.
+World models (also referred to as World Foundation Models or WFMs) offer an alternative, data-driven approach to simulation and future state prediction that can capture more nuanced physical phenomena and render realistic video/image outputs.
 World models are trained to capture the underlying spatial and temporal dynamics in images and video to predict future states of the environment.
 In this document, we will look at four prevalent world models: GAIA-1 \[3\], Genie \[4\], TesserAct \[5\], and Cosmos \[6\].
 
@@ -55,7 +55,7 @@ $$\hat{x}_{T+1:} = \mathcal{D}(\mathcal{E}(x_{0:T}))$$
       <td><strong>Genie</strong></td>
       <td>Unlabelled video frames;
         promptable with text or images.</td>
-      <td>Action-controllable videos (frame-by-frame).</td>
+      <td>Action-controllable videos (frame-by-frame). It generates action-controllable virtual worlds as videos.</td>
     </tr>
     <tr>
       <td><strong>GAIA-1</strong></td>
@@ -74,10 +74,6 @@ $$\hat{x}_{T+1:} = \mathcal{D}(\mathcal{E}(x_{0:T}))$$
     </tr>
   </tbody>
 </table>
-
-Genie can be prompted with text, synthetic images, photographs, or sketches.
-It learns latent actions from unlabeled Internet video.
-It generates action-controllable virtual worlds as videos.
 
 ### Scaling
 <table>
@@ -111,7 +107,7 @@ It generates action-controllable virtual worlds as videos.
     <tr>
       <td><strong>TesserAct</strong></td>
       <td><em>Not specified in sources</em></td>
-      <td><strong>~285,000 videos</strong> across synthetic and real domains</td>
+      <td><strong>~200,000 videos</strong> across synthetic and real domains</td>
       <td><em>Not specified in sources</em></td>
     </tr>
   </tbody>
@@ -120,7 +116,7 @@ It generates action-controllable virtual worlds as videos.
 ### Tokenization
 
 Tokenization is a critical component for world models as it compresses high-dimensional image data into a lower-dimensional latent space that the world model can efficiently reason over.
-The niave approach of sectioning images into patches and flattening them into vectors is often insufficient for capturing the complex spatial and temporal relationships in image data at a scale sufficiently efficient enough for practical use of a world model.
+The naive approach of sectioning images into patches and flattening them into vectors is often insufficient for capturing the complex spatial and temporal relationships in image data at a scale sufficiently efficient enough for practical use of a world model.
 State of the art world models instead use a variety of **discrete** and **continuous** tokenization approaches as follows:
 
 <table>
@@ -135,27 +131,27 @@ State of the art world models instead use a variety of **discrete** and **contin
     <tr>
       <td><strong>Genie</strong></td>
       <td><strong>Discrete</strong></td>
-      <td><strong>VQ-VAE</strong> with a spatiotemporal transformer used for both video tokenization and the Latent Action Model (LAM) \[4\], \[7\].</td>
+      <td><strong>VQ-VAE</strong> with a spatiotemporal transformer used for both video tokenization and the Latent Action Model (LAM) [4], [7].</td>
     </tr>
     <tr>
       <td><strong>GAIA-1</strong></td>
       <td><strong>Discrete</strong></td>
-      <td><strong>VQ-VAE / VQ-GAN</strong>; the encoder quantizes features using nearest-neighbor look-ups from a learnable embedding table \[3\], \[7\], \[8\].</td>
+      <td><strong>VQ-VAE / VQ-GAN</strong>; the encoder quantizes features using nearest-neighbor look-ups from a learnable embedding table [3], [7], [8].</td>
     </tr>
     <tr>
       <td><strong>Cosmos (Discrete)</strong></td>
       <td><strong>Discrete</strong></td>
-      <td><strong>Finite-Scalar-Quantization (FSQ)</strong>; used to map latent space into discrete codes without requiring auxiliary commitment losses \[6\], \[9\].</td>
+      <td><strong>Finite-Scalar-Quantization (FSQ)</strong>; used to map latent space into discrete codes without requiring auxiliary commitment losses [6], [9].</td>
     </tr>
     <tr>
       <td><strong>Cosmos (Continuous)</strong></td>
       <td><strong>Continuous</strong></td>
-      <td><strong>Vanilla Autoencoder (AE)</strong>; maps videos into a continuous latent space for use in diffusion-based WFMs \[6\].</td>
+      <td><strong>Vanilla Autoencoder (AE)</strong>; maps videos into a continuous latent space for use in diffusion-based WFMs [6].</td>
     </tr>
     <tr>
       <td><strong>TesserAct</strong></td>
       <td><strong>Continuous</strong></td>
-      <td><strong>3D Variational Autoencoder (VAE)</strong>; leverages the pre-trained CogVideoX VAE to encode RGB, depth, and normal videos \[5\], \[10\].</td>
+      <td><strong>3D Variational Autoencoder (VAE)</strong>; leverages the pre-trained CogVideoX VAE to encode RGB, depth, and normal videos [5], [10].</td>
     </tr>
   </tbody>
 </table>
@@ -1268,7 +1264,7 @@ Five distinct components make up the structure of Cosmos:
 Similar to the other world models in this document, the spatio-temporal relationships of input frames is captured via tokens with spatial and temporal dimensions.
 The Cosmos-Tokenizer1 was introduced in this paper to support both discrete and continuous causal latent representations embedded in a height ($H$), width ($W$), and channel ($C$) format.
 The input tokens are first transformed into wavelet space to downsample the dimensions, then passed into a 2D $k\times k\times 1$ convolution to capture spatial information, and finally passed into a causal $1\times 1\times 1 \times k$ convolution to capture temporal information.
-The convolution on wavelet-space tokens seperate Cosmos-Tokenizer1 from other standard architectures like VQ-VAE (CITE) by **removing redundancies** and **strictly maintaining a causal structure**.
+The convolution on wavelet-space tokens separates Cosmos-Tokenizer1 from other standard architectures like VQ-VAE (CITE) by **removing redundancies** and **strictly maintaining a causal structure**.
 
 ![Cosmos Tokenizer Architecture](./figures-system-diagrams-images/Cosmos-Tokenizer-Evaluation.png)
 
@@ -1307,7 +1303,7 @@ The following table summarizes the loss equations used during these stages:
       <td><strong>Gram-matrix (GM) Loss</strong></td>
       <td>Stage 2</td>
       <td>$\mathcal{L}_{\text{Gram}} = \frac{1}{L} \sum_{l=1}^L \sum_{t} \alpha_l \|GM_l(\hat{x}_t) - GM_l(x_t)\|_1$</td>
-      <td>Specifically designed to <strong>enhance the sharpness</strong> of the reconstructed images,.</td>
+      <td>Specifically designed to <strong>enhance the sharpness</strong> of the reconstructed images.</td>
     </tr>
     <tr>
       <td><strong>Adversarial Loss</strong></td>
@@ -1318,8 +1314,8 @@ The following table summarizes the loss equations used during these stages:
   </tbody>
 </table>
 
-The only other causal tokenizer that was compared to Cosmos-Tokenizer1 was the CogVideoX-Tokenizer (CITE) that was used in TesserAct, and Cosmos-Tokenizer1 outperformed it by on the peak signal to noise (PSNR) reconstruction quality metric by ~3 points at comparible compression ratios when tested on the DAVIS dataset.
-NVIDIA also performed an ablation of their tokenizer at different compression rates which revealed that their tokenizer decreases in reocnstruction quality with higher compression rates (as expected), but notably maintained higher than state of the art performance with up to 8x higher compression.
+The only other causal tokenizer that was compared to Cosmos-Tokenizer1 was the CogVideoX-Tokenizer (CITE) that was used in TesserAct, and Cosmos-Tokenizer1 outperformed it on the peak signal to noise (PSNR) reconstruction quality metric by ~3 points at comparable compression ratios when tested on the DAVIS dataset.
+NVIDIA also performed an ablation of their tokenizer at different compression rates which revealed that their tokenizer decreases in reconstruction quality with higher compression rates (as expected), but notably maintained higher than state of the art performance with up to 8x higher compression.
 
 ### 2.3 Pre-trained World Foundation Models
 
@@ -1422,7 +1418,7 @@ However, models suffer from a lack of **object permanence** and inaccuracies in 
 
 ### 5.4 Sign-Off Criteria
 **Decision:** NO (for safety-critical deployment) / YES (for synthetic data generation).
-The Cosmos paper reports that considerable errors in object permeance in contact rich environments persist.
+The Cosmos paper reports that considerable errors in object permanence in contact rich environments persist.
 However, for augmenting training sets with photorealistic synthetic data, it is the current state-of-the-art.
 
 ---
