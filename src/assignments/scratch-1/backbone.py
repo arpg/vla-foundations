@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 # during solution development.
 
 debug_info = True
+is_causal_mask = True
 
 class RMSNorm(nn.Module):
     """
@@ -98,21 +99,22 @@ class RotaryPositionalEmbedding(nn.Module):
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, q: torch.Tensor, k: torch.Tensor, start_pos: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Apply rotary embeddings to query and key tensors
 
         Args:
             q: Query tensor (batch, num_heads, seq_len, head_dim)
             k: Key tensor (batch, num_heads, seq_len, head_dim)
+            start_pos: Starting position for KV-cache (default 0)
         Returns:
             Rotated (q, k) tensors
         """
         seq_len = q.shape[2]
 
-        # Get cached cos/sin values
-        cos = self.cos_cached[:seq_len, ...]
-        sin = self.sin_cached[:seq_len, ...]
+        # Get cached cos/sin values with position offset for KV-cache
+        cos = self.cos_cached[start_pos:start_pos + seq_len, ...]
+        sin = self.sin_cached[start_pos:start_pos + seq_len, ...]
 
         # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
         q_rot = (q * cos) + (self.rotate_half(q) * sin)
@@ -151,16 +153,21 @@ class CausalSelfAttention(nn.Module):
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None,
-                return_attention: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+                return_attention: bool = False,
+                kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+                start_pos: int = 0) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         global debug_info
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask (seq_len, seq_len)
             return_attention: If True, return attention weights for visualization
+            kv_cache: Optional tuple of (cached_k, cached_v) from previous forward passes
+            start_pos: Starting position for RoPE when using KV-cache
         Returns:
             Output tensor (batch, seq_len, dim)
             Attention weights (batch, num_heads, seq_len, seq_len) if return_attention=True, else None
+            Updated KV cache tuple (k, v)
         """
         batch_size, seq_len, _ = x.shape
 
@@ -189,8 +196,17 @@ class CausalSelfAttention(nn.Module):
         # Value: "What does position 'j' contribute if selected?"
         v = v.transpose(1, 2)  # (batch, num_heads, seq_len, head_dim)
 
-        # Step 2: Apply RoPE to Q and K
-        q, k = self.rope(q, k)
+        # Step 2: Apply RoPE to Q and K (with position offset for KV-cache)
+        q, k = self.rope(q, k, start_pos)
+
+        # Step 2.5: KV-Cache - concatenate cached K,V with new K,V
+        if kv_cache is not None:
+            cached_k, cached_v = kv_cache
+            k = torch.cat([cached_k, k], dim=2)  # (batch, num_heads, cache_len + seq_len, head_dim)
+            v = torch.cat([cached_v, v], dim=2)
+
+        # Store updated cache
+        new_kv_cache = (k, v)
 
         # Step 3: Compute attention scores
         # scores = (Q @ K^T) / sqrt(d_k)
@@ -202,9 +218,9 @@ class CausalSelfAttention(nn.Module):
         # The mask should prevent position i from attending to positions > i
         # Hint: Create a lower-triangular matrix using torch.tril
         # Looks like something higher up will pass in the mask, so use that, otherwise redefine
-        if mask is None:
-            print("Had to create mask inside CausalSelfAttention because none was passed in.")
-            mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        # if mask is None:
+        #     print("Had to create mask inside CausalSelfAttention because none was passed in.")
+        #     mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
         
         if debug_info:
             print(f"Mask shape: {mask.shape}")  # (seq_len, seq_len)
@@ -248,7 +264,7 @@ class CausalSelfAttention(nn.Module):
         # Step 8: Apply residual dropout
         out = self.resid_dropout(out)
 
-        return out, attn_weights_for_viz
+        return out, attn_weights_for_viz, new_kv_cache
 
 
 class FeedForward(nn.Module):
@@ -296,21 +312,28 @@ class TransformerBlock(nn.Module):
         self.norm2 = RMSNorm(dim)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None,
-                return_attention: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+                return_attention: bool = False,
+                kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+                start_pos: int = 0) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask
             return_attention: If True, return attention weights
+            kv_cache: Optional KV cache from previous forward passes
+            start_pos: Starting position for RoPE when using KV-cache
         Returns:
             Output tensor (batch, seq_len, dim)
             Attention weights if return_attention=True, else None
+            Updated KV cache
         """
         # Pre-norm architecture (norm before attention/FF)
-        attn_out, attn_weights = self.attention(self.norm1(x), mask, return_attention)
+        attn_out, attn_weights, new_kv_cache = self.attention(
+            self.norm1(x), mask, return_attention, kv_cache, start_pos
+        )
         x = x + attn_out
         x = x + self.feed_forward(self.norm2(x))
-        return x, attn_weights
+        return x, attn_weights, new_kv_cache
 
 
 class DecoderOnlyTransformer(nn.Module):
@@ -365,29 +388,49 @@ class DecoderOnlyTransformer(nn.Module):
         input_ids: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
         return_attention: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[list]]:
+        kv_cache: Optional[list] = None,
+        start_pos: int = 0,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[list], Optional[list]]:
         """
         Args:
             input_ids: Input token indices (batch, seq_len)
             targets: Target token indices for training (batch, seq_len)
             return_attention: If True, return attention weights from all layers
+            kv_cache: Optional list of KV caches, one per layer
+            start_pos: Starting position for KV-cache (used with RoPE)
         Returns:
             logits: Output logits (batch, seq_len, vocab_size)
             loss: Cross-entropy loss if targets provided, else None
             attention_weights: List of attention weights per layer if return_attention=True
+            new_kv_cache: Updated list of KV caches per layer
         """
         batch_size, seq_len = input_ids.shape
 
         # Embed tokens
         x = self.token_embedding(input_ids)  # (batch, seq_len, dim)
 
-        # Create causal mask (lower triangular)
-        mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        # Create causal mask
+        if kv_cache is not None and kv_cache[0] is not None:
+            # During generation with cache: new tokens can attend to all cached + current positions
+            # Causality is already enforced by only having past tokens in the cache
+            cache_len = kv_cache[0][0].shape[2]
+            total_len = cache_len + seq_len
+            mask = torch.ones(seq_len, total_len, device=x.device)
+        elif is_causal_mask:
+            # Create causal mask (lower triangular) for training
+            mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        else:
+            # Create Non Causal Mask (all ones)
+            mask = torch.ones(seq_len, seq_len, device=x.device)
 
         # Apply transformer blocks and collect attention weights
         all_attention_weights = [] if return_attention else None
-        for block in self.blocks:
-            x, attn_weights = block(x, mask, return_attention)
+        new_kv_cache = []
+
+        for i, block in enumerate(self.blocks):
+            layer_cache = kv_cache[i] if kv_cache is not None else None
+            x, attn_weights, layer_new_cache = block(x, mask, return_attention, layer_cache, start_pos)
+            new_kv_cache.append(layer_new_cache)
             if return_attention:
                 all_attention_weights.append(attn_weights)
 
@@ -406,7 +449,7 @@ class DecoderOnlyTransformer(nn.Module):
                 ignore_index=-1,  # Ignore padding tokens
             )
 
-        return logits, loss, all_attention_weights
+        return logits, loss, all_attention_weights, new_kv_cache
 
     @torch.no_grad()
     def generate(
@@ -415,37 +458,75 @@ class DecoderOnlyTransformer(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
+        use_kv_cache: bool = True,
     ) -> torch.Tensor:
         """
-        Autoregressive generation
+        Autoregressive generation with optional KV-caching
 
         Args:
             input_ids: Starting tokens (batch, seq_len)
             max_new_tokens: Number of tokens to generate
             temperature: Sampling temperature
             top_k: Top-k sampling (if None, use full distribution)
+            use_kv_cache: If True, use KV-caching for faster inference
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
-        for _ in range(max_new_tokens):
-            # Crop context if too long
-            input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+        if use_kv_cache:
+            # Initialize KV cache as None for first forward pass
+            kv_cache = None
+            cur_pos = 0
 
-            # Forward pass
-            logits, _ = self.forward(input_context)
-            logits = logits[:, -1, :] / temperature  # Get last token logits
+            # Process the initial prompt
+            logits, _, _, kv_cache = self.forward(input_ids, kv_cache=kv_cache, start_pos=cur_pos)
+            cur_pos = input_ids.size(1)
 
-            # Optional top-k sampling
-            if top_k is not None:
-                values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < values[:, [-1]]] = -float('Inf')
+            for _ in range(max_new_tokens):
+                # Get last token logits
+                next_logits = logits[:, -1, :] / temperature
 
-            # Sample from distribution
-            probs = F.softmax(logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
+                # Optional top-k sampling
+                if top_k is not None:
+                    values, _ = torch.topk(next_logits, min(top_k, next_logits.size(-1)))
+                    next_logits[next_logits < values[:, [-1]]] = -float('Inf')
 
-            # Append to sequence
-            input_ids = torch.cat([input_ids, next_token], dim=1)
+                # Sample from distribution
+                probs = F.softmax(next_logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
+
+                # Append to sequence
+                input_ids = torch.cat([input_ids, next_token], dim=1)
+
+                # Check if we've reached max sequence length
+                if cur_pos >= self.max_seq_len:
+                    break
+
+                # Forward pass with only the new token, using cached KV
+                logits, _, _, kv_cache = self.forward(
+                    next_token, kv_cache=kv_cache, start_pos=cur_pos
+                )
+                cur_pos += 1
+        else:
+            # Original implementation without KV-cache
+            for _ in range(max_new_tokens):
+                # Crop context if too long
+                input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+
+                # Forward pass
+                logits, _, _, _ = self.forward(input_context)
+                logits = logits[:, -1, :] / temperature  # Get last token logits
+
+                # Optional top-k sampling
+                if top_k is not None:
+                    values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                    logits[logits < values[:, [-1]]] = -float('Inf')
+
+                # Sample from distribution
+                probs = F.softmax(logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
+
+                # Append to sequence
+                input_ids = torch.cat([input_ids, next_token], dim=1)
 
         return input_ids
 
@@ -486,7 +567,7 @@ def train_epoch(
         targets = actions[:, 1:]
 
         # 2. Forward pass (get logits and loss)
-        logits, loss, _ = model(inputs, targets=targets)
+        logits, loss, _, _ = model(inputs, targets=targets)
 
         # 3. Backward pass
         loss.backward()
@@ -541,7 +622,7 @@ def evaluate(
             inputs = actions[:, :-1]
             targets = actions[:, 1:]
 
-            logits, loss, _ = model(inputs, targets=targets)
+            logits, loss, _, _ = model(inputs, targets=targets)
 
             total_loss += loss.item()
             num_batches += 1
@@ -792,7 +873,7 @@ def main():
             print(f"New best model found at epoch {epoch+1} with val loss {best_val_loss:.4f}")
             checkpoint_dir = Path("checkpoints")
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
-            checkpoint_path = checkpoint_dir / f"best_model.pt"
+            checkpoint_path = checkpoint_dir / f"casual_mask_removed_best_model.pt"
             torch.save(best_model, checkpoint_path)
             print(f"Saved checkpoint to {checkpoint_path}")
         else:

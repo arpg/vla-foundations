@@ -50,7 +50,7 @@ def visualize_attention(
 
     with torch.no_grad():
         # Forward pass with attention weights
-        _, _, all_attention_weights = model(input_ids, return_attention=True)
+        _, _, all_attention_weights, _ = model(input_ids, return_attention=True)
 
     # Get attention weights for specified layer
     # Shape: (batch, num_heads, seq_len, seq_len)
@@ -121,7 +121,7 @@ def visualize_all_heads(
         input_ids = input_ids.unsqueeze(0)
 
     with torch.no_grad():
-        _, _, all_attention_weights = model(input_ids, return_attention=True)
+        _, _, all_attention_weights, _ = model(input_ids, return_attention=True)
 
     # Get attention weights for specified layer (batch, num_heads, seq_len, seq_len)
     attn_weights = all_attention_weights[layer_idx][0].cpu().numpy()  # (num_heads, seq_len, seq_len)
@@ -155,7 +155,7 @@ def visualize_all_heads(
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize trained Transformer attention patterns")
-    parser.add_argument("--checkpoint", type=str, default="checkpoints/best_model.pt",
+    parser.add_argument("--checkpoint", type=str, default="checkpoints/causal_mask_removed_best_model.pt",
                         help="Path to model checkpoint")
     parser.add_argument("--data", type=str, default="data/trajectories.pkl",
                         help="Path to trajectory data")
