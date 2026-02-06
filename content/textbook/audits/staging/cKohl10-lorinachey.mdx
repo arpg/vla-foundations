@@ -438,7 +438,7 @@ This interleaving enables the model to learn cross-modal dependencies: image tok
 
 **Per-Modality Specifications**:
 - Text tokens: $c_t \in \mathbb{R}^{32 \times 4096}$ (T5-Large embeddings, frozen)
-- Image tokens: $z_t \in \left\{1,...,8192\}^{576}$ (discrete VQ codes, learned embedding)
+- Image tokens: $z_t \in \left\{1,...,8192\right\}^{576}$ (discrete VQ codes, learned embedding)
 - Action tokens: $a_t \in \mathbb{R}^{2 \times 4096}$ (speed + curvature, linear projection)
 
 **Sequence Scale**:
@@ -815,14 +815,27 @@ The data flow proceeds as follows: (1) RGB, depth, and normal videos are separat
 - **Geometric completeness**: Depth provides metric distance; normals provide surface orientation - together sufficient for 3D reconstruction
 - **Temporal modeling**: Video diffusion naturally captures dynamics, unlike per-frame 3D estimation
 
-**Diffusion Formulation**: The model learns the joint distribution $p(v, d, n | v_0, d_0, n_0, T)$ where $v, d, n$ are the predicted RGB, depth, and normal video latents, and the conditions are the first frame's latents plus text instruction $T$.
+**Diffusion Formulation**: The model learns the joint distribution $p(v, d, n | v_0, d_0, n_0, T)$
+
+where:
+- $v, d, n$: Predicted RGB, depth, and normal video latents
+- $v_0, d_0, n_0$: First frame's RGB, depth, and normal latents
+- $T$: Text instruction
 
 **Training Objective**:
 $$
 \mathcal{L} = \mathbb{E}_{v_0, T, t, \epsilon} \left[ \left\| [\epsilon_v, \epsilon_d, \epsilon_n] - \epsilon_\theta(x_t, t, x_0, T) \right\|^2 \right]
 $$
 
-where noise is added jointly to all three modalities and the denoiser predicts all three noise components.
+where:
+- $v_0$: Ground truth RGB video latents
+- $T$: Text instruction
+- $t$: Diffusion timestep
+- $\epsilon$: Noise sampled from standard normal distribution
+- $\epsilon_v, \epsilon_d, \epsilon_n$: Noise components for RGB, depth, and normal modalities
+- $x_t$: Noisy latents at timestep $t$
+- $x_0$: Clean latents (first frame)
+- $\epsilon_\theta$: Denoising network parameterized by $\theta$
 
 ### 2.3 Input/Output Architecture
 
@@ -832,6 +845,17 @@ f_z = InputProj(z_t, z_0)  for z ∈ {v, d, n}
 h = DiT(Σ f_z, t, T)
 ```
 
+where:
+- $f_z$: Modality-specific embedding for modality $z$
+- $z_t$: Noisy latents at timestep $t$ for modality $z$
+- $z_0$: Clean latents (first frame) for modality $z$
+- $z \in \left\{v,d,n\right\}$: Modalities (RGB, depth, normal)
+- $h$: Hidden states from DiT backbone
+- $t$: Diffusion timestep
+- $T$: Text instruction
+- $\text{InputProj}$: Input projection module
+- $\text{DiT}$: Diffusion Transformer backbone
+
 **Text Conditioning**: Instructions are formatted as `[action instruction] + [robot arm name]`, e.g., "pick up apple google robot".
 This enables cross-embodiment generalization.
 
@@ -840,7 +864,15 @@ $$
 \epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \left\{v,d,n\right\}}))
 $$
 
-The Conv3D layer encodes the concatenation of input latents with predicted RGB output, enabling depth/normal predictions to condition on the RGB prediction.
+where:
+- $\epsilon^*_{d,n}$: Predicted noise for depth and normal modalities
+- $\epsilon^*_v$: Predicted noise for RGB modality
+- $h$: Hidden states from DiT backbone
+- $z_t$: Noisy latents at timestep $t$ for modality $z$
+- $z_0$: Clean latents (first frame) for modality $z$
+- $z \in \left\{v,d,n\right\}$: Modalities (RGB, depth, normal)
+- $\text{DNProj}$: Depth/Normal projection module
+- $\text{Conv3D}$: 3D convolutional layer
 
 **Zero Initialization**: All new modules are initialized with zeros, ensuring the model initially reproduces CogVideoX's RGB output before learning geometric predictions.
 This preserves pretrained knowledge.
@@ -855,6 +887,12 @@ $$
 \min_{\tilde{d}} \iint_\Omega (\tilde{n}_z \partial_u \tilde{d} + n_x)^2 + (\tilde{n}_z \partial_v \tilde{d} + n_y)^2 \, du \, dv
 $$
 
+where:
+- $\tilde{d}$: Optimized depth map
+- $\tilde{n}_z, n_x, n_y$: Normal map components (z-component and x, y components)
+- $\partial_u, \partial_v$: Partial derivatives with respect to image coordinates $u, v$
+- $\Omega$: Image domain
+
 This spatial consistency loss $L_s$ enforces that depth gradients align with normal predictions.
 
 **Temporal Consistency Loss**: Frame-by-frame optimization lacks temporal coherence.
@@ -868,12 +906,36 @@ $$
 L_c = \lambda_{cd} \left\| \tilde{D}^i \circ M^i_d - D^{i \to (i-1)} \circ M^i_d \right\|^2 + \lambda_{cb} \left\| \tilde{D}^i \circ M^i_b - D^{i \to (i-1)} \circ M^i_b \right\|^2
 $$
 
+where:
+- $L_c$: Temporal consistency loss
+- $\tilde{D}^i$: Optimized depth map at frame $i$
+- $D^{i \to (i-1)}$: Depth map at frame $i$ warped to frame $i-1$ using optical flow
+- $M^i_d$: Mask for dynamic regions at frame $i$
+- $M^i_b$: Mask for background/static regions at frame $i$
+- $\lambda_{cd}, \lambda_{cb}$: Loss weights for dynamic and background regions
+- $\circ$: Element-wise multiplication (Hadamard product)
+
 **Regularization Loss**: Prevents optimized depth from deviating too far from the generated prediction:
 $$
 L_r = \lambda_{rd} \left\| \tilde{D}^i \circ M^i_d - D^i \circ M^i_d \right\|^2 + \lambda_{rb} \left\| \tilde{D}^i \circ M^i_b - D^i \circ M^i_b \right\|^2
 $$
 
+where:
+- $L_r$: Regularization loss
+- $\tilde{D}^i$: Optimized depth map at frame $i$
+- $D^i$: Generated depth prediction at frame $i$ (before optimization)
+- $M^i_d$: Mask for dynamic regions at frame $i$
+- $M^i_b$: Mask for background/static regions at frame $i$
+- $\lambda_{rd}, \lambda_{rb}$: Regularization weights for dynamic and background regions
+- $\circ$: Element-wise multiplication (Hadamard product)
+
 **Full Objective**: $\arg\min_{\tilde{D}} (L_s + L_c + L_r)$
+
+where:
+- $\tilde{D}$: Optimized depth maps across all frames
+- $L_s$: Spatial consistency loss (normal integration)
+- $L_c$: Temporal consistency loss
+- $L_r$: Regularization loss
 
 ### 2.5 Key Architectural Trade-Offs
 
