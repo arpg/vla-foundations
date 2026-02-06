@@ -5,7 +5,7 @@
 *Scribed by Mel; presented by Lorin. No generative tools used to produce this document.*
 
 
-## Lorin: Risk tolerance in VLAs
+## Lorin: Utilizing Risk Profiles in VLAs
 ### Goal
 Change action outputs based on a risk profile. This profile should be encoded in an RL policy so the stack is risk aware. 
 
@@ -14,38 +14,50 @@ Change action outputs based on a risk profile. This profile should be encoded in
 
 ### Details
 
-**Data**: The data mix will be an "OpenVLA or Octo type dataset" - possibly OpenX. To be feasible, a small collection of simulation data on robot arm will be required for fine tuning.
+**Data**: The data mix will be an "OpenVLA or Octo type dataset" - possibly OpenXEmbodiment (OXE) dataset.
+To be feasible, a small collection of simulation data on robot arm will be required for fine tuning.
+This data will be collected via a simulator (IsaacSim/IsaacLab) in this case.
 
-**Training**: Scaling is a major concern. It will be necessary to train an RL policy and then evaluate, which will take a while. It's not necessarily compute heavy to collect a small dataset and demonstrate one safe / one unsafe trajectory that are meaningfully different. 
+**Training**: Scaling is a major concern. It will be necessary to train an RL policy and then evaluate, which will take a while.
+It's not necessarily compute heavy to collect a small dataset and demonstrate one safe / one unsafe trajectory that are meaningfully different.
 
 ### Discussion
 
 **Thanush**: What are the dataset details? 
 
-Ideally it'd be mix of internet scale and fine tuning data [but the exact mix was not specified]. If there are computational issues, it'd be necessary to try to scale down to minimum.
+Ideally it'd be mix of internet scale and fine tuning data, but an exact mix hasn't been determined yet.
+If there are computational issues, it'd be necessary to try to scale down to minimum.
+The minimum dataset would be a supervised fine-tuning dataset that I create from teleoperation in simulation.
 
-The project will start with very simple task: designating a risk zone and a safe zone. The simpler the better!
+The project will start with very simple task: designating a risk zone and a safe zone.
+The simpler the better!
 
 **Soorej**: How will the safe / unsafe zone be validated?
 
 Yes, there's a binary classification there - but it'd also be good to quantify how far inside safe zone the robot is.
+We want a full understanding of the distribution of actions possible and their rewards/costs.
 
 **Mel**: What's the base VLA?
 
-It's unclear - likely whatever combination of dataset and model has a simulation implementation for IsaacSim.
+Probably OpenVLA, Octo, or SmolVLA. Wichever provides for easier setup and future work to scale it (i.e. open model weights, full robot models).
 
 **Mel**: Safe RL's a pretty big field. Is there a particular work or niche of works you're drawing from? 
 
-There are statistical analysis tools on the RL training stage that would be applicable: some risk-aware PPO implementations, some value iteration / Bellman adjustments, and so on. The approach will tend towards a simple, tabular value iteration based approach to start. 
+There are statistical analysis tools on the RL training stage that would be applicable: some risk-aware PPO implementations, some value iteration / Bellman adjustments, and so on.
+The approach could be a simpler value iteration to start, but the literature around distributional RL with PPO is solid so that may be a good starting point.
 
-**Thanush**: Would it be better to have a sensor on the arm to help produce data / safety measurements? [unclear]
+**Thanush**: Would it be better to have a sensor on the arm to help produce data / safety measurements?
 
-When actually deploying policies in real life, if the on-arm camera goes out, we still need to determine what’s safe. 
+I think this question is largely focusing on the practicallity of a "risk-aware" VLA deployed on a robot in a HRI context.
+Additional sensors on the robot with fixed, rule-based policies that trigger an emergency stop are certainly valid.
+But there are plenty of reasons to have redunant systems and to not rely solely on rule-based vision or proximity sensors.
+When actually deploying policies in real life, if the on-arm camera goes out, we still need to determine what’s safe.
 
 ## Thanush
 
 ### Goal
-Based on TinyVLA, build a VLA stack with a new policy head to learn multiple expert action modules for different manipulation behaviors. Train this on a fragment of MetaWorld tasks, and evaluate it on related but unseen tasks, to determine generalization capabilities.
+Based on TinyVLA, build a VLA stack with a new policy head to learn multiple expert action modules for different manipulation behaviors.
+Train this on a fragment of MetaWorld tasks, and evaluate it on related but unseen tasks, to determine generalization capabilities.
 
 ### Details
 
