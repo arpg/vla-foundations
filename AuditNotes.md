@@ -51,19 +51,28 @@ Learn an explicit **safe/unsafe boundary** from rollouts (e.g., constraint model
 
 ## Zakariya Project Discussion
 
-### Pitch: 
-Inspired by partially observable markov decision processes how to assign value the information for long horizon planning. How to fine tune a VLA to quantify information value. “Emergent Temporal Abstractions inform Learing” train it on, train RL on it, instead of output of the tokens, they perform RL on the residual activation stream in each layer. Where does this application work best? You can discover this temporal abstraction works best in the middle layers.
+### Pitch / Initial Dissolve:
+The core robotic bottleneck is Autoregressive Error Accumulation. Vision-Language-Action (VLA) models typically operate in an open-loop, token-by-token manner. In this paradigm, a single quantization error in an action token leads to compounding trajectory drift that the model cannot recover from without explicit long-horizon reasoning. This proposed "delta" is the correct architectural choice because it transitions the VLA from a deterministic controller to a Stochastic Reference Policy ($\overline{\pi}$) within a formal planning framework. We know this is the problem because state-of-the-art VLA deployments fail in long-horizon tasks where error recovery and future consequences are not explicitly modeled.
 
-### Questions:
-Whats partially observable?
-The state could be, 
-What is this residual?
-You get one on each layer, and train an RL model to get extended information about long horizon tasks. Helps ground actions over longer durations. Training over single output tokens losses the temporal information. Can we gather more information and control the residuals to prevent loss of information.
-What is the value of receivng and excutuing outcomes? 
-Sometimes these outcomes are completely unnecessary observation branching to make it easier
+### Technical Delta:
 
-### Techincal Delta: (not discussed)
+The architecture fuses two distinct advancements to address current VLA limitations: 
 
+- **VLA-as-Reference ($\overline{\pi}$):** The VLA provides the prior distribution for action sampling, allowing the solver to maximize rewards while minimizing KL-divergence from the VLA’s "policy".
+
+- **VOI-Guided Branching:** Using a meta-level decision space (the VOI-POMDP), the planner selectively disregards observations when the Value of Information (VOI)—the expected performance gain from reasoning about observations—is low.
+
+### Information Decay:
+
+Although this approach extends the reasoning horizon beyond pure VLA action execution, it can still lose information through **adherence constraints** and **selective observation processing**:
+
+- **Reference Adherence (KL Bottleneck):** In the reference-based POMDP objective, the KL-divergence penalty includes a tuning parameter that directly controls how much the planner is allowed to deviate from the base VLA policy $\overline{\pi}$. If this penalty is set too high, the solver will remain overly coupled to $\overline{\pi}$, suppressing corrective deviations even when the belief state indicates compounding error or looming failure. If set too low, the planner may discard useful inductive bias from $\overline{\pi}$ and waste queries exploring implausible action sequences.
+
+- **Observation Gating (VOI Bottleneck):** VOI-MCP introduces a criterion parameter $\kappa$ that governs when the planner branches on observations. This parameter must be tuned carefully: if $\kappa$ is too aggressive, the planner may **ignore critical observations** (e.g., obstacle proximity, contact events, slip) that are necessary for task success and safe execution. If $\kappa$ is too conservative, the search reverts toward exhaustive action-observation branching, reintroducing the computational dilution that makes long-horizon reasoning intractable.
+
+### Physicality Gap
+
+This approach is still subject to the physicality gaps of using a VLA-only approach, including dynamics mismatch from learning on noisy data, action tokenization resolution etc. Additionally, any assumptions on the world model used in online tree search are prone to clash with real-world observations and transitions.
 
 ## Jimmy Project Discussion
 
