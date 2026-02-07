@@ -438,7 +438,7 @@ This interleaving enables the model to learn cross-modal dependencies: image tok
 
 **Per-Modality Specifications**:
 - Text tokens: $c_t \in \mathbb{R}^{32 \times 4096}$ (T5-Large embeddings, frozen)
-- Image tokens: $z_t \in \left\{1,...,8192\right\}^{576}$ (discrete VQ codes, learned embedding)
+- Image tokens: $z_t \in \{1,...,8192\}^{576}$ (discrete VQ codes, learned embedding)
 - Action tokens: $a_t \in \mathbb{R}^{2 \times 4096}$ (speed + curvature, linear projection)
 
 **Sequence Scale**:
