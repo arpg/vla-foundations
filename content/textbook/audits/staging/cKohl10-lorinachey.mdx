@@ -402,7 +402,7 @@ The tokenizer incorporates inductive biases from DINO [30] (self-supervised visi
 
 For input image $x_t$, the encoder produces discrete tokens:
 $$
-z_t = E_\theta(x_t) \in \left\{1, ..., K\right\}^{n}
+z_t = E_\theta(x_t) \in \lbrace 1, ..., K \rbrace^{n}
 $$
 
 where quantization uses nearest-neighbor lookup from learnable embedding table.
@@ -438,7 +438,7 @@ This interleaving enables the model to learn cross-modal dependencies: image tok
 
 **Per-Modality Specifications**:
 - Text tokens: $c_t \in \mathbb{R}^{32 \times 4096}$ (T5-Large embeddings, frozen)
-- Image tokens: $z_t \in \{1,...,8192\}^{576}$ (discrete VQ codes, learned embedding)
+- Image tokens: $z_t \in \lbrace 1,...,8192 \rbrace^{576}$ (discrete VQ codes, learned embedding)
 - Action tokens: $a_t \in \mathbb{R}^{2 \times 4096}$ (speed + curvature, linear projection)
 
 **Sequence Scale**:
@@ -490,7 +490,7 @@ where:
 
 GAIA-1's design makes three critical trade-offs that shape its capabilities and limitations:
 
-**Discrete Tokens vs. Continuous Latents.** GAIA-1 uses discrete tokenization ($z \in \left\{1,...,K\right\}^n$) rather than continuous latent representations.
+**Discrete Tokens vs. Continuous Latents.** GAIA-1 uses discrete tokenization ($z \in \lbrace 1,...,K \rbrace^n$) rather than continuous latent representations.
 This enables LLM-style next-token prediction and benefits from proven scaling laws, but introduces quantization error.
 Each image is compressed to 7,488 bits (576 tokens × 13 bits), a 470× compression that discards fine-grained spatial information.
 The DINO distillation loss biases tokens toward semantic categories over geometric precision - beneficial for high-level scene understanding but potentially harmful for safety-critical details like exact distances.
@@ -849,7 +849,7 @@ where:
 - $f_z$: Modality-specific embedding for modality $z$
 - $z_t$: Noisy latents at timestep $t$ for modality $z$
 - $z_0$: Clean latents (first frame) for modality $z$
-- $z \in \left\{v,d,n\right\}$: Modalities (RGB, depth, normal)
+- $z \in \lbrace v,d,n \rbrace$: Modalities (RGB, depth, normal)
 - $h$: Hidden states from DiT backbone
 - $t$: Diffusion timestep
 - $T$: Text instruction
@@ -861,7 +861,7 @@ This enables cross-embodiment generalization.
 
 **Output Design**: RGB uses the original CogVideoX output projector. Depth and normal use additional modules:
 $$
-\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \left\{v,d,n\right\}}))
+\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \lbrace v,d,n \rbrace}))
 $$
 
 where:
@@ -870,7 +870,7 @@ where:
 - $h$: Hidden states from DiT backbone
 - $z_t$: Noisy latents at timestep $t$ for modality $z$
 - $z_0$: Clean latents (first frame) for modality $z$
-- $z \in \left\{v,d,n\right\}$: Modalities (RGB, depth, normal)
+- $z \in \lbrace v,d,n \rbrace$: Modalities (RGB, depth, normal)
 - $\text{DNProj}$: Depth/Normal projection module
 - $\text{Conv3D}$: 3D convolutional layer
 
@@ -897,7 +897,7 @@ This spatial consistency loss $L_s$ enforces that depth gradients align with nor
 
 **Temporal Consistency Loss**: Frame-by-frame optimization lacks temporal coherence.
 TesserAct uses optical flow (RAFT [59]) to enforce consistency:
-- **Static regions**: Pixels with small optical flow magnitude ($\left\|F^i\right\| \leq c$)
+- **Static regions**: Pixels with small optical flow magnitude ($\|F^i\| \leq c$)
 - **Dynamic regions**: Moving pixels
 - **Background**: Static regions consistent across frames
 
