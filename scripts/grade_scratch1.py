@@ -439,11 +439,210 @@ class ReportGenerator:
         self.chris_bot_image = chris_bot_image
 
     def generate_report(self, report: GradingReport) -> str:
-        """Generate complete markdown report"""
+        """Generate complete markdown report (DEPRECATED: use generate_public_report or generate_private_report)"""
         if report.critical_failure:
             return self._generate_failure_report(report)
         else:
             return self._generate_standard_report(report)
+
+    def generate_public_report(self, report: GradingReport) -> str:
+        """Generate public-facing report for GitHub PR (feedback-focused, no numeric scores)"""
+        if report.critical_failure:
+            return self._generate_failure_report(report)
+
+        # Group test results by category
+        results_by_category = {}
+        for result in report.test_results:
+            if result.category not in results_by_category:
+                results_by_category[result.category] = []
+            results_by_category[result.category].append(result)
+
+        md = f"""![Chris-Bot]({self.chris_bot_image})
+### 🤖 Chris's Grading Assistant - Feedback Report
+
+**Student:** @{report.author}
+**PR:** #{report.pr_number}
+**Branch:** `{report.branch_name}`
+
+Hi! I've reviewed your submission. Here's what I found:
+
+---
+
+## 📊 Component Feedback
+
+"""
+        # Causal Attention
+        causal_results = results_by_category.get("causal_attention", [])
+        causal_passed = all(r.passed for r in causal_results)
+        md += f"### {'✅' if causal_passed else '❌'} Causal Self-Attention\n\n"
+        for result in causal_results:
+            md += f"{result.feedback}\n\n"
+
+        # RMSNorm
+        rmsnorm_results = results_by_category.get("rmsnorm", [])
+        rmsnorm_passed = all(r.passed for r in rmsnorm_results)
+        md += f"### {'✅' if rmsnorm_passed else '❌'} RMSNorm\n\n"
+        for result in rmsnorm_results:
+            md += f"{result.feedback}\n\n"
+
+        # Training
+        training_results = results_by_category.get("training", [])
+        training_passed = all(r.passed for r in training_results)
+        md += f"### {'✅' if training_passed else '⚠️'} Training Loop\n\n"
+        for result in training_results:
+            md += f"{result.feedback}\n\n"
+
+        # RoPE
+        rope_results = results_by_category.get("rope", [])
+        rope_passed = all(r.passed for r in rope_results)
+        md += f"### {'✅' if rope_passed else '❌'} RoPE Embeddings\n\n"
+        for result in rope_results:
+            md += f"{result.feedback}\n\n"
+
+        # Code Quality
+        quality_results = results_by_category.get("code_quality", [])
+        quality_passed = all(r.passed for r in quality_results)
+        md += f"### {'✅' if quality_passed else '❌'} Code Quality\n\n"
+        if quality_passed:
+            md += "Your code imports and runs cleanly. Nice! ✨\n\n"
+        else:
+            for result in quality_results:
+                md += f"{result.feedback}\n\n"
+
+        # Report
+        md += "---\n\n## 📝 Documentation & Analysis\n\n"
+        if report.has_report:
+            md += "✅ Report submitted! I found:\n"
+            for f in report.report_files:
+                md += f"- `{f}`\n"
+            md += "\nYour instructor will review the quality of your analysis.\n\n"
+        else:
+            md += "⚠️ **No report found!**\n\n"
+
+        # Mastery
+        if report.has_mastery:
+            md += "---\n\n## 🎯 Mastery Features Detected\n\n"
+            md += "I noticed you implemented:\n"
+            for feature in report.mastery_features:
+                md += f"- {feature}\n"
+            md += "\nGreat work going beyond the requirements! Your instructor will verify implementation quality.\n\n"
+
+        md += "---\n\n"
+        md += "> *Grading is automated but reviewed by an instructor. If you have questions, reach out on Slack!*\n"
+
+        return md
+
+    def generate_private_report(self, report: GradingReport) -> str:
+        """Generate private report for gradebook (score-focused)"""
+        # Group test results by category
+        results_by_category = {}
+        for result in report.test_results:
+            if result.category not in results_by_category:
+                results_by_category[result.category] = []
+            results_by_category[result.category].append(result)
+
+        # Calculate category scores
+        causal_results = results_by_category.get("causal_attention", [])
+        causal_points = sum(r.points_earned for r in causal_results)
+        causal_max = sum(r.points_possible for r in causal_results)
+
+        rmsnorm_results = results_by_category.get("rmsnorm", [])
+        rmsnorm_points = sum(r.points_earned for r in rmsnorm_results)
+        rmsnorm_max = sum(r.points_possible for r in rmsnorm_results)
+
+        training_results = results_by_category.get("training", [])
+        training_points = sum(r.points_earned for r in training_results)
+        training_max = sum(r.points_possible for r in training_results)
+
+        rope_results = results_by_category.get("rope", [])
+        rope_points = sum(r.points_earned for r in rope_results)
+        rope_max = sum(r.points_possible for r in rope_results)
+
+        quality_results = results_by_category.get("code_quality", [])
+        quality_points = sum(r.points_earned for r in quality_results)
+        quality_max = sum(r.points_possible for r in quality_results)
+
+        automated_total = causal_points + rmsnorm_points + training_points + rope_points + quality_points
+        automated_max = causal_max + rmsnorm_max + training_max + rope_max + quality_max
+
+        percentage = (report.total_points / report.max_points) * 100 if report.max_points > 0 else 0
+
+        md = f"""# PRIVATE GRADING REPORT - PR #{report.pr_number}
+
+**Student:** {report.author}
+**Branch:** {report.branch_name}
+**Graded:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+---
+
+## AUTOMATED SCORES ({automated_total}/{automated_max} pts)
+
+| Component | Score | Max | Details |
+|-----------|-------|-----|---------|
+| Causal Attention | {causal_points} | {causal_max} | {"✅ Passed" if causal_points == causal_max else "❌ Failed"} |
+| RMSNorm | {rmsnorm_points} | {rmsnorm_max} | {"✅ Passed" if rmsnorm_points == rmsnorm_max else "❌ Failed"} |
+| Training | {training_points} | {training_max} | {"✅ Passed" if training_points == training_max else "❌ Failed"} |
+| RoPE | {rope_points} | {rope_max} | {"✅ Passed" if rope_points == rope_max else "❌ Failed"} |
+| Code Quality | {quality_points} | {quality_max} | {"✅ Passed" if quality_points == quality_max else "❌ Failed"} |
+
+---
+
+## MANUAL REVIEW REQUIRED
+
+### Documentation (0-30 pts): _____ / 30
+
+Report files found:
+"""
+        if report.has_report:
+            for f in report.report_files:
+                md += f"- {f}\n"
+        else:
+            md += "- ⚠️ NO REPORT FOUND\n"
+
+        md += """
+Check for:
+- [ ] Loss curve visualization (clear, labeled)
+- [ ] Attention map visualization (interpretable)
+- [ ] The Audit: causal mask removal analysis
+
+### Mastery Components (0-10 pts): _____ / 10
+
+"""
+        if report.has_mastery:
+            md += "Features detected:\n"
+            for feature in report.mastery_features:
+                md += f"- {feature}\n"
+        else:
+            md += "- No mastery features detected\n"
+
+        md += f"""
+---
+
+## FINAL SCORE
+
+**Automated:** {automated_total}/{automated_max}
+**Documentation:** _____ / 30
+**Mastery:** _____ / 10
+**Adjustments:** _____ (e.g., -5 for missing matplotlib)
+
+**TOTAL:** _____ / 100
+
+---
+
+## TEST DETAILS
+
+"""
+        # Detailed test results
+        for category, results in results_by_category.items():
+            md += f"\n### {category.replace('_', ' ').title()}\n\n"
+            for result in results:
+                status = "✅ PASS" if result.passed else "❌ FAIL"
+                md += f"- **{result.name}**: {status} ({result.points_earned}/{result.points_possible} pts)\n"
+                md += f"  - {result.feedback}\n"
+                if result.traceback:
+                    md += f"  - Error: `{result.traceback[:200]}...`\n"
+
+        return md
 
     def _generate_standard_report(self, report: GradingReport) -> str:
         """Generate standard grading report"""
@@ -621,15 +820,22 @@ Your code could not be imported or executed. Here's what went wrong:
 """
 
     def save_report(self, report: GradingReport, output_dir: Path):
-        """Save report to file"""
+        """Save both public and private reports"""
         output_dir.mkdir(parents=True, exist_ok=True)
-        filename = output_dir / f"PR_{report.pr_number}_report.md"
 
-        content = self.generate_report(report)
-        filename.write_text(content)
+        # Save public report (for GitHub PR comment)
+        public_file = output_dir / f"PR_{report.pr_number}_public.md"
+        public_content = self.generate_public_report(report)
+        public_file.write_text(public_content)
 
-        print(f"  📄 Report saved: {filename}")
-        return filename
+        # Save private report (for gradebook)
+        private_file = output_dir / f"PR_{report.pr_number}_private.md"
+        private_content = self.generate_private_report(report)
+        private_file.write_text(private_content)
+
+        print(f"  📄 Public report: {public_file}")
+        print(f"  📄 Private report: {private_file}")
+        return public_file, private_file
 
 
 # ============================================================================
