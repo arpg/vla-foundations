@@ -356,11 +356,15 @@ class Scorer:
 
             if category:
                 passed = outcome in ["passed", "PASSED"]
+                skipped = outcome in ["skipped", "SKIPPED"]
                 points_earned = points_possible if passed else 0
 
                 # Get feedback
                 feedback_key = test_name.replace("test_", "")
-                feedback = self._get_feedback(feedback_key, passed, test.get("call", {}))
+                if skipped:
+                    feedback = "⏭️ Test skipped (likely due to import failure or missing dependencies)"
+                else:
+                    feedback = self._get_feedback(feedback_key, passed, test.get("call", {}))
 
                 scored_results.append(TestResult(
                     name=test_name,
