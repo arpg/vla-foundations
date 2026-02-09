@@ -527,7 +527,13 @@ class ReportGenerator:
         quality_points = sum(r.points_earned for r in quality_results)
         quality_max = sum(r.points_possible for r in quality_results)
         md += f"### {'✅' if quality_points == quality_max else '❌'} Code Quality ({quality_points}/{quality_max} pts)\n\n"
-        md += "Your code compiled and ran without critical errors. Nice! ✨\n\n"
+        if quality_points == quality_max:
+            md += "Your code compiled and ran without critical errors. Nice! ✨\n\n"
+        else:
+            for result in quality_results:
+                md += f"{result.feedback}\n\n"
+                if result.traceback and not result.passed:
+                    md += f"<details>\n<summary>🔍 Error Details</summary>\n\n```\n{result.traceback[:500]}\n```\n</details>\n\n"
 
         # Report (Manual Review)
         md += "---\n\n## 📝 Report & Documentation (30 pts): **NEEDS MANUAL REVIEW**\n\n"
