@@ -623,7 +623,7 @@ Check for:
 **Automated:** {automated_total}/{automated_max}
 **Documentation:** _____ / 30
 **Mastery:** _____ / 10
-**Adjustments:** _____ (e.g., -5 for missing matplotlib)
+**Adjustments:** _____ (e.g., -1 for programmatic fixes like missing dependencies)
 
 **TOTAL:** _____ / 100
 
