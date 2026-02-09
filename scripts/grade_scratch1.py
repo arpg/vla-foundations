@@ -252,8 +252,8 @@ class TestRunner:
         output = result.stdout + result.stderr
 
         # Extract test results using regex
-        # Pattern matches: test_scratch1_rigor.py::test_name PASSED/FAILED
-        test_pattern = r"(test_\w+)\s+(PASSED|FAILED|ERROR)"
+        # Pattern matches: test_scratch1_rigor.py::test_name PASSED/FAILED/SKIPPED
+        test_pattern = r"::(test_\w+)\s+(PASSED|FAILED|ERROR|SKIPPED)"
         matches = re.findall(test_pattern, output, re.MULTILINE)
 
         tests = []
