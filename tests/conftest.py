@@ -57,7 +57,6 @@ def inject_solutions_for_internal_tests(request):
 
     if not internal_tests:
         # Not running internal tests, skip solution injection
-        yield
         return
 
     # Check if dev_utils.py exists (instructor environment)
@@ -65,7 +64,6 @@ def inject_solutions_for_internal_tests(request):
     if not dev_utils_path.exists():
         # Skip injection in student/grading environment
         print("\n=== Skipping solution injection (dev_utils.py not found) ===")
-        yield
         return
 
     # Inject solutions

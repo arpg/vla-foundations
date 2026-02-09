@@ -165,25 +165,51 @@ class TestRunner:
         self.test_file = repo_path / "tests" / "internal" / "test_scratch1_rigor.py"
 
     def inject_internal_tests(self):
-        """Copy internal tests from main branch to current branch"""
+        """Copy internal tests and dependencies from main branch to current branch"""
         try:
-            # Get test file content from main branch
+            # Inject test files
+            (self.repo_path / "tests" / "internal").mkdir(parents=True, exist_ok=True)
+
+            for filename in ["test_scratch1_rigor.py", "__init__.py"]:
+                result = subprocess.run(
+                    ["git", "show", f"main:tests/internal/{filename}"],
+                    cwd=self.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                (self.repo_path / "tests" / "internal" / filename).write_text(result.stdout)
+
+            # Inject conftest.py
             result = subprocess.run(
-                ["git", "show", f"main:tests/internal/test_scratch1_rigor.py"],
+                ["git", "show", f"main:tests/conftest.py"],
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
                 check=True
             )
+            (self.repo_path / "tests" / "conftest.py").write_text(result.stdout)
 
-            # Ensure tests/internal directory exists
-            (self.repo_path / "tests" / "internal").mkdir(parents=True, exist_ok=True)
+            # Inject pyproject.toml for platform-specific deps
+            result = subprocess.run(
+                ["git", "show", f"main:pyproject.toml"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            (self.repo_path / "pyproject.toml").write_text(result.stdout)
 
-            # Write the test file
-            self.test_file.write_text(result.stdout)
-            print(f"  ✓ Internal tests injected")
+            # Remove old lock and sync
+            lock_file = self.repo_path / "uv.lock"
+            if lock_file.exists():
+                lock_file.unlink()
+
+            subprocess.run(["uv", "sync"], cwd=self.repo_path, capture_output=True, check=True)
+
+            print(f"  ✓ Internal tests and dependencies injected")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to get internal tests from main branch: {e.stderr}")
+            raise RuntimeError(f"Failed to inject tests/dependencies: {e.stderr}")
 
     def run_tests(self) -> Dict[str, any]:
         """
