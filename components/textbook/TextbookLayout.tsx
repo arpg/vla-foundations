@@ -21,13 +21,14 @@ export function TextbookLayout({ children }: TextbookLayoutProps) {
         </article>
         
         {/* Table of Contents - Right sidebar */}
-        <aside className="hidden xl:block w-64 border-l border-gray-200 bg-gray-50 p-6 overflow-y-auto h-screen sticky top-0">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        <aside className="hidden xl:block w-64 border-l border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 p-6 overflow-y-auto h-screen sticky top-0">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-teal-500 rounded-full"></span>
             On This Page
           </div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-slate-600">
             {/* TOC will be populated dynamically */}
-            <p className="text-xs italic">Table of contents</p>
+            <p className="text-xs italic text-slate-500">Table of contents</p>
           </div>
         </aside>
       </main>

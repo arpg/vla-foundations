@@ -57,7 +57,8 @@ export function AuditLayout({ children, chapters, isReviewMode = false, prNumber
         </article>
 
         <aside className="hidden xl:block w-72 border-l border-slate-200 bg-gradient-to-b from-slate-50 to-white p-8 overflow-y-auto h-screen sticky top-0">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 pb-2 border-b border-slate-200">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 pb-2 border-b border-slate-200 flex items-center gap-2">
+            <span className="w-1 h-4 bg-teal-500 rounded-full"></span>
             On This Page
           </div>
           <div className="text-sm text-slate-600">
