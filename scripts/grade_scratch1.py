@@ -151,7 +151,14 @@ class GitManager:
 
         if self.had_stash:
             print("  📦 Restoring stashed changes...")
-            subprocess.run(["git", "stash", "pop"], cwd=self.repo_path, check=True)
+            result = subprocess.run(
+                ["git", "stash", "pop"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                print(f"  ⚠️  Warning: Stash pop had conflicts. Resolve manually if needed.")
 
 
 # ============================================================================
