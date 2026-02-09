@@ -567,7 +567,7 @@ Models from 0.65M to 6.5B parameters (10,000× range) follow smooth power-law cu
 - **Inference latency** worsens with scale due to autoregressive generation
 
 **Data Wall.** Unlike LLMs with near-infinite web text, driving video is scarce.
-GAIA-1's 4,700 hours represents ~94,000 miles - containing essentially zero safety-critical events (accidents occur at ~$10^{-6}$/mile).
+GAIA-1's 4,700 hours represents $\approx 94{,}000$ miles - containing essentially zero safety-critical events (accidents occur at $\approx 10^{-6}$ per mile).
 No amount of scaling can teach the model to predict scenarios absent from training.
 
 ---
@@ -581,9 +581,9 @@ No amount of scaling can teach the model to predict scenarios absent from traini
 For one world model forward pass predicting 576 tokens, each step requires full sequence attention over 15,860 tokens.
 Estimated inference: ~29 seconds per frame on A100, approximately **180× slower than real-time** at 6.25 Hz.
 
-**Hardware Reality Check**: GAIA-1 requires ~$1.15 \times 10^{17}$ FLOPs per frame.
-Even an H100 (~2,000 TFLOPS) achieves only ~0.02 frames/sec.
-On automotive hardware (NVIDIA Orin, ~67 TFLOPS), the gap is 3-4 orders of magnitude.
+**Hardware Reality Check**: GAIA-1 requires $\approx 1.15 \times 10^{17}$ FLOPs per frame.
+Even an H100 ($\approx 2{,}000$ TFLOPS) achieves only $\approx 0.02$ frames/sec.
+On automotive hardware (NVIDIA Orin, $\approx 67$ TFLOPS), the gap is 3-4 orders of magnitude.
 
 ### 4.2 Benchmark Critique
 
