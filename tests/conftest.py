@@ -48,7 +48,8 @@ def inject_solutions_for_internal_tests(request):
     Automatically inject solutions before internal tests run.
     Reset after all tests complete.
 
-    Only activates when running tests from tests/internal/ directory.
+    Only activates when running tests from tests/internal/ directory
+    AND when dev_utils.py exists (i.e., in instructor environment).
     """
     # Check if we're running internal tests
     test_items = [item for item in request.session.items]
@@ -56,6 +57,13 @@ def inject_solutions_for_internal_tests(request):
 
     if not internal_tests:
         # Not running internal tests, skip solution injection
+        return
+
+    # Check if dev_utils.py exists (instructor environment)
+    dev_utils_path = Path(__file__).parent.parent / "scripts" / "dev_utils.py"
+    if not dev_utils_path.exists():
+        # Skip injection in student/grading environment
+        print("\n=== Skipping solution injection (dev_utils.py not found) ===")
         return
 
     # Inject solutions
