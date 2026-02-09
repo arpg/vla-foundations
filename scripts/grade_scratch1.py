@@ -141,8 +141,9 @@ class GitManager:
         """Restore to original branch and unstash if needed"""
         if self.original_branch:
             print(f"  ↩ Returning to branch: {self.original_branch}")
+            # Use -f to force checkout, discarding any injected changes
             subprocess.run(
-                ["git", "checkout", self.original_branch],
+                ["git", "checkout", "-f", self.original_branch],
                 cwd=self.repo_path,
                 check=True,
                 capture_output=True
