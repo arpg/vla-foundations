@@ -823,9 +823,8 @@ where:
 - $T$: Text instruction
 
 **Training Objective**:
-$$
-\mathcal{L} = \mathbb{E}_{v_0, T, t, \epsilon} [ \| [\epsilon_v, \epsilon_d, \epsilon_n] - \epsilon_\theta(x_t, t, x_0, T) \|^2 ]
-$$
+
+$\mathcal{L} = \mathbb{E}_{v_0, T, t, \epsilon} [ \| [\epsilon_v, \epsilon_d, \epsilon_n] - \epsilon_\theta(x_t, t, x_0, T) \|^2 ]$
 
 where:
 - $v_0$: Ground truth RGB video latents
@@ -860,9 +859,8 @@ where:
 This enables cross-embodiment generalization.
 
 **Output Design**: RGB uses the original CogVideoX output projector. Depth and normal use additional modules:
-$$
-\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \lbrace v,d,n \rbrace}))
-$$
+
+$\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \lbrace v,d,n \rbrace}))$
 
 where:
 - $\epsilon^*_{d,n}$: Predicted noise for depth and normal modalities
@@ -883,9 +881,8 @@ After generating RGB-DN videos, TesserAct reconstructs temporally consistent 4D 
 
 **Normal Integration**: Raw depth predictions are often coarse with tilted planes.
 Normal maps provide surface orientation constraints that refine depth via integration:
-$$
-\min_{\tilde{d}} \iint_\Omega (\tilde{n}_z \partial_u \tilde{d} + n_x)^2 + (\tilde{n}_z \partial_v \tilde{d} + n_y)^2 \, du \, dv
-$$
+
+$\min_{\tilde{d}} \iint_\Omega (\tilde{n}_z \partial_u \tilde{d} + n_x)^2 + (\tilde{n}_z \partial_v \tilde{d} + n_y)^2 \, du \, dv$
 
 where:
 - $\tilde{d}$: Optimized depth map
@@ -902,9 +899,8 @@ TesserAct uses optical flow (RAFT [59]) to enforce consistency:
 - **Background**: Static regions consistent across frames
 
 The consistency loss enforces depth agreement for corresponding pixels across frames:
-$$
-L_c = \lambda_{cd} \left\| \tilde{D}^i \circ M^i_d - D^{i \to (i-1)} \circ M^i_d \right\|^2 + \lambda_{cb} \left\| \tilde{D}^i \circ M^i_b - D^{i \to (i-1)} \circ M^i_b \right\|^2
-$$
+
+$L_c = \lambda_{cd} \left\| \tilde{D}^i \circ M^i_d - D^{i \to (i-1)} \circ M^i_d \right\|^2 + \lambda_{cb} \left\| \tilde{D}^i \circ M^i_b - D^{i \to (i-1)} \circ M^i_b \right\|^2$
 
 where:
 - $L_c$: Temporal consistency loss
@@ -916,9 +912,8 @@ where:
 - $\circ$: Element-wise multiplication (Hadamard product)
 
 **Regularization Loss**: Prevents optimized depth from deviating too far from the generated prediction:
-$$
-L_r = \lambda_{rd} \left\| \tilde{D}^i \circ M^i_d - D^i \circ M^i_d \right\|^2 + \lambda_{rb} \left\| \tilde{D}^i \circ M^i_b - D^i \circ M^i_b \right\|^2
-$$
+
+$L_r = \lambda_{rd} \left\| \tilde{D}^i \circ M^i_d - D^i \circ M^i_d \right\|^2 + \lambda_{rb} \left\| \tilde{D}^i \circ M^i_b - D^i \circ M^i_b \right\|^2$
 
 where:
 - $L_r$: Regularization loss
