@@ -824,7 +824,7 @@ where:
 
 **Training Objective**:
 
-$\mathcal{L} = \mathbb{E}_{v_0, T, t, \epsilon} \left[ \left\| [\epsilon_v, \epsilon_d, \epsilon_n] - \epsilon_\theta(x_t, t, x_0, T) \right\|^2 \right]$
+$\mathcal{L} = \mathbb{E}_{v_0, T, t, \epsilon} \left[ \| [\epsilon_v, \epsilon_d, \epsilon_n] - \epsilon_\theta(x_t, t, x_0, T) \|^2 \right]$
 
 where:
 - $v_0$: Ground truth RGB video latents
@@ -860,14 +860,7 @@ This enables cross-embodiment generalization.
 
 **Output Design**: RGB uses the original CogVideoX output projector. Depth and normal use additional modules:
 
-$\epsilon^*_{d,n} =
-\mathrm{DNProj}\!\left(
-h,\,
-\mathrm{Conv3D}\!\left(
-\epsilon^*_v,\,
-\left( z_t;\, z_0 \right)_{z \in \{v,d,n\}}
-\right)
-\right)$
+$\epsilon^*_{d,n} = \text{DNProj}\left(h, \text{Conv3D}\left(\epsilon^*_v, \left[z_t; z_0\right]_{z \in \lbrace v,d,n \rbrace}\right)\right)$
 
 where:
 - $\epsilon^*_{d,n}$: Predicted noise for depth and normal modalities
