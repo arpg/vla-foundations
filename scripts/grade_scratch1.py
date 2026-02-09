@@ -164,6 +164,27 @@ class TestRunner:
         self.repo_path = repo_path
         self.test_file = repo_path / "tests" / "internal" / "test_scratch1_rigor.py"
 
+    def inject_internal_tests(self):
+        """Copy internal tests from main branch to current branch"""
+        try:
+            # Get test file content from main branch
+            result = subprocess.run(
+                ["git", "show", f"main:tests/internal/test_scratch1_rigor.py"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            # Ensure tests/internal directory exists
+            (self.repo_path / "tests" / "internal").mkdir(parents=True, exist_ok=True)
+
+            # Write the test file
+            self.test_file.write_text(result.stdout)
+            print(f"  ✓ Internal tests injected")
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to get internal tests from main branch: {e.stderr}")
+
     def run_tests(self) -> Dict[str, any]:
         """
         Run pytest on internal tests
@@ -593,6 +614,9 @@ class Scratch1Grader:
         try:
             # Checkout PR branch
             branch_name, author = self.git_manager.checkout_pr_branch(pr_number)
+
+            # Inject internal tests into student's branch
+            self.test_runner.inject_internal_tests()
 
             # Run tests
             test_results = self.test_runner.run_tests()
