@@ -9,11 +9,16 @@ Students must complete the TODO sections for:
 3. Training loop
 """
 
+import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from typing import Optional, Tuple    
+import pickle
+from pathlib import Path
+from typing import Optional, Tuple, Union
+
+from generate_data import create_dataloaders, generate_dataset    
 
 class RMSNorm(nn.Module):
     """
@@ -30,9 +35,8 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma)
-        # Hint: Use nn.Parameter with torch.ones
-        self.scale = None  # REPLACE THIS LINE
+        # Learnable scale parameter (gamma)
+        self.scale = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -41,15 +45,10 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm
-        # Step 1: Compute RMS (root mean square) along the last dimension
-        # Step 2: Normalize by dividing x by RMS
-        # Step 3: Apply learnable scale parameter
-
-        # HINT: Use torch.mean, torch.rsqrt for efficiency
-        # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-        raise NotImplementedError("TODO: Implement RMSNorm forward pass")
+        # RMS = sqrt(mean(x^2) + eps); use rsqrt for efficiency: 1/sqrt(...)
+        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        # Normalize: x / RMS, then apply learned scale
+        return x * rms * self.scale
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -140,49 +139,53 @@ class CausalSelfAttention(nn.Module):
         # Rotary embeddings
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, return_attn_weights: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask (seq_len, seq_len)
+            return_attn_weights: If True, return (output, attn_weights)
         Returns:
-            Output tensor (batch, seq_len, dim)
+            Output tensor (batch, seq_len, dim), or (output, attn_weights) if return_attn_weights
         """
         batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention
-
         # Step 1: Project input to Q, K, V
-        # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
-        # Split into Q, K, V and reshape for multi-head attention
-        # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
+        qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
+        qkv = qkv.view(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, batch, num_heads, seq_len, head_dim)
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
         # Step 2: Apply RoPE to Q and K
-        # q, k = self.rope(q, k)
+        q, k = self.rope(q, k)
 
-        # Step 3: Compute attention scores
-        # scores = (Q @ K^T) / sqrt(d_k)
-        # Hint: Use torch.matmul or @ operator
-        # Shape should be (batch, num_heads, seq_len, seq_len)
+        # Step 3: Compute attention scores: softmax(QK^T / sqrt(d_k))
+        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # (batch, num_heads, seq_len, seq_len)
 
-        # Step 4: Apply causal mask
-        # The mask should prevent position i from attending to positions > i
-        # Hint: Create a lower-triangular matrix using torch.tril
-        # Set masked positions to -inf BEFORE softmax
-        # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
+        # Step 4: Apply causal mask (prevent attending to future tokens)
+        # Lower triangular: 1 where i >= j (can attend), 0 where j > i (cannot attend)
+        if mask is not None:
+            causal_mask = mask
+        else:
+            causal_mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+        scores = scores.masked_fill(causal_mask == 0, float('-inf'))
 
         # Step 5: Apply softmax and dropout
-        # attn_weights = F.softmax(scores, dim=-1)
-        # attn_weights = self.attn_dropout(attn_weights)
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.attn_dropout(attn_weights)
 
         # Step 6: Apply attention to values
-        # out = attn_weights @ V
+        out = torch.matmul(attn_weights, v)  # (batch, num_heads, seq_len, head_dim)
 
         # Step 7: Reshape and project back
-        # Concatenate heads and apply output projection
-        # Hint: Use .transpose() and .contiguous().view() to reshape
+        out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.dim)
+        out = self.resid_dropout(self.out_proj(out))
 
-        raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
+        if return_attn_weights:
+            return out, attn_weights.detach()
+        return out
 
 
 class FeedForward(nn.Module):
@@ -229,18 +232,26 @@ class TransformerBlock(nn.Module):
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        return_attn_weights: bool = False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask
+            return_attn_weights: If True, return (output, attn_weights)
         Returns:
-            Output tensor (batch, seq_len, dim)
+            Output tensor, or (output, attn_weights) if return_attn_weights
         """
-        # Pre-norm architecture (norm before attention/FF)
-        x = x + self.attention(self.norm1(x), mask)
+        attn_out = self.attention(self.norm1(x), mask, return_attn_weights=return_attn_weights)
+        if return_attn_weights:
+            attn_out, attn_weights = attn_out
+        x = x + attn_out
         x = x + self.feed_forward(self.norm2(x))
-        return x
+        return (x, attn_weights) if return_attn_weights else x
 
 
 class DecoderOnlyTransformer(nn.Module):
@@ -294,14 +305,18 @@ class DecoderOnlyTransformer(nn.Module):
         self,
         input_ids: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        return_attn_weights: bool = False,
+    ) -> Union[
+        Tuple[torch.Tensor, Optional[torch.Tensor]],
+        Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor],
+    ]:
         """
         Args:
             input_ids: Input token indices (batch, seq_len)
             targets: Target token indices for training (batch, seq_len)
+            return_attn_weights: If True, return attention from first block
         Returns:
-            logits: Output logits (batch, seq_len, vocab_size)
-            loss: Cross-entropy loss if targets provided, else None
+            logits, loss; or (logits, loss, attn_weights) if return_attn_weights
         """
         batch_size, seq_len = input_ids.shape
 
@@ -312,8 +327,14 @@ class DecoderOnlyTransformer(nn.Module):
         mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
         # Apply transformer blocks
-        for block in self.blocks:
-            x = block(x, mask)
+        attn_weights = None
+        for i, block in enumerate(self.blocks):
+            get_attn = return_attn_weights and (i == 0)
+            out = block(x, mask, return_attn_weights=get_attn)
+            if get_attn:
+                x, attn_weights = out
+            else:
+                x = out
 
         # Final norm and projection
         x = self.norm_final(x)
@@ -322,13 +343,14 @@ class DecoderOnlyTransformer(nn.Module):
         # Compute loss if targets provided
         loss = None
         if targets is not None:
-            # Flatten for cross-entropy
             loss = F.cross_entropy(
                 logits.view(-1, self.vocab_size),
                 targets.view(-1),
-                ignore_index=-1,  # Ignore padding tokens
+                ignore_index=-1,
             )
 
+        if return_attn_weights:
+            return logits, loss, attn_weights
         return logits, loss
 
     @torch.no_grad()
@@ -379,7 +401,9 @@ def train_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
-) -> float:
+    global_step: int = 0,
+    checkpoint_dir: Optional[Path] = None,
+) -> Tuple[float, int]:
     """
     Train for one epoch
 
@@ -395,21 +419,44 @@ def train_epoch(
     model.train()
     total_loss = 0.0
     num_batches = 0
+    step_losses: list = []
 
-    # TODO: Implement training loop
-    # For each batch:
-    #   1. Move data to device
-    #   2. Forward pass (get logits and loss)
-    #   3. Backward pass
-    #   4. Gradient clipping (max_norm=1.0)
-    #   5. Optimizer step
-    #   6. Zero gradients
-    #   7. Accumulate loss
+    for batch_idx, batch in enumerate(dataloader):
+        # Batch is (states, actions) from create_dataloaders
+        _, actions = batch
+        actions = actions.to(device)
 
-    # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
-    # Hint: Print progress every 100 batches
+        # Next-token prediction: at position t predict token t+1
+        # input_ids = full sequence, targets = shifted (targets[t] = input[t+1]), last position ignored
+        input_ids = actions
+        targets = torch.cat([
+            actions[:, 1:],
+            torch.full((actions.shape[0], 1), -1, device=device, dtype=torch.long)
+        ], dim=1)
 
-    raise NotImplementedError("TODO: Implement training loop")
+        optimizer.zero_grad()
+        _, loss = model(input_ids, targets)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        total_loss += loss.item()
+        num_batches += 1
+        step_losses.append((global_step + 1, loss.item()))
+
+        global_step += 1
+        if checkpoint_dir is not None and global_step % 1000 == 0:
+            ckpt_path = checkpoint_dir / f"checkpoint_step_{global_step}.pt"
+            torch.save(model.state_dict(), ckpt_path)
+            print(f"  Saved checkpoint at step {global_step}")
+
+        if (batch_idx + 1) % 100 == 0:
+            avg_loss = total_loss / num_batches
+            perplexity = math.exp(min(avg_loss, 20))
+            print(f"  Epoch {epoch+1} - Batch {batch_idx+1}/{len(dataloader)} - Loss: {loss.item():.4f} - Avg: {avg_loss:.4f} - Perplexity: {perplexity:.2f}")
+
+    avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+    return avg_loss, global_step, step_losses
 
 
 def main():
@@ -428,31 +475,76 @@ def main():
     max_seq_len = 50  # Maximum sequence length
     batch_size = 32
     learning_rate = 1e-4
-    num_epochs = 10
+    num_epochs = 10  # Use 3 for quick test: python backbone.py --epochs 3
 
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # TODO: Load dataset
-    # Use the generate_data.py script to create synthetic trajectories
-    # Load from data/trajectories.pkl
+    # Load or generate dataset
+    data_path = Path(__file__).parent / "data" / "trajectories.pkl"
+    if data_path.exists():
+        print(f"Loading dataset from {data_path}")
+        with open(data_path, "rb") as f:
+            dataset = pickle.load(f)
+    else:
+        print("Dataset not found, generating...")
+        dataset = generate_dataset(num_trajectories=10000, seq_length=50, seed=42)
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(data_path, "wb") as f:
+            pickle.dump(dataset, f)
 
-    # TODO: Create model
-    # model = DecoderOnlyTransformer(...)
+    train_loader, val_loader = create_dataloaders(
+        dataset, batch_size=batch_size, train_split=0.9
+    )
 
-    # TODO: Create optimizer
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    # Create model
+    model = DecoderOnlyTransformer(
+        vocab_size=vocab_size,
+        dim=dim,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        ff_hidden_dim=ff_hidden_dim,
+        max_seq_len=max_seq_len,
+        dropout=0.1,
+    )
+    model = model.to(device)
 
-    # TODO: Training loop
-    # for epoch in range(num_epochs):
-    #     train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
-    #     print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+    # Create optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # TODO: Save checkpoint
-    # torch.save(model.state_dict(), "checkpoints/best_model.pt")
+    # Checkpoint directory
+    checkpoint_dir = Path(__file__).parent / "checkpoints"
+    checkpoint_dir.mkdir(exist_ok=True)
 
-    print("TODO: Complete the main training script")
+    # Training loop
+    global_step = 0
+    best_loss = float("inf")
+    all_step_losses: list = []
+    for epoch in range(num_epochs):
+        train_loss, global_step, step_losses = train_epoch(
+            model, train_loader, optimizer, device, epoch,
+            global_step=global_step, checkpoint_dir=checkpoint_dir
+        )
+        all_step_losses.extend(step_losses)
+        perplexity = math.exp(min(train_loss, 20))
+        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f} - Perplexity: {perplexity:.2f}")
+
+        if train_loss < best_loss:
+            best_loss = train_loss
+            torch.save(model.state_dict(), checkpoint_dir / "best_model.pt")
+            print(f"  Saved best model (loss: {best_loss:.4f})")
+
+    # Save training log for visualization
+    log_path = Path(__file__).parent / "training_log.json"
+    with open(log_path, "w") as f:
+        json.dump(
+            [{"step": s, "loss": l} for s, l in all_step_losses],
+            f, indent=2
+        )
+    print(f"\nTraining complete. Best loss: {best_loss:.4f}")
+    print(f"Checkpoints saved to {checkpoint_dir}")
+    print(f"Training log saved to {log_path}")
 
 
 if __name__ == "__main__":
