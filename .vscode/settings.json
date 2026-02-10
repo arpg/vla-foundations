@@ -1,0 +1,7 @@
+{
+  "[latex]": {
+    "editor.rulers": [ 100],
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 100
+  }
+}
