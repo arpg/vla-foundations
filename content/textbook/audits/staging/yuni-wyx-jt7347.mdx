@@ -29,17 +29,19 @@ This audit argues that while each step improves generalization, the primary bott
 
 ### Main Contributions
 
-The main purpose behind the paper was to develop a cross-embodiment foundation model (agnostic to robot type as well as task specifications - exploration vs. goal seeking as well as distance scales).
+The main purpose behind the paper was to develop a cross-embodiment foundation model (agnostic to robot type as well as task specifications - exploration versus goal seeking as well as distance scales).
 Training data for every type of individual subcomponent of robot vision tasks is costly, so the authors wanted to define a unified model that can handle the general case, and can be minimally adapted to a diverse range of tasks.
 Two features of their approach that stood out were:
 
-1. **Action space normalization**: To make the model truly embodiment agnostic, ViNT used relative waypoints - to account for the different speeds and sizes of the robots, the waypoints were normalized by scaling them by their top speed.
+1. **Action space normalization**: To make the model truly embodiment agnostic, ViNT used relative waypoints.
+To account for the different speeds and sizes of the robots, the waypoints were normalized by scaling them by their top speed.
 This way the model wouldn't have to be trained on specific robot types, and the outputs can then just be scaled via robot-specific controllers for deployment.
 To be clear, the outputs are not low level controls - they are just positional offsets (e.g. dx, dy, dtheta) that are normalized, ultimately allowing for a single policy head to work with the varying dynamics of any robot type.
 
 2. **Semantic topological map**: No explicit map building was done either, but instead a topological graph was built, where waypoints were recorded on the graph as nodes (with corresponding image or feature - learned visual embeddings of visited locations), and the nodes were connected by temporal sequences of actions.
-This allows for long horizon planning and exploration vs. exploitation handling without any explicit SLAM.
-While ViNT does not explicitly set a hard line between when to explore or when to seek goal (which will be explored more in NoMaD), its scoring system encoded into the topological map (diffusion-based subgoal generation in latent space, some subgoals might not yet exist in map but are scored high for progress to goal) creates some form of emergent handling.
+This allows for long horizon planning and exploration versus exploitation handling without any explicit SLAM.
+While ViNT does not explicitly set a hard line between when to explore or when to seek goal (which will be explored more in NoMaD), its scoring system encoded into the topological map (diffusion-based subgoal generation in latent space.
+Some subgoals might not yet exist in map but are scored high for progress to goal) creates some form of emergent handling.
 
 ### Architecture
 
@@ -54,7 +56,8 @@ While ViNT does not explicitly set a hard line between when to explore or when t
    Instead, this encoder encodes the difference between current observation and the goal - just stack observations and goal together, pass through EfficientNet, then flatten to get goal tokens, similar to observation encoder.
    Attention forces goal to attend to / compare with window observation sequence.
 
-2. **Transformer**: $P_{\text{past}}$, $P_{\text{obs}}$ (i.e. current), and $P_{\text{goal}}$ tokens are combined with positional encoding, and passed into decoder-only Transformer backbone (denoted as 'f' in the paper) with 4 multi-headed attention blocks (4 heads, 4 layers), and 2048 hidden units.
+2. **Transformer**: $P_{\text{past}}$, $P_{\text{obs}}$ (i.e. current), and $P_{\text{goal}}$ tokens are combined with positional encoding.
+These are passed into a decoder-only Transformer backbone (denoted as 'f' in the paper) with 4 multi-headed attention blocks (4 heads, 4 layers), and 2048 hidden units.
 
    a. 6 tokens, model dimension of 512, 4 layers, 4 heads, 2048 feed-forward hidden dim, 128 per attention head (512 / 4).
    
@@ -107,14 +110,16 @@ Furthermore, they can improve on task performance by training with on-task data 
 ### Summary - The Interesting and The Concerning
 
 With ViNT's strong generalization capabilities as a foundation model, the aspect of building a semantic topological map stood out the most.
-As is the goal with most modern learning-based end-to-end approaches, it sort of mirrors how humans navigate - when a person wants to navigate to some location, we don't analyze the locations of the rocks on the sidewalk in relation to the street and count the steps to reach a goal (we do to some extent from a low-level perspective, but this is more a subconscious process than a high-level process).
+As is the goal with most modern learning-based end-to-end approaches, it sort of mirrors how humans navigate.
+When a person wants to navigate to some location, we don't analyze the locations of the rocks on the sidewalk in relation to the street and count the steps to reach a goal.
+We do to some extent from a low-level perspective, but this is more a subconscious process than a high-level process.
 We more often are just given semantic cues to tell us whether we have reached locations along the path to the goal, as well as the goal (e.g. walk in some direction for 5-10 minutes until you see a grocery store - requires knowledge of grocery stores, what following roads looks like, etc.).
 
 However, there are still a few things left unanswered.
 While ViNT is strongly generalizable in its pure navigational capabilities, it lacks more semantic reasoning behind choosing the specific trajectory along a certain path.
-While it has a form of handling exploration vs. exploitation (by diffusion generation of subgoals and subgoal ranking), it doesn't explicitly have an inherent understanding of the environment itself (i.e. if I am looking for a lamp, where are lamps typically found in a house).
-This extends to other contextual reasoning points, such as traversability (we can choose shortest set of nodes or actions in the graph, but what about the specific quality of the trajectories themselves such that they take an efficient or safe path).
-The model itself serves as a strong baseline as a foundation model for robot-vision navigation tasks, but still requires more components to push it outside of the realm of just adding more training data to make it work.
+While it has a form of handling exploration versus exploitation (by diffusion generation of subgoals and subgoal ranking), it doesn't explicitly have an inherent understanding of the environment it's navigating in.
+This extends to other contextual reasoning points, such as traversability (we can choose shortest set of nodes or actions in the graph, but what about the specific quality of the trajectories themselves?).
+The model itself serves as a strong baseline as a foundation model for robot-vision navigation tasks, but still requires more components to push it outside of the realm of just adding more training data.
 On that note also, ViNT seems to be pretty computationally expensive (training, diffusion generation).
 As mentioned in the paper, ViNT requires a "degree of structural similarity" - it is mostly geared towards 2D or planar movement, and focuses mostly on RGB images.
 Regardless, the ViNT framework is an important step towards generalization of robot navigation tasks.
@@ -216,22 +221,26 @@ NoMaD was evaluated in 6 different real-world and outdoor environments using a L
 The model was compared with 6 different baselines:
 
 1. **VIB**: Variational Information bottleneck, which models distribution of actions conditioned on observations.
-2. **Masked ViNT**: Essentially ViNT but with goal masking policy. Predicts point estimates of future actions instead of modeling the entire distribution.
+2. **Masked ViNT**: Essentially ViNT but with goal masking policy.
+Predicts point estimates of future actions instead of modeling the entire distribution.
 3. **Autoregressive**: Uses autoregressive prediction over a discrete distribution of actions.
 4. **Subgoal diffusion**: Basically just ViNT (diffusion generation of subgoals with navigation policy).
 5. **Random subgoals**: A variation of ViNT that instead of using diffusion, just randomly samples training data for candidate subgoal.
 
 From experiments, it was shown that NoMaD performed as well as if not better than ViNT (subgoal diffusion) in both exploration and navigation, whilst using markedly fewer parameters (19M vs 335M).
-Masked ViNT was the interesting one of the bunch, performing quite poorly, probably due to the deterministic action head outputs - when faced with multiple decisions, it has to pick and choose, so the model's knowledge of what decision to choose when there are equally 'not great' decisions is limited.
+Masked ViNT was the interesting one of the bunch, performing quite poorly, probably due to the deterministic action head outputs - when faced with multiple decisions, it has to pick and choose.
+As such, the model's knowledge of what decision to choose when there are equally 'not great' decisions is limited.
 ViNT averages to a single action, sometimes predicting an action in between two actions, which is not good, instead of NoMaD's sampling approach.
 
 ### Summary - The Interesting and The Concerning
 
-In comparison to ViNT, NoMaD presents a new approach to learning exploration and goal-seeking behaviors - instead of relying on a hierarchical graph-based approach, it's simply done by masking the goal during training and inference time to push the robot's adaptability to both scenarios.
+In comparison to ViNT, NoMaD presents a new approach to learning exploration and goal-seeking behaviors.
+Instead of relying on a hierarchical graph-based approach, it's simply done by masking the goal during training and inference time to push the robot's adaptability to both scenarios.
 The main contribution is architecturally quite simple, but effective.
 The goal-masking effectively turns navigation from a single-task problem into a conditional behavior spectrum, allowing for a more unified end-to-end approach.
 Additionally, the way they used diffusion for only action generation instead of image generation greatly reduces computational costs for running NoMaD.
-Previously in ViNT, exploration vs. exploitation was a behavior encoded within the graph generation and subgoal ranking, but now with NoMaD, the low level collision avoidance and high level planning (exploration vs. subgoal seeking) is defined in one model architecture.
+Previously in ViNT, exploration versus exploitation was a behavior encoded within the graph generation and subgoal ranking.
+Now with NoMaD, the low level collision avoidance and high level planning (exploration versus subgoal seeking) is defined in one model architecture.
 Additionally, the probability distribution allows for more fine-tuned assignment of what actions are good and bad in all action space (e.g. high probability on turn left or turn right at a T junction, low probability of going straight and hitting wall).
 
 Some things which could be expanded upon however, include:
@@ -363,6 +372,9 @@ Taken together, these failures suggest a complementary path forward: ViNT provid
 A unified navigation system would need to integrate all three, while explicitly managing information decay at the interface between semantic reasoning and low-level control.
 
 ## References
+* \[1\] Shah et al., "ViNT: A Foundation Model for Visual Navigation.", arXiv, 2023.  
+* \[2\] Sridhar et al., "NoMaD: Goal Masked Diffusion Policies for Navigation and Exploration.", arXiv, 2023.  
+* \[3\] Zhang et al., "Uni-NaVid: A Video-based Vision-Language-Action Model for Unifying Embodied Navigation Tasks.", arXiv, 2024.
 
 ```bibtex
 @inproceedings{shah2023vint,
