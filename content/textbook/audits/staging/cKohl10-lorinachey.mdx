@@ -1339,7 +1339,7 @@ Five distinct components make up the structure of Cosmos:
 Similar to the other world models in this document, the spatio-temporal relationships of input frames is captured via tokens with spatial and temporal dimensions.
 The Cosmos-Tokenizer1 was introduced in this paper to support both discrete and continuous causal latent representations embedded in a height ($H$), width ($W$), and channel ($C$) format.
 The input tokens are first transformed into wavelet space to downsample the dimensions, then passed into a 2D $k\times k\times 1$ convolution to capture spatial information, and finally passed into a causal $1\times 1\times 1 \times k$ convolution to capture temporal information.
-The convolution on wavelet-space tokens separates Cosmos-Tokenizer1 from other standard architectures like VQ-VAE (CITE) by **removing redundancies** and **strictly maintaining a causal structure**.
+The convolution on wavelet-space tokens separates Cosmos-Tokenizer1 from other standard architectures like VQ-VAE \[1\] by **removing redundancies** and **strictly maintaining a causal structure**.
 
 ![Cosmos Tokenizer Architecture](./figures-system-diagrams-images/Cosmos-Tokenizer-Evaluation.png)
 
@@ -1366,7 +1366,7 @@ The following table summarizes the loss equations used during these stages:
       <td><strong>Perceptual Loss</strong></td>
       <td>Stage 1</td>
       <td>$\mathcal{L}_{\text{Perceptual}} = \frac{1}{L} \sum_{l=1}^L \sum_{t} \alpha_l \|VGG_l(\hat{x}_t) - VGG_l(x_t)\|_1$</td>
-      <td>Uses <strong>VGG-19 network features</strong> to ensure high-level semantic and visual information is preserved.</td>
+      <td>Uses <strong>VGG-19 network features</strong> \[2\] to ensure high-level semantic and visual information is preserved.</td>
     </tr>
     <tr>
       <td><strong>Optical Flow (OF) Loss</strong></td>
@@ -1389,14 +1389,14 @@ The following table summarizes the loss equations used during these stages:
   </tbody>
 </table>
 
-The only other causal tokenizer that was compared to Cosmos-Tokenizer1 was the CogVideoX-Tokenizer (CITE) that was used in TesserAct, and Cosmos-Tokenizer1 outperformed it on the peak signal to noise (PSNR) reconstruction quality metric by ~3 points at comparable compression ratios when tested on the DAVIS dataset.
+The only other causal tokenizer that was compared to Cosmos-Tokenizer1 was the CogVideoX-Tokenizer \[3\] that was used in TesserAct, and Cosmos-Tokenizer1 outperformed it on the peak signal to noise (PSNR) reconstruction quality metric by ~3 points at comparable compression ratios when tested on the DAVIS dataset \[4\].
 NVIDIA also performed an ablation of their tokenizer at different compression rates which revealed that their tokenizer decreases in reconstruction quality with higher compression rates (as expected), but notably maintained higher than state of the art performance with up to 8x higher compression.
 
 ### 2.3 Pre-trained World Foundation Models
 
 #### Diffusion WFMs
 Diffusion-based WFMs utilize **continuous latent embeddings**.
-The architecture is a **transformer-based denoiser** (DiT) modified for controllable generation through 3D patchification.
+The architecture is a **transformer-based denoiser** modified for controllable generation through 3D patchification.
 * **Conditioning Strategy**: Supports image and video conditioning by concatenating frames along the temporal dimension during denoising.
 * **Performance**: Yields the highest visual fidelity and 3D consistency in the Cosmos suite.
 
@@ -1424,7 +1424,7 @@ AR models formulate world simulation as a **next-token prediction** task using *
     <tr>
       <td><strong>Generation Speed</strong></td>
       <td><strong>Slow</strong>: Iterative denoising.</td>
-      <td><strong>Fast</strong>: Real-time (10 FPS) via KV-caching.</td>
+      <td><strong>Fast</strong>: Real-time (10 FPS) via KV-caching \[5\].</td>
     </tr>
     <tr>
       <td><strong>Representations</strong></td>
@@ -1459,8 +1459,8 @@ The pipeline processed **20 million hours of raw video** to yield **100 million 
 ## 4. Downstream Application
 
 ### 4.1 Robotics
-Cosmos models are fine-tuned on video-action sequences (e.g., **Bridge dataset**).
-Action-conditioned next-frame prediction outperforms diffusion baselines like IRASim, suggesting pre-trained generalist knowledge provides a high ceiling for manipulation tasks.
+Cosmos models are fine-tuned on video-action sequences (e.g., **Bridge dataset** \[6\]).
+Action-conditioned next-frame prediction outperforms diffusion baselines like IRASim \[7\], suggesting pre-trained generalist knowledge provides a high ceiling for manipulation tasks.
 
 ### 4.2 Missing Closed-Loop Evidence
 A critical audit finding: there is **no empirical evidence for closed-loop performance**.
@@ -1500,7 +1500,14 @@ However, for augmenting training sets with photorealistic synthetic data, it is 
 
 ## References
 
-(WIP)
+*   \[1\] van denOord et al., "Neural discrete representation learning.", NeurIPS 2017.
+*   \[2\] Simonyan and Zisserman, "Very deep convolutional networks for large-scale image recognition.", arxiv 2014.
+*   \[3\] Yang et al., "CogVideoX: Text-to-video diffusion models with an expert transformer.", arxiv 2024.
+*   \[4\] Perazzi et al., "A mathematical analysis of convolutional networks.", CVPR 2016.
+*   \[5\] Paszke et al., "PyTorch: An imperative style, high-performance deep learning library.", NeurIPS 2019.
+*   \[6\] Walker et al., "BridgeData V2: A dataset for robot learning at scale.", CoRL 2023.
+*   \[7\] Zhu et al., "Irasim: Learning interactive real-robot action simulators.", arXiv 2024.
+*   \[8\] NVIDIA, "Cosmos: World Foundation Model Platform for Physical AI.", arXiv 2025.
 
 ---
 
@@ -1512,25 +1519,84 @@ However, for augmenting training sets with photorealistic synthetic data, it is 
 
 ---
 
-## 1. Summary
+## **1. Summary**
+Genie is an **11B parameter foundation world model** designed to generate interactive, action-controllable virtual environments from a single prompt (text, sketch, or photo). 
+Unlike traditional world models that require action-labeled data, Genie is trained in a **fully unsupervised manner from unlabeled Internet videos**. 
+The model architecture leverages **spatiotemporal (ST) transformers** \[3\] across three key modules: a video tokenizer, a latent action model (LAM), and an autoregressive dynamics model. 
+Trained on **30,000 hours** of 2D platformer gameplay, Genie demonstrates emergent properties such as parallax and 3D consistency, and generalizes to out-of-distribution (OOD) inputs like hand-drawn sketches.
 
 ---
 
-## 2. Architectural Overview
+## **2. Architectural Overview**
+
+### **2.1 Platform Architecture**
+The Genie platform is built on the **ST-transformer architecture**, which alternates spatial and temporal attention layers to mitigate the quadratic memory costs of video data. 
+The model treats interactive environment generation as a **next-token prediction task**, where future states are conditioned on inferred latent actions.
+
+### **2.2 Video Tokenization**
+The **ST-ViViT tokenizer** (200M parameters) utilizes a **VQ-VAE** \[5\] with ST-transformer blocks in both the encoder and decoder. 
+It compresses raw video frames ($x$) into discrete tokens ($z$) from a codebook of 1024 unique codes. 
+Unlike spatial-only tokenizers, this temporal-aware approach incorporates dynamics directly into the encodings, significantly improving reconstruction quality (FVD) for downstream generation.
+
+### **2.3 Dynamics Model**
+The core "engine" is a **10.1B parameter decoder-only MaskGIT transformer** \[2\]. 
+It autoregressively predicts the next frame tokens $\hat{z}_t$ based on the history of video tokens $z_{1:t-1}$ and latent actions $a_{1:t-1}$. 
+Notably, Genie uses **additive embeddings** for latent actions rather than simple concatenation, which the authors found improved the controllability of the generated worlds.
 
 ---
 
-## 3. Data & Scaling
+## **3. Data & Scaling**
+Genie follows the scaling laws typical of Large Language Models (LLMs).
+*   **Dataset (Platformers)**: Constructed by filtering 55M clips down to a high-quality "Curated" set of **6.8M clips (30,000 hours)**. Filtering distractor items like menu screens or streamer faces was found to be more beneficial than raw data quantity.
+*   **Scaling Frontier**: The authors conducted a rigorous analysis from 40M to 2.7B parameters, showing a **linear correlation between additional compute (FLOPs) and decreased training loss**.
+*   **Main Model Training**: The final model consists of **10.7B parameters** (11B with the 360p upscaler) and was trained on **942B tokens** using **256 TPUv5p** for 125,000 steps.
 
 ---
 
-## 4. Downstream Application
+## **4. Downstream Application**
+
+### **4.1 Robotics**
+Genie generalizes beyond gaming to robotic manipulation. 
+A **2.5B parameter model** trained on videos from the RT-1 dataset \[4\] successfully learned consistent latent actions (e.g., "up," "down," "left") and the **physical properties of deformable objects**.
+
+### **4.2 Missing Closed-Loop Evidence**
+While Genie acts as a high-fidelity "neural simulator," it currently lacks direct integration into physical robotic hardware for real-time, closed-loop control. 
+Instead, it serves as a **foundation for imitation from observation**, where a policy $\pi(a_t|x_t)$ is trained to predict the latent actions of an expert to solve unseen environments like CoinRun.
+
+### **4.3 The Video-Only Assumption**
+The fundamental technical thesis of Genie is that **ground-truth action labels are unnecessary for learning world models**. 
+By discarding the LAM encoder at inference and allowing a user to index the learned VQ codebook, Genie proves that internet-scale video provides enough causal structure to ground an agent's "understanding" of a world.
 
 ---
 
-## 5. Critical Synthesis & Sign-Off
+## **5. Critical Synthesis & Sign-Off**
+
+### **5.1 Load-Bearing Assumptions**
+*   **Semantic Consistency**: The model assumes that a learned latent action (e.g., "Latent Action 1") will consistently map to the same semantic behavior (e.g., "Jump") across vastly different visual textures—an assumption that holds empirically across game genres and robotic scenes.
+*   **Intuitive Physics**: It assumes that the visual patterns in 2D platformers contain enough "common sense" to simulate complex features like **parallax and 3D depth**, which the 11B model successfully emulates.
+
+### **5.2 Reproducibility Assessment**
+Reproducing the 11B model is **challenging for academic labs** due to the massive compute requirement (TPUv5p clusters). 
+However, the authors provide a **reproducible case study** (CoinRun) that can run on a single mid-range TPU/GPU in under a week, facilitating future architectural research.
+
+### **5.3 Failure Modes**
+*   **Information Decay**: The current **16-frame memory limit** causes long-horizon causal chains to fail, leading to object morphing or environment drift.
+*   **Hallucinations**: As an autoregressive model, it can generate "unrealistic futures" that violate the established rules of the environment.
+*   **Inference Bottleneck**: At **~1 FPS**, the model is currently too slow for real-time interaction or high-frequency robotic feedback loops.
+
+### **5.4 Sign-Off Criteria**
+**Technical Recommendation**: I would **sign off** on Genie as a foundational research milestone for **unsupervised world modeling**, but not as a production-ready robotics simulator. 
+Its ability to extract controllable latent actions from raw video is a **load-bearing breakthrough** for the field. 
+However, until the **Inference Reality** (1 FPS) and **Memory Horizon** (16 frames) are addressed, it remains a stepping stone rather than a durable engineering tool for physical deployment.
 
 ---
+
+## **References**
+*   \[1\] Bruce et al., "Genie: Generative Interactive Environments.", arxiv 2024.
+*   \[2\] Chang et al., "MaskGIT: Masked Generative Image Transformer.", arxiv 2022.
+*   \[3\] Xu et al., "Spatial-Temporal Transformer Networks for Traffic Flow Forecasting.", arxiv 2020.
+*   \[4\] Brohan et al., "RT-1: Robotics transformer for real-world control at scale.", arxiv 2023.
+*   \[5\] Oord et al., "Neural discrete representation learning.", arxiv 2017.
 
 ## References
 
