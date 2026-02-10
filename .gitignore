@@ -57,6 +57,9 @@ __pycache__/
 # Private solution infrastructure (NEVER commit to public branches)
 *.backup.py
 
+# Grading reports (private scores - NEVER commit)
+/grading_reports/
+
 # Claude Code skill outputs (generated reports)
 .claude/releases/*.md
 .claude/sync-reports/*.md
