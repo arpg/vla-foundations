@@ -17,7 +17,7 @@ paper: "Genie, Cosmos, TesserAct, and GAIA-1"
 ---
 # World Models at a Glance
 
-<img src="./figures-system-diagrams-images/robot_predictions.png" alt="Robot Predictions" width="900" />
+<img src="/audits/figures-system-diagrams-images/robot_predictions.png" alt="Robot Predictions" width="900" />
 
 
 Figure 1: Proceeding video frames are generated from a world model given the context of the robot's task. 
@@ -380,7 +380,7 @@ This factorization allows each component to be optimized independently and benef
   </tbody>
 </table>
 
-![GAIA-1 Architecture](./figures-system-diagrams-images/Figure2-SystemDiagram-GAIA1.png)
+![GAIA-1 Architecture](/audits/figures-system-diagrams-images/Figure2-SystemDiagram-GAIA1.png)
 
 
 The data flow proceeds as follows: (1) Input video frames are encoded into discrete image tokens via the tokenizer; (2) Text descriptions are embedded via frozen T5-Large [24]; (3) Actions (speed, curvature) are projected via learned linear layers; (4) All modalities are interleaved into a single sequence and processed by the autoregressive world model to predict future image tokens; (5) Predicted tokens are decoded into video frames via the diffusion decoder.
@@ -802,7 +802,7 @@ Compared to Aether [57] which trains on synthetic data without language groundin
 TesserAct extends CogVideoX [69], a latent video diffusion model, to jointly predict RGB, depth, and normal videos.
 The architecture preserves the pretrained video generation capability while adding geometric prediction heads.
 
-![TesserAct Architecture](./figures-system-diagrams-images/Architecture-Fig2-TesserAct.png)
+![TesserAct Architecture](/audits/figures-system-diagrams-images/Architecture-Fig2-TesserAct.png)
 
 
 The data flow proceeds as follows: (1) RGB, depth, and normal videos are separately encoded by the frozen CogVideoX 3D VAE; (2) Three separate input projectors extract embeddings for each modality; (3) The DiT backbone processes the sum of embeddings conditioned on text instruction and diffusion timestep; (4) RGB output uses the original CogVideoX projector; (5) Depth and normal outputs use additional Conv3D + MLP projectors that combine hidden states with RGB predictions.
@@ -1342,7 +1342,7 @@ The Cosmos-Tokenizer1 was introduced in this paper to support both discrete and 
 The input tokens are first transformed into wavelet space to downsample the dimensions, then passed into a 2D $k\times k\times 1$ convolution to capture spatial information, and finally passed into a causal $1\times 1\times 1 \times k$ convolution to capture temporal information.
 The convolution on wavelet-space tokens separates Cosmos-Tokenizer1 from other standard architectures like VQ-VAE \[1\] by **removing redundancies** and **strictly maintaining a causal structure**.
 
-![Cosmos Tokenizer Architecture](./figures-system-diagrams-images/Cosmos-Tokenizer-Evaluation.png)
+![Cosmos Tokenizer Architecture](/audits/figures-system-diagrams-images/cosmos_tokenizer_conv.png)
 
 The Cosmos-Tokenizer1 is trained using a two-stage training scheme, followed by a fine-tuning stage to capture the spatio-temporal information in the inputs.
 The following table summarizes the loss equations used during these stages:
