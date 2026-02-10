@@ -18,7 +18,7 @@ import pickle
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
-from generate_data import create_dataloaders, generate_dataset    
+from generate_data import create_dataloaders, generate_dataset
 
 class RMSNorm(nn.Module):
     """
