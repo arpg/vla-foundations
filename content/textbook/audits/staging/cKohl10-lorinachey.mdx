@@ -864,7 +864,7 @@ This enables cross-embodiment generalization.
 
 **Output Design**: RGB uses the original CogVideoX output projector. Depth and normal use additional modules:
 
-$\epsilon^*_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon^*_v, [z_t; z_0]_{z \in \lbrace v,d,n \rbrace}))$
+$\epsilon_{d,n} = \text{DNProj}(h, \text{Conv3D}(\epsilon_v, [z_t; z_0]_{z \in \{v,d,n\}}))$
 
 where:
 - $\epsilon^*_{d,n}$: Predicted noise for depth and normal modalities
