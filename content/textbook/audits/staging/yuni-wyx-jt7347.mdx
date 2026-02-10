@@ -1,8 +1,293 @@
 ---
-title: "TITLE_HERE"
+title: "Vision-based Language-Conditioned Navigation"
 author: "Yuni Wu and Jimmy Tran"
 paper: "ViNT (2023), NoMaD (2023), Uni-NaVid (2024)"
 topic: "Navigation"
 ---
 
-# Your audit content here...
+# Vision-Language Navigation under Real-World 
+
+## Introduction
+
+Robotic navigation has traditionally been structured around a modular sense–think–act pipeline, where perception, mapping, planning, and control are explicitly defined and engineered. While this paradigm has proven reliable, it relies heavily on discrete reasoning and hand-designed representations, requiring prior knowledge about the environment, the robot embodiment, and the task structure. 
+
+Recent advances in large-scale data collection and representation learning have driven a shift toward end-to-end navigation models, where visual and language observations are directly mapped to actions. This transition reduces the need for explicit intermediate representations, but introduces new challenges in generalization, temporal consistency, and physical executability. 
+
+This audit examines three representative approaches—ViNT, NoMaD, and Uni-NaVid—as incremental attempts to relax prior assumptions while preserving navigational competence. Rather than proposing a single unified solution, these works decompose the problem of generalized robot navigation into progressively harder sub-problems. 
+
+ViNT introduces a foundation model for navigation that replaces explicit geometric maps with a semantic topological representation, enabling robot-agnostic navigation while retaining coarse spatial structure. NoMaD addresses the subsequent challenge of goal-directed behavior under complete environmental uncertainty, explicitly modeling the trade-off between exploration and exploitation during navigation. Uni-NaVid further extends this paradigm by incorporating language grounding, allowing navigation policies to condition their search and execution strategies on semantic instructions across diverse datasets. 
+
+Viewed together, these approaches form a progressive trajectory: from semantic spatial representation (ViNT), to uncertainty-aware navigation dynamics (NoMaD), to language-conditioned decision making (Uni-NaVid). This audit argues that while each step improves generalization, the primary bottleneck shifts toward the interface between high-level semantic goals and temporally consistent, physically grounded control.
+
+## Part 1: ViNT
+
+### Main Contributions: 
+The main purpose behind the paper was to develop a cross-embodiment foundation model (agnostic to robot type as well as task specifications - exploration vs. goal seeking as well as distance scales). Training data for every type of individual subcomponent of robot vision tasks is costly, so want to define a unified model that can handle the general case, and can be minimally adapted to a diverse range of tasks. Two features of their approach that stood out were:
+1. Action space normalization: to make the model truly embodiment agnostic, ViNT used relative waypoints - to account for the different speeds and sizes of the robots, the waypoints were normalized by scaling them by their top speed. This way the model wouldn't have to be trained on specific robot types, and the outputs can then just be scaled via robot-specific controllers for deployment. To be clear, the outputs are not low level controls - they are just positional offsets (e.g. dx, dy, dtheta) that are normalized, ultimately allowing for a single policy head to work with the varying dynamics of any robot type.
+2. Semantic topological map: no explicit map building was done either, but instead a topological graph was built, where waypoints were recorded on the graph as nodes (with corresponding image or feature - learned visual embeddings of visited locations), and the nodes were connected by temporal sequences of actions. Allows for long horizon planning and exploration vs. exploitation handling w/o any explicit 'SLAM.' While ViNT does not explicitly set a hard line between when to explore or when to seek goal (which will be explored more in NoMaD), it's scoring system encoded into the topological map (diffusion-based subgoal generation in latent space, some subgoals might not yet exist in map but are scored high for progress to goal) creates some form of emergent handling.
+
+### Architecture:
+1. **Inputs**: current observation, past observations, and goal images are all encoded via a pair of EfficientNet-B0 encoders (reference link to EfficientNet TBA)
+a. Observation encoder (denoted $\psi$ in the paper): encodes current observation as well as context window of past observation (attention). Takes in 85x64x3 images, and outputs a flattened feature vector from last convolutional layer. Output is 5 512 dim vectors (P_t and P_(t-i) for i = [1, 4]), resized to model dimension.
+b. Goal encoder (denoted $\phi$ in the paper): processes goal images into the sequence as spatial pairing with between observations and goal. Findings in paper mentioned that this step shouldn't just extract features from goal image, as this would lead to stuff in image sometimes being ignored (temporal inconsistencies?). Instead, this encoder encodes the difference between current observation and the goal - just stack observations and goal together, pass through EfficientNet, then flatten to get goal tokens, similar to observation encoder. Attention forces goal to attend to / compare with window observation sequence.
+2. **Tranformer**: P_past, P_obs (i.e. current), and P_goal tokens are combined with positional encoding, and passed into decoder-only Transformer backbone (denoted as 'f' in the paper) with 4 multi-headed attention blocks (4 heads, 4 layers), and 2048 hidden units. 
+a. 6 tokens, model dimension of 512, 4 layers, 4 heads, 2048 feed-forward hidden dim, 128 per attention head (512 / 4)
+We have a fixed window / input length, so only need a decoder - direct mapping from observations to actions. The two output head predict normalized actions in the form of waypoints (as previously mentioned), as well as temporal distance to goal (temporal in terms of 'actions' and time to complete...? check this).
+3. **Diffusion**: also previously mentioned, ViNT also produces subgoal candidates to break down the planning problem. These candidates are generated via a image diffusion model (find model specifics, but for now, the model is trained on same dataset as ViNT), and are scored by a goal-directed heuristic. The transformer helps with the prediction for how well the actions progress to goal since it predicts current dist to goal. In the full pipeline, the robot uses the diffusion model to generate subgoals from current observation, and then spatially grounds them via ViNT (goal encoder), and scores them using the heuristic. This is notably computationally expensive...
+4. **Topological Graph**: One of the novelties of this paper is it's method of building a topological graph that links observations via action sequences, effectively building a sparse map or representation of the environment. This approach is interesting, because the model is able to now handle both low-level interactions (collision avoidance through short term actions or model reasoning), as well as high-level planning - graph-based methods do well because they can reason about coverage. This ultimately helps with exploration, as well as preventing getting 'stuck.'
+
+### Training:
+ViNT was trained on 100 hours of real-world trajectories, spanning 8 different robot platforms. Training procedure is as follows:
+1. Sample trajectory: $\tau \sim \mathcal{D}$
+2. Sample timestep: $t \sim \text{Uniform}(0, |\tau| - H - l_{\text{max}})$
+3. Extract temporal context: $o_{t:t-P} = [o_{t-P}, o_{t-P+1}, ..., o_{t-1}, o_t]$
+4. Sample subgoal distance: $d \sim \text{Uniform}(l_{\text{min}}, l_{\text{max}})$
+5. Extract subgoal observation: $o_s = o_{t+d}$
+6. Extract action labels: $\hat{a} = a_{t:t+H} = [a_{t+1}, a_{t+2}, ..., a_{t+H}]$
+7. Distance label: $d$ (temporal distance in timesteps)
+as well as the maximum likelihood objective function:
+$$
+\mathcal{L}_{\text{ViNT}}(\phi, \psi, f) = \mathbb{E}_{\tau} \mathbb{E}_{t} \mathbb{E}_{d} \left[ \log p(\hat{a} \mid f(\psi(o)_{t:t-P}, \phi(o_t, o_s))) + \lambda \log p(d \mid f(\psi(o)_{t:t-P}, \phi(o_t, o_s))) \right]
+$$
+where $\lambda$ is a loss balancing weight between the action and distance loss components.
+
+### Evaluation + Extensions:
+ViNT was evaluated with 3 main categories in mind: coverage of exploration and goal reaching, zero-shot transfer to new robot platforms, and whether it can be adapted to different tasks with minimal fine tuning.
+
+1. Exploration coverage: Robot placed in unseen environment, and recorded metrics were maximum displacement (distance from start w/o collision or human intervention), coverage area, as well as number of times human intervention was required (if it got stuck, for example).
+=> (TBA: tables and results for navigation performance, as well as exploration performance)
+2. Zero-shot transfer: basically just deployed ViNT on 4 different robots, and recorded success rates.
+=> (TBA: tables for comparison of robot types and methods)
+3. Broader Generalization, Fine-Tuning, and Adaptations:  They're able to do adaptations to different task specifications via prompt tuning. ViNT can also learn a sort of mapping from desired goal modality to ViNT native goal tokens (essentially keeping everything the same except for goal encoder $\phi$). Furthermore, they can improve on task performance by training with on-task data with only 1 hour of data to transfer capabilities to new setting.
+
+### Summary - The Interesting and The Concerning:
+
+With ViNT's strong generalization capabilities as a foundation model, the aspect of building a semantic topological map stood out the most. As is the goal with most modern learning-based end-to-end approaches, it sort of mirrors how humans navigate - when a person wants to navigate to some location, we don't analyze the locations of the rocks on the sidewalk in relation to the street and count the steps to reach a goal (we do to some extent from a low-level perspective, but this is more a subconcious process then a high-level process), we more often are just given semantic cues to tell us whether we have reached locations along the path to the goal, as well as the goal (e.g. walk in some direction for 5-10 minutes until you see a grocery store - requires knowledge of grocery stores, what following roads looks like, etc.).
+
+However, there are still a few things left unanswered. While ViNT is strongly generalizable in it's pure navigational capabilities, it lacks a more semantic reasoning behind choosing the specific trajectory along a certain path. While it has a form of handling exploration vs. exploitation (by diffusion generation of subgoals and subgoals ranking), it doesn't explicitly have an inherent understanding of the environment itself (i.e. if I am looking for a lamp, where are lamps typically found in a house). This extends to other contextual reasoning points, such as traversability (we can choose shortest set of nodes or actions in the graph, but what about the specific quality of the trajectories themselves such that they take an efficient or safe path...?). The model itself serves as a strong baseline as a foundation model for robot-vision navigation tasks, but still require more components to push it outside of the realm of shoving more training data it make it work. On that note also, ViNT seems to be pretty computationally expensive (training, diffusion generation). As mentioned in the paper, ViNT requires a "degree of structural similarity" - it is mostly geared towards 2D or planar movement, and focuses mostly on RGB images. Regardless, the ViNT framework is an important step towards generalization of robot navigation tasks.
+
+## Part 2: NoMaD
+
+### Main Contributions:
+NoMaD’s central contribution is a reframing of navigation and exploration as inference over a shared action distribution rather than as separate behaviors requiring separate policies.
+
+Instead of treating goal-conditioned navigation and task-agnostic exploration as distinct problems (often handled via hierarchical planners or subgoal generators), NoMaD proposes that both behaviors can be represented by a single policy whose output distribution changes based on whether goal information is provided.
+
+This is achieved through goal masking, which allows the same policy to operate in two regimes:
+- Goal-conditioned mode: actions are conditioned on a visual goal.
+- Undirected mode: actions are sampled without any goal information, inducing exploration.
+
+Crucially, NoMaD applies diffusion modeling directly in action space, rather than generating subgoals or future observations. This avoids high-dimensional generative modeling and yields a compact, efficient policy capable of expressing multimodal, collision-free behaviors in real time.
+
+---
+### Architecture:
+At a high level, NoMaD combines ViNT-style visual encoding, attention-based goal masking, and an action diffusion policy.
+
+**Observation Encoding**
+
+The policy receives:
+- A sequence of recent RGB observations $𝑜_𝑡 - _{P:t}$
+- An optional goal image $o_g$
+
+Visual inputs are encoded using EfficientNet-B0 and processed by a Transformer backbone to produce a context vector:
+
+$$ c_t = f_\theta\left(o_t-_{P:t}, o_g, m\right)$$
+
+where $m∈${0,1} is a binary goal mask controlling whether the goal token participates in attention.
+
+**Goal Masking**
+
+Goal masking is implemented via hard attention masking:
+
+- $𝑚$ = 0: goal token is visible → goal-conditioned navigation
+- $𝑚$ = 1: goal token is masked → undirected exploration
+
+During training:
+
+$$𝑚 ∼ Bernoulli(0.5)$$
+
+This forces the policy to learn a shared representation that supports both behaviors.
+
+**Action Diffusion Policy**
+
+Rather than predicting a single action, NoMaD models a distribution over future action sequences:
+$$ p\left(a_{t:t+H}|c_t\right)$$
+
+Diffusion is used to represent this distribution by iteratively denoising an initially random action sequence.
+
+Initialization:
+$$ a_t^K ~ N(0, 1)$$
+
+Denoising process:
+$$ a_t^{k-1} = \alpha\left(a_t^k - \gamma_k \epsilon_\theta\left(c_t, a_t^k, k\right)\right) + N\left(0, \sigma_k^2I\right)$$
+
+Afetr $K$ steps, the policy samples a collision-free, multimodal action sequence $a_t^0$.
+
+---
+### Training:
+**Data Assumptions**
+NoMaD is trained entirely via supervised imitation learning using large-scale real-world datasets (GNM and SACSoN), totaling over 100 hours of robot navigation data.
+
+There is:
+- No reinforcement learning
+- No explicit reward
+- No environment model
+
+**Objective Function**
+Training optimizes a diffusion noise prediction loss with an auxiliary temporal-distance objective:
+
+$$ \mathcal{L}_{NoMaD} = \mathbb{E}\left[\left|\left|\epsilon - \epsilon_\theta(c_t, a_t + \epsilon, k)\right|\right|^2\right] + \lambda \left|\left|d(o_t, o_g) - \hat{d}(c_t) \right|\right|^2$$
+where:
+- The first term trains the action diffusion model
+- The second term encourages temporal progress toward the goal
+- $\lambda = 10^{-4}$
+
+**Training Regime**
+- End-to-end training (vision + action)
+- 10 diffusion steps
+- Conditional 1D U-Net for noise prediction
+- Fixed 50/50 mix of goal-conditioned and goal-masked samples
+
+---
+### Evaluation:
+NoMaD was evaluated in 6 different real-world and outdoor environments using a LoCoBot mobile platform. The model was compared with 6 different baselines:
+1. VIB: Variational Information bottleneck, which models distribution of actions conditioned on observations.
+2. Masked ViNT: essentially ViNT but with goal masking policy. Predicts point estimates of future actions instead of modelling the entire distribution.
+3. Autoregressive: uses autoregressive prediction over a discrete distribution of actions.
+4. Subgoal diffusion: basically just ViNT (diffusion generation of subgoals with navigation policy).
+5. Random subgoals: a variation of ViNT that instead of using diffusion, it just randomly samples training data for candidate subgoal. Why would this work?
+(TBA: exploration and navigation success rates table 1 - wait, this table mentions NoMaD was paired with topological graph??) From experiments, it was shown that NoMaD performed as well as if not better than ViNT (subgoal diffusion) in both exploration and navigation, whilst using marketedly less parameters (19M vs 335M). Masked ViNT was the interesting one of the bunch, performing quite poorly, probably due to the deterministic action head outputs - when faced with multiple decisions, it has to pick and choose, so the models knowledge of what decision to choose when there are equally 'not great' decisions is limited (ViNT averages to a single action, sometimes predicting an action in between two actions, which is not good, instead of NoMaD's sampling approach).
+
+
+---
+### Summary - The Interesting and The Concerning:
+In comparison to ViNT, NoMaD presents a new approach to learning exploration and goal-seeking behaviors - instead of relying on a hierarchical graph-based approach, simply done by masking the goal during training and inference time to push the robot's adaptability to both scenarios. The main contribution is architecturally quite simple, but effective. The goal-masking effectively turns navigation from a single-task problem into a conditional behavior spectrum, allowing for a more unified end-to-end approach. Additionally, the way they used diffusion for only action generation instead of image generation greatly reduces computational costs for running NoMaD. Previously in ViNT, exploration vs. exploitation was a behavior encoded within the graph generation and subgoal ranking, but now with NoMaD, the low level collision avoidance and high level planning (exploration vs. sub goal seeking) is defined in one model architecture. Additionally, the probability distribution allows for more fine tuned assignment of what actions are good and bad in all action space (e.g. high probability on turn left or turn right at a T junction, low probability of going straight and hit wall).
+
+Some things which could be expanded upon however, includes:
+1. The probability distribution of the goal masking itself. They chose a Bernoulli distribution with the mean probability of 50/50. There's not a lot of clarity on why this was chosen or students on other distributions...is this environment dependent?
+2. Like most other models, how well would this transfer if trained in office spaces, and deployed in forests? There's still some element of scene understanding that needs to be included for the model to be truly generalizable. Need priors for understanding generalized knowledge from internet...?
+3. While this model works well enough without maps, there's no explicit long-term memory - with end-to-end approaches, a lot of this is kept within it's own black box of what the model still knows, and weights could vanish...can be used as a backbone for other integrations though. From a machine learning standpoint it is impressive, but is it architecturally sound? Will end-to-end ever be? Also, this limits human readability of internal logic...
+4. Interesting to note that Masked ViNT performed so poorly, suggesting that success of paper was not just goal masking, but other subtle architectural changes in tandem.
+
+## Part 3: Uni-NaVid
+
+### Main Contributions:
+After reading the paper, I see Uni-NaVid’s main contribution as **making multi-task, LLM-based embodied navigation actually deployable**, rather than introducing a fundamentally new navigation paradigm.
+
+Concretely, the paper contributes:
+1. A **unified Vision-Language-Action (VLA) formulation** that uses a single model to handle multiple embodied navigation tasks (VLN, ObjectNav, EQA, Human Following) without task-specific pipelines.
+2. An **online visual token merging mechanism** that directly addresses the scalability bottleneck of long-horizon video input to LLMs.
+3. A demonstration that **multi-task joint training produces positive synergy**, instead of degrading performance, when the observation and action spaces are fully unified.
+4. A **real-time, non-blocking navigation system** that runs at ~5 Hz and can be deployed on a real robot without explicit maps or planners.
+
+To me, the key contribution is not higher-level reasoning, but **engineering feasibility**: showing that an LLM-based navigation policy can run continuously on a real robot.
+
+---
+### Architecture:
+Uni-NaVid adopts a clean, end-to-end VLA architecture that maps:
+
+> **ego-centric RGB video + natural language → low-level navigation actions**
+
+The architecture consists of three major components:
+
+- **Vision Encoder**:  
+  Each video frame is encoded using EVA-CLIP into visual tokens. The model relies purely on monocular RGB input, without depth, LiDAR, or explicit mapping.
+
+- **Online Visual Token Merging (core design choice)**:  
+  Instead of letting visual tokens grow unbounded over time, the model dynamically merges tokens based on temporal distance:
+  - Recent observations are kept at higher resolution.
+  - Older observations are progressively compressed.
+  
+  This design is critical because it prevents inference latency from increasing with navigation length, which is a common failure mode of LLM-based navigation systems.
+
+- **LLM Policy Head**:  
+  Merged visual tokens are projected into the same embedding space as language tokens and concatenated with the instruction.  
+  The LLM predicts **k = 4 future low-level actions** (`FORWARD`, `TURN-LEFT`, `TURN-RIGHT`, `STOP`) in one forward pass, enabling non-blocking execution.
+
+Overall, the architecture intentionally avoids explicit world models, symbolic planners, or graphs, betting instead on representation learning and token management.
+
+---
+### Training:
+
+Uni-NaVid is trained using **joint multi-task supervised learning** with a single shared policy.
+
+- **Navigation Data**:
+  - 3.6 million trajectories
+  - Collected across four navigation tasks
+  - Multiple simulated environments (Habitat, HM3D, MP3D)
+
+- **Auxiliary Video-Language Data**:
+  - 2.3 million internet-scale samples
+  - Video Question Answering and video captioning
+  - Used to strengthen semantic understanding and improve sim-to-real generalization
+
+All tasks share:
+- The same observation space (RGB video + language)
+- The same action space (low-level discrete actions)
+- No task-specific heads or rewards
+
+Importantly, the paper does **not** use reinforcement learning, explicit planning losses, or world-model supervision. Navigation is learned purely via action token prediction.
+
+---
+### Evaluation:
+The evaluation focuses on three aspects:
+
+1. **Task Performance**  
+   Uni-NaVid achieves SOTA or SOTA-comparable results on:
+   - VLN-CE
+   - HM3D ObjectNav
+   - MP3D-EQA  
+   using only monocular RGB video and language instructions.
+
+2. **Multi-Task Synergy**  
+   Joint training consistently outperforms single-task training, supporting the claim that shared representations across navigation tasks are beneficial rather than harmful.
+
+3. **Real-World Deployment**  
+   The model is deployed zero-shot on a Unitree Go2 quadruped robot and demonstrates stable, non-blocking navigation, including multi-stage “chain-of-navigation” commands.  
+   While the real-world experiments are limited in scale, they convincingly show that the system runs continuously without inference bottlenecks.
+
+---
+### Summary - The Interesting and The Concerning:
+Uni-NaVid treats embodied navigation less as an explicit planning problem and more as a token budgeting problem for long-horizon video input, which is a very pragmatic shift. Instead of building maps or graphs, the model relies on online token merging to preserve just enough temporal structure for action prediction.
+
+However, the approach implicitly assumes that short-horizon foresight (k-step actions) is sufficient for stable navigation. There is no explicit distinction between exploration and goal-directed behavior, nor an explicit mechanism for long-term intent or revisitation.
+
+The reliance on discrete low-level actions simplifies deployment but raises questions about safety, precision, and robustness in cluttered or dynamic environments. It is also unclear how failures can be diagnosed when important visual information is aggressively merged away.
+
+As a result, Uni-NaVid appears strongly generalizable within the distribution of environments it is trained on, but its ability to handle truly out-of-distribution settings without explicit world modeling remains an open question.
+
+
+## Load Bearing Walls and Breaking Points
+
+Across ViNT, NoMaD, and Uni-NaVid, the primary load-bearing assumption is that high-level representations—semantic maps, memory states, or language goals—can remain stable proxies for executable navigation behavior. Each method breaks at a different point along this abstraction hierarchy.
+
+ViNT fails when semantic topological structure is insufficient to guarantee
+physical reachability over long horizons. NoMaD mitigates this through memory and stochasticity, but breaks when memory cannot fully resolve partial observability or dynamic changes. Uni-NaVid further enriches decision-making with language, but amplifies the semantic–motor gap, where linguistically valid goals may be dynamically infeasible.
+
+Taken together, these failures suggest a complementary path forward: 
+
+ViNT provides structural spatial priors, NoMaD contributes temporal persistence under uncertainty, and Uni-NaVid offers semantic intent. A unified navigation system would need to integrate all three, while explicitly managing information decay at the interface between semantic reasoning and low-level control.
+
+## References
+
+@inproceedings{shah2023vint,
+          title     = {Vi{NT}: A Foundation Model for Visual Navigation},
+          author    = {Dhruv Shah and Ajay Sridhar and Nitish Dashora and Kyle Stachowicz and Kevin Black and Noriaki Hirose and Sergey Levine},
+          booktitle = {7th Annual Conference on Robot Learning},
+          year      = {2023},
+          url       = {https://arxiv.org/abs/2306.14846}
+        }
+@article{sridhar2023nomad,
+                    author  = {Ajay Sridhar and Dhruv Shah and Catherine Glossop and Sergey Levine},
+                    title   = {{NoMaD: Goal Masked Diffusion Policies for Navigation and Exploration}},
+                    journal = {arXiv pre-print},
+                    year    = {2023},
+                    url     = {https://arxiv.org/abs/2310.07896}
+                  }
+@misc{zhang2024uninavid,
+        title={Uni-NaVid: A Video-based Vision-Language-Action Model for Unifying Embodied Navigation Tasks}, 
+        author={Jiazhao Zhang and Kunyu Wang and Shaoan Wang and Minghan Li and Haoran Liu and Songlin Wei and Zhongyuan Wang and Zhizheng Zhang and He Wang},
+        year={2024},
+        journal = {arXiv preprint arXiv:2412.06224},
+        url = {https://arxiv.org/abs/2412.06224}
+      }
