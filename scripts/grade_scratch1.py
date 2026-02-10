@@ -62,10 +62,50 @@ class GradingReport:
 class GitManager:
     """Handles all git operations safely"""
 
+    BOT_NAME = "crh-bot"
+    BOT_EMAIL = "260777175+crh-bot@users.noreply.github.com"
+
     def __init__(self, repo_path: Path):
         self.repo_path = repo_path
         self.original_branch = None
         self.had_stash = False
+        self.original_git_name = None
+        self.original_git_email = None
+
+    def set_bot_identity(self):
+        """Set git config to Chris Bot for commits on student branches"""
+        # Save original config
+        for field, attr in [("user.name", "original_git_name"), ("user.email", "original_git_email")]:
+            result = subprocess.run(
+                ["git", "config", field], cwd=self.repo_path,
+                capture_output=True, text=True
+            )
+            setattr(self, attr, result.stdout.strip() if result.returncode == 0 else None)
+
+        subprocess.run(["git", "config", "user.name", self.BOT_NAME], cwd=self.repo_path, check=True)
+        subprocess.run(["git", "config", "user.email", self.BOT_EMAIL], cwd=self.repo_path, check=True)
+
+    def restore_identity(self):
+        """Restore original git config after bot operations"""
+        for field, val in [("user.name", self.original_git_name), ("user.email", self.original_git_email)]:
+            if val:
+                subprocess.run(["git", "config", field, val], cwd=self.repo_path)
+
+    def bot_commit(self, message: str, files: List[str] = None):
+        """Make a commit as Chris Bot on the current branch"""
+        self.set_bot_identity()
+        try:
+            if files:
+                subprocess.run(["git", "add"] + files, cwd=self.repo_path, check=True)
+            else:
+                subprocess.run(["git", "add", "-A"], cwd=self.repo_path, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", message],
+                cwd=self.repo_path, capture_output=True, text=True, check=True
+            )
+            print(f"  🤖 Chris Bot committed: {message}")
+        finally:
+            self.restore_identity()
 
     def get_current_branch(self) -> str:
         """Get current git branch"""
