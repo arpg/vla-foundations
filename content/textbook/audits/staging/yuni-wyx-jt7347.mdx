@@ -236,11 +236,20 @@ Additionally, the probability distribution allows for more fine-tuned assignment
 
 Some things which could be expanded upon however, include:
 
-1. The probability distribution of the goal masking itself. They chose a Bernoulli distribution with the mean probability of 50/50. There's not a lot of clarity on why this was chosen or studies on other distributions. Is this environment dependent?
+1. The probability distribution of the goal masking itself.
+They chose a Bernoulli distribution with the mean probability of 50/50.
+There's not a lot of clarity on why this was chosen or studies on other distributions.
+Is this environment dependent?
 
-2. Like most other models, how well would this transfer if trained in office spaces, and deployed in forests? There's still some element of scene understanding that needs to be included for the model to be truly generalizable. Need priors for understanding generalized knowledge from internet?
+2. Like most other models, how well would this transfer if trained in office spaces, and deployed in forests?
+There's still some element of scene understanding that needs to be included for the model to be truly generalizable.
+Need priors for understanding generalized knowledge from internet?
 
-3. While this model works well enough without maps, there's no explicit long-term memory - with end-to-end approaches, a lot of this is kept within its own black box of what the model still knows, and weights could vanish. Can be used as a backbone for other integrations though. From a machine learning standpoint it is impressive, but is it architecturally sound? Will end-to-end ever be? Also, this limits human readability of internal logic.
+3. While this model works well enough without maps, there's no explicit long-term memory - with end-to-end approaches, a lot of this is kept within its own black box of what the model still knows, and weights could vanish.
+Can be used as a backbone for other integrations though.
+From a machine learning standpoint it is impressive, but is it architecturally sound?
+Will end-to-end ever be?
+Also, this limits human readability of internal logic.
 
 4. Interesting to note that Masked ViNT performed so poorly, suggesting that success of paper was not just goal masking, but other subtle architectural changes in tandem.
 
