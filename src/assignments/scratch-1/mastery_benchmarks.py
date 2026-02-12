@@ -1,5 +1,5 @@
 """
-Mastery-level benchmarks for Scratch-1.
+benchmarks for Scratch-1.
 
 1. Ablation study: RoPE vs Sinusoidal positional encodings
 2. Inference speed comparison: with vs without KV-caching

@@ -45,7 +45,6 @@ The causal mask enforces that the model learns a genuine mapping from past conte
 
 - **Data format**: The `create_dataloaders` returns `(states, actions)`; the model uses only `actions` as token sequences for next-token prediction.
 - **Target alignment**: Targets were constructed as `[input[1:], -1]` so that at position $t$ we predict `input[t+1]`, with the last position ignored for loss.
-- **Visualization**: Matplotlib was unavailable in the environment; rewrote `visualize.py` to use PIL for generating loss curves and attention heatmaps.
 
 ## Mastery: RoPE vs Sinusoidal — Why RoPE is Superior for Spatial Data
 
