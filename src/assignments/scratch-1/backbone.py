@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import math
 import pickle
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from generate_data import create_dataloaders, generate_dataset
 
@@ -87,27 +87,46 @@ class RotaryPositionalEmbedding(nn.Module):
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, q: torch.Tensor, k: torch.Tensor, position_offset: int = 0
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Apply rotary embeddings to query and key tensors
 
         Args:
             q: Query tensor (batch, num_heads, seq_len, head_dim)
             k: Key tensor (batch, num_heads, seq_len, head_dim)
+            position_offset: For KV-cache: position of first token in q/k (default 0)
         Returns:
             Rotated (q, k) tensors
         """
         seq_len = q.shape[2]
-
-        # Get cached cos/sin values
-        cos = self.cos_cached[:seq_len, ...]
-        sin = self.sin_cached[:seq_len, ...]
-
-        # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
+        # Get cached cos/sin for the correct positions (supports KV-cache incremental decoding)
+        cos = self.cos_cached[position_offset : position_offset + seq_len, ...]
+        sin = self.sin_cached[position_offset : position_offset + seq_len, ...]
         q_rot = (q * cos) + (self.rotate_half(q) * sin)
         k_rot = (k * cos) + (self.rotate_half(k) * sin)
-
         return q_rot, k_rot
+
+
+class SinusoidalPositionalEmbedding(nn.Module):
+    """
+    Sinusoidal positional embeddings (Vaswani et al., 2017).
+    Used in original Transformer; add to input embeddings.
+    """
+
+    def __init__(self, dim: int, max_seq_len: int = 2048):
+        super().__init__()
+        pe = torch.zeros(max_seq_len, dim)
+        position = torch.arange(0, max_seq_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, dim, 2).float() * (-math.log(10000.0) / dim))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe.unsqueeze(0))
+
+    def forward(self, x: torch.Tensor, position_offset: int = 0) -> torch.Tensor:
+        """Add sinusoidal PE to input (batch, seq_len, dim). Use position_offset for KV-cache."""
+        return x + self.pe[:, position_offset : position_offset + x.size(1), :]
 
 
 class CausalSelfAttention(nn.Module):
@@ -119,7 +138,7 @@ class CausalSelfAttention(nn.Module):
     - Uses RoPE instead of absolute positional embeddings
     """
 
-    def __init__(self, dim: int, num_heads: int, dropout: float = 0.1):
+    def __init__(self, dim: int, num_heads: int, dropout: float = 0.1, use_rope: bool = True):
         super().__init__()
         assert dim % num_heads == 0, "dim must be divisible by num_heads"
 
@@ -127,6 +146,7 @@ class CausalSelfAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
+        self.use_rope = use_rope
 
         # Linear projections for Q, K, V
         self.qkv_proj = nn.Linear(dim, 3 * dim, bias=False)
@@ -136,55 +156,83 @@ class CausalSelfAttention(nn.Module):
         self.attn_dropout = nn.Dropout(dropout)
         self.resid_dropout = nn.Dropout(dropout)
 
-        # Rotary embeddings
-        self.rope = RotaryPositionalEmbedding(self.head_dim)
+        # Rotary embeddings (only when use_rope=True)
+        self.rope = RotaryPositionalEmbedding(self.head_dim) if use_rope else None
 
     def forward(
-        self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, return_attn_weights: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        self,
+        x: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        return_attn_weights: bool = False,
+        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: bool = False,
+    ) -> Union[
+        torch.Tensor,
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]],
+    ]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask (seq_len, seq_len)
             return_attn_weights: If True, return (output, attn_weights)
+            past_key_value: Cached (k, v) from previous step for KV-cache (batch, num_heads, past_len, head_dim)
+            use_cache: If True and past_key_value provided, return updated cache
         Returns:
-            Output tensor (batch, seq_len, dim), or (output, attn_weights) if return_attn_weights
+            output; or (output, attn_weights); or (output, present_key_value) when use_cache
         """
         batch_size, seq_len, _ = x.shape
+        past_len = past_key_value[0].shape[2] if past_key_value is not None else 0
+        position_offset = past_len
 
         # Step 1: Project input to Q, K, V
-        qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
+        qkv = self.qkv_proj(x)
         qkv = qkv.view(batch_size, seq_len, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, batch, num_heads, seq_len, head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
 
-        # Step 2: Apply RoPE to Q and K
-        q, k = self.rope(q, k)
+        # Step 2: Apply RoPE to Q and K (with position offset for incremental decoding)
+        if self.rope is not None:
+            q, k = self.rope(q, k, position_offset=position_offset)
 
-        # Step 3: Compute attention scores: softmax(QK^T / sqrt(d_k))
-        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # (batch, num_heads, seq_len, seq_len)
+        # KV-cache: concatenate past K, V with new K, V
+        if past_key_value is not None:
+            past_k, past_v = past_key_value
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
 
-        # Step 4: Apply causal mask (prevent attending to future tokens)
-        # Lower triangular: 1 where i >= j (can attend), 0 where j > i (cannot attend)
+        present_key_value = (k, v) if use_cache else None
+        total_len = k.shape[2]
+
+        # Step 3: Compute attention scores
+        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+
+        # Step 4: Apply causal mask
         if mask is not None:
             causal_mask = mask
         else:
-            causal_mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+            if past_len > 0:
+                # Incremental: single query attends to all keys (all in past)
+                causal_mask = torch.ones(seq_len, total_len, device=x.device)
+            else:
+                causal_mask = torch.tril(torch.ones(seq_len, total_len, device=x.device))
         scores = scores.masked_fill(causal_mask == 0, float('-inf'))
 
-        # Step 5: Apply softmax and dropout
+        # Step 5: Softmax and dropout
         attn_weights = F.softmax(scores, dim=-1)
         attn_weights = self.attn_dropout(attn_weights)
 
         # Step 6: Apply attention to values
-        out = torch.matmul(attn_weights, v)  # (batch, num_heads, seq_len, head_dim)
+        out = torch.matmul(attn_weights, v)
 
-        # Step 7: Reshape and project back
+        # Step 7: Reshape and project
         out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.dim)
         out = self.resid_dropout(self.out_proj(out))
 
         if return_attn_weights:
             return out, attn_weights.detach()
+        if use_cache:
+            return out, present_key_value
         return out
 
 
@@ -225,9 +273,11 @@ class TransformerBlock(nn.Module):
         x = x + FeedForward(RMSNorm(x))
     """
 
-    def __init__(self, dim: int, num_heads: int, ff_hidden_dim: int, dropout: float = 0.1):
+    def __init__(
+        self, dim: int, num_heads: int, ff_hidden_dim: int, dropout: float = 0.1, use_rope: bool = True
+    ):
         super().__init__()
-        self.attention = CausalSelfAttention(dim, num_heads, dropout)
+        self.attention = CausalSelfAttention(dim, num_heads, dropout, use_rope=use_rope)
         self.feed_forward = FeedForward(dim, ff_hidden_dim, dropout)
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
@@ -237,21 +287,38 @@ class TransformerBlock(nn.Module):
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         return_attn_weights: bool = False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: bool = False,
+    ) -> Union[
+        torch.Tensor,
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]],
+    ]:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask
             return_attn_weights: If True, return (output, attn_weights)
-        Returns:
-            Output tensor, or (output, attn_weights) if return_attn_weights
+            past_key_value: KV-cache from previous step
+            use_cache: If True, return (output, present_key_value)
         """
-        attn_out = self.attention(self.norm1(x), mask, return_attn_weights=return_attn_weights)
-        if return_attn_weights:
+        attn_out = self.attention(
+            self.norm1(x), mask,
+            return_attn_weights=return_attn_weights,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
+        )
+        if use_cache:
+            attn_out, present_key_value = attn_out
+        elif return_attn_weights:
             attn_out, attn_weights = attn_out
         x = x + attn_out
         x = x + self.feed_forward(self.norm2(x))
-        return (x, attn_weights) if return_attn_weights else x
+        if use_cache:
+            return x, present_key_value
+        if return_attn_weights:
+            return x, attn_weights
+        return x
 
 
 class DecoderOnlyTransformer(nn.Module):
@@ -270,18 +337,28 @@ class DecoderOnlyTransformer(nn.Module):
         ff_hidden_dim: int,
         max_seq_len: int = 2048,
         dropout: float = 0.1,
+        position_encoding: str = "rope",
     ):
         super().__init__()
         self.vocab_size = vocab_size
         self.dim = dim
         self.max_seq_len = max_seq_len
+        self.position_encoding = position_encoding
+        use_rope = position_encoding == "rope"
 
         # Token embedding
         self.token_embedding = nn.Embedding(vocab_size, dim)
 
+        # Positional encoding (sinusoidal added to input; RoPE is applied in attention)
+        self.pos_embedding = (
+            SinusoidalPositionalEmbedding(dim, max_seq_len)
+            if position_encoding == "sinusoidal"
+            else None
+        )
+
         # Transformer blocks
         self.blocks = nn.ModuleList([
-            TransformerBlock(dim, num_heads, ff_hidden_dim, dropout)
+            TransformerBlock(dim, num_heads, ff_hidden_dim, dropout, use_rope=use_rope)
             for _ in range(num_layers)
         ])
 
@@ -322,6 +399,8 @@ class DecoderOnlyTransformer(nn.Module):
 
         # Embed tokens
         x = self.token_embedding(input_ids)  # (batch, seq_len, dim)
+        if self.pos_embedding is not None:
+            x = self.pos_embedding(x)
 
         # Create causal mask (lower triangular)
         mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
@@ -353,6 +432,41 @@ class DecoderOnlyTransformer(nn.Module):
             return logits, loss, attn_weights
         return logits, loss
 
+    def forward_with_cache(
+        self,
+        input_ids: torch.Tensor,
+        past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+    ) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor, torch.Tensor]]]:
+        """
+        Forward pass with KV-cache for efficient autoregressive generation.
+
+        Args:
+            input_ids: Token indices (batch, seq_len) - seq_len=1 when using cache
+            past_key_values: List of (k, v) per layer from previous step
+        Returns:
+            logits: (batch, seq_len, vocab_size)
+            past_key_values: Updated cache for next step
+        """
+        batch_size, seq_len = input_ids.shape
+        past_len = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        x = self.token_embedding(input_ids)
+        if self.pos_embedding is not None:
+            x = self.pos_embedding(x, position_offset=past_len)
+        mask = None if past_key_values is not None else torch.tril(
+            torch.ones(seq_len, seq_len, device=x.device)
+        )
+        new_past_key_values: List[Tuple[torch.Tensor, torch.Tensor]] = []
+
+        for i, block in enumerate(self.blocks):
+            past_kv = past_key_values[i] if past_key_values is not None else None
+            x, present_kv = block(x, mask, return_attn_weights=False,
+                                  past_key_value=past_kv, use_cache=True)
+            new_past_key_values.append(present_kv)
+
+        x = self.norm_final(x)
+        logits = self.lm_head(x)
+        return logits, new_past_key_values
+
     @torch.no_grad()
     def generate(
         self,
@@ -360,38 +474,67 @@ class DecoderOnlyTransformer(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
+        use_cache: bool = True,
     ) -> torch.Tensor:
         """
-        Autoregressive generation
+        Autoregressive generation. Supports KV-cache for efficient inference.
 
         Args:
             input_ids: Starting tokens (batch, seq_len)
             max_new_tokens: Number of tokens to generate
             temperature: Sampling temperature
             top_k: Top-k sampling (if None, use full distribution)
+            use_cache: If True, use KV-cache for faster generation
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
+        if use_cache:
+            return self._generate_with_cache(input_ids, max_new_tokens, temperature, top_k)
+        return self._generate_without_cache(input_ids, max_new_tokens, temperature, top_k)
+
+    def _generate_without_cache(
+        self,
+        input_ids: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float,
+        top_k: Optional[int],
+    ) -> torch.Tensor:
+        """Generate without KV-cache (recomputes full context each step)."""
         for _ in range(max_new_tokens):
-            # Crop context if too long
             input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
-
-            # Forward pass
             logits, _ = self.forward(input_context)
-            logits = logits[:, -1, :] / temperature  # Get last token logits
-
-            # Optional top-k sampling
+            logits = logits[:, -1, :] / temperature
             if top_k is not None:
                 values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < values[:, [-1]]] = -float('Inf')
-
-            # Sample from distribution
             probs = F.softmax(logits, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1)
-
-            # Append to sequence
             input_ids = torch.cat([input_ids, next_token], dim=1)
+        return input_ids
 
+    def _generate_with_cache(
+        self,
+        input_ids: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float,
+        top_k: Optional[int],
+    ) -> torch.Tensor:
+        """Generate with KV-cache (efficient incremental decoding)."""
+        input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
+        logits, past_key_values = self.forward_with_cache(input_context)
+        logits = logits[:, -1, :]
+        for _ in range(max_new_tokens):
+            if logits.dim() == 2:
+                logits = logits.unsqueeze(1)
+            logits = logits[:, -1, :] / temperature
+            if top_k is not None:
+                values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < values[:, [-1]]] = -float('Inf')
+            probs = F.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
+            input_ids = torch.cat([input_ids, next_token], dim=1)
+            if _ < max_new_tokens - 1:
+                logits, past_key_values = self.forward_with_cache(next_token, past_key_values)
         return input_ids
 
 
@@ -475,7 +618,7 @@ def main():
     max_seq_len = 50  # Maximum sequence length
     batch_size = 32
     learning_rate = 1e-4
-    num_epochs = 10  # Use 3 for quick test: python backbone.py --epochs 3
+    num_epochs = 10
 
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
