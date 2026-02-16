@@ -1,0 +1,83 @@
+## Driving Reasoning Models at a Glance (AlphaDrive vs EMMA vs Alpamayo-R1)
+
+### Problem Statement
+Modern autonomy systems increasingly explore **VLM/MLLM-based planners** that map perception (images/video) plus context (routing/intent/ego state) into **driving decisions**. Across real-world driving, (i) **multiple actions can be valid** for the same scene, (ii) decisions must satisfy **real-time constraints**, and (iii) developers often want **human-interpretable rationales**—ideally with some form of **consistency** between the rationale and the executed plan.  
+These three papers share that motivation, but differ in **action representation**, **reasoning representation**, and **how training enforces correctness vs diversity vs causal consistency**.
+
+---
+
+### Model Highlights
+- **AlphaDrive**: Fine-tunes a small VLM for **high-level planning** using **GRPO** reward design to support **multiple valid plans** and emphasize **safety-critical actions**.
+- **EMMA**: Frames autonomy as a **multitask language interface** over an MLLM—planning, 3D detection, and road graph outputs are generated via prompts, with **coordinates/waypoints emitted as text**.
+- **Alpamayo-R1**: Argues free-form CoT is often unreliable; introduces **Chain-of-Causation (CoC)** supervision and a **flow-matching trajectory decoder** for **real-time multimodal continuous planning** tied to structured reasoning.
+
+---
+
+### Core Pipeline Pattern (Unifying View)
+All three can be summarized as:
+
+**Perception → latent representation → reasoning/decision tokens → action output**
+
+They differ mainly in:
+- the *granularity* of the action output (meta-actions vs textual waypoints vs decoded continuous trajectories),
+- whether reasoning is treated primarily as an **auxiliary explanation** or as a **structured decision-grounding signal**, and
+- whether action generation is done **directly in text/discrete space** or via an additional **continuous decoder**.
+
+---
+
+## Features (Inputs / Outputs / What “Action” Means)
+
+| Model | Primary Inputs | Primary Outputs | What “Action” is |
+|---|---|---|---|
+| **AlphaDrive** | Front-view image + prompt including speed + navigation instruction text | **Meta-actions** (lateral + longitudinal categories) and optionally structured reasoning | **Discrete high-level driving decision** (category-level) |
+| **EMMA** | Camera video/images, intent, ego history (represented as text), plus task prompt | **Waypoints/trajectories as text**, plus detection + road-graph outputs depending on prompt | **Trajectory as language** (coordinates emitted as plain text) |
+| **Alpamayo-R1** | Multi-camera images + egomotion; text context | **Structured reasoning + discrete trajectory tokens**, then **continuous trajectories via flow-matching decoder** | **Multimodal continuous trajectory**, efficiently decoded from tokens |
+
+---
+
+## Training & Supervision
+
+| Model | Training Stages | Key Supervision Signal | What the objective emphasizes |
+|---|---|---|---|
+| **AlphaDrive** | (1) Distill reasoning from a larger teacher → **SFT** warm-start; (2) **GRPO RL** refinement | GT meta-actions + reward shaping | **Multimodal planning** (diversity), **safety-critical weighting**, and structured output constraints |
+| **EMMA** | Multitask training with a unified language formulation; adds **CoT** prompting/training | **Future ego locations** from logs for planning; plus task-specific labels (detection/road-graph) | **Shared interface across tasks**; co-training yields cross-task gains |
+| **Alpamayo-R1** | Multi-stage: add action modality → SFT for reasoning → **RL post-training**; plus **CoC dataset/pipeline** | Structured **Chain-of-Causation** + trajectory objectives | **Causal structure**, **reasoning/action consistency**, and high-quality multimodal trajectories under runtime constraints |
+
+---
+
+## Reasoning
+
+| Model | Reasoning Form | Role of Reasoning |
+|---|---|---|
+| **AlphaDrive** | Structured “planning reasoning” text (format explicitly rewarded) | Improves planning quality via distillation + RL; reasoning is trained as part of the output distribution |
+| **EMMA** | Chain-of-thought rationales (text) | Primarily an accompanying rationale paired with predicted outputs; leverages MLLM capabilities and unified prompting |
+| **Alpamayo-R1** | **Chain-of-Causation (CoC)** (decision-grounded causal links) | Intended to provide *structured* decision grounding and improved alignment between reasoning and action generation |
+
+---
+
+## Real-Time + Deployment Story
+
+| Model | Runtime Strategy | Notes |
+|---|---|---|
+| **AlphaDrive** | Uses a small backbone (Qwen2VL-2B) + discrete meta-action outputs | Latency-friendly partly because the output space is compact and discrete |
+| **EMMA** | Reports a latency-optimized configuration (~3 FPS) via simplifying sequences and removing explicit reasoning chains | Frames runtime as a core constraint for MLLM autonomy and provides a speed-focused variant |
+| **Alpamayo-R1** | Uses **flow-matching** with a small number of steps (e.g., 5) for fast continuous decoding | Claims real-time end-to-end (~99ms) and on-vehicle road tests |
+
+---
+
+## Trade-Offs (AlphaDrive vs EMMA vs Alpamayo-R1)
+
+| Model | Excels at | Shortfalls / Risks | Why (mechanism-level) |
+|---|---|---|---|
+| **AlphaDrive** | **High-level planning robustness** under inherently multimodal supervision; explicitly promotes **diverse feasible plans** and **safety-sensitive decisions** via reward shaping. | **Limited behavioral expressivity** if the action taxonomy/labels are coarse (harder to represent nuanced maneuvers if they are not in the meta-action set). | Predicts **discrete meta-actions**, then uses **GRPO** with rewards for accuracy, action-weighting, diversity, and format. This supports multimodality and safety emphasis, but constrains representable behavior to the chosen action set. |
+| **EMMA** | **Unified multitask autonomy** (planning + detection + road graph) with a single promptable model; shows **co-training synergies** across tasks. | Emitting **numeric geometry as text** can be brittle (format/token issues, numeric precision sensitivity); large MLLMs face **latency constraints**, motivating simplified variants. | The design choice to express outputs (including coordinates) as **language** enables a unified interface and shared representations, but makes performance sensitive to **sequence formatting and length**; runtime constraints are acknowledged with a faster configuration. |
+| **Alpamayo-R1** | **Structured, decision-grounded reasoning** (CoC) paired with **high-quality multimodal continuous planning** and a strong **real-time** narrative via flow-matching decoding. | **Higher system complexity**: structured-labeling pipeline + multi-stage training + specialized decoder; performance depends on CoC label quality/coverage; structured reasoning still inherits upstream perception/context failures. | Adds (i) explicit **structured causal supervision** and (ii) a **continuous trajectory decoder** (flow matching) to combine controllability/consistency with efficient inference. Gains come with more components and stronger assumptions about labeling schema and conditioning.  |
+
+---
+
+## References
+\[1\] AlphaDrive: “AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning,” arXiv 2025.
+
+\[2\] EMMA: "End-to-End Multimodal Model for Autonomous Driving," arXiv 2024.
+
+\[3\] Alpamayo-R1: "Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail," arXiv 2026.
