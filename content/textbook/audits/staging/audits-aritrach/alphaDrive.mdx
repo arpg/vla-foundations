@@ -42,7 +42,7 @@ The paper argues that naive “correctness reward” used in math/programming ap
 ### 2.2 Context
 - **End-to-end driving models** can output trajectories/controls directly from sensors, but they are “black-box” systems that struggle with the long-tail of driving cases because they lack explicit reasoning.
 - **VLM-based planners** shift some of that burden: use vision + language prompting to decide higher-level actions, which can incorporate “commonsense” reasoning. The paper provides an example prompt where the model is asked to plan for the next three seconds using a speed + navigation command.
-- The gap AlphaDrive tries to close is **training strategy**: applying RL and reasoning methods that have shown value in large LMs (RLHF/DPO/GRPO, chain-of-thought, inference-time scaling), but tailored to the planning structure and evaluation realities in driving.
+- The gap AlphaDrive tries to close is **training strategy**: applying RL and reasoning methods that have shown value in large LMs (DPO/GRPO, chain-of-thought, inference-time scaling), but tailored to the planning structure and evaluation realities in driving.
 
 ### 2.3 Approaches
 A useful industry taxonomy for “VLMs in driving”:
@@ -276,3 +276,13 @@ This is consistent with the diversity reward motivation, but it creates a deploy
 \[1\] AlphaDrive: “AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning,” arXiv 2025.
 
 \[2\] DeepSeek-R1: "Incentivizing Reasoning Capability in LLMs via Reinforcement Learning," arXiv 2025.
+
+\[3\] PPO: "Proximal Policy Optimization Algorithms," arXiv 2017.
+
+\[4\] DPO: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model," arXiv 2023.
+
+\[5\] DeepSeekMath: "DeepSeek-Math: Pushing the Limits of Mathematical Reasoning in Open Language Models," arXiv 2024.
+
+\[6\] CoT: "Chain of Thought Prompting Elicits Reasoning in Large Language Models," arXiv 2022.
+
+\[7\] Qwen2-VL: "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution," arXiv 2024.
