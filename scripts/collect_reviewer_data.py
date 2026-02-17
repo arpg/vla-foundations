@@ -130,27 +130,27 @@ def compute_raw_points(categories_totals: dict[str, int]) -> int:
     )
 
 
-def normalize_scores(raw_points_list: list[int]) -> list[float]:
-    """Normalize raw points to 0-10 using sqrt scaling against class max.
+def normalize_scores(raw_points_list: list[int], benchmark_raw: int) -> list[float]:
+    """Normalize raw points to 0-10 using sqrt scaling against instructor benchmark.
 
-    sqrt scaling rewards both quality and volume without making it a
-    pure comment-count contest. A reviewer with 2x the raw points scores
-    ~1.4x, not 2x.
+    The instructor's total contribution sets the 10.0 ceiling. Students
+    are scored relative to that. sqrt scaling rewards both quality and
+    volume without making it a pure comment-count contest.
     """
     import math
-    max_raw = max(raw_points_list) if raw_points_list else 1
-    if max_raw == 0:
+    if benchmark_raw == 0:
         return [0.0] * len(raw_points_list)
-    sqrt_max = math.sqrt(max_raw)
-    return [round(math.sqrt(r) / sqrt_max * 10, 1) for r in raw_points_list]
+    sqrt_bench = math.sqrt(benchmark_raw)
+    return [min(10.0, round(math.sqrt(r) / sqrt_bench * 10, 1)) for r in raw_points_list]
 
 
 def quality_tier(score: float) -> str:
-    if score >= 8.0:
+    """Tier thresholds calibrated to instructor benchmark (10.0 = instructor)."""
+    if score >= 5.0:
         return "Exemplary"
-    elif score >= 6.0:
+    elif score >= 3.5:
         return "Strong"
-    elif score >= 4.0:
+    elif score >= 2.0:
         return "Solid"
     else:
         return "Developing"
@@ -343,16 +343,19 @@ def main():
             "_raw_points": raw,
         })
 
-    # Pass 2: normalize scores across the class (students only for scaling)
+    # Pass 2: normalize student scores against instructor benchmark
+    instructor_raw = next(
+        (p["_raw_points"] for p in pre_list if p["is_instructor"]), 1
+    )
     student_raws = [p["_raw_points"] for p in pre_list if not p["is_instructor"]]
-    student_scores = normalize_scores(student_raws)
+    student_scores = normalize_scores(student_raws, benchmark_raw=instructor_raw)
 
     # Build final list with normalized scores
     reviewer_list = []
     student_idx = 0
     for p in pre_list:
         if p["is_instructor"]:
-            score = 0.0  # not scored
+            score = 10.0  # benchmark
             tier = "Instructor"
         else:
             score = student_scores[student_idx]

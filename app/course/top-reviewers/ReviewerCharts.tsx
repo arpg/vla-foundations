@@ -201,8 +201,8 @@ export default function ReviewerCharts({
           Quality Scores
         </h2>
         <p className="text-gray-600 mb-6">
-          Heuristic quality score (0-10) based on comment depth, constructiveness, and specificity.
-          Tier bands: Exemplary (8+), Strong (6-8), Solid (4-6), Developing (&lt;4).
+          Quality score relative to instructor benchmark (10.0).
+          Tier bands: Exemplary (5+), Strong (3.5-5), Solid (2-3.5), Developing (&lt;2).
         </p>
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <ResponsiveContainer width="100%" height={400}>

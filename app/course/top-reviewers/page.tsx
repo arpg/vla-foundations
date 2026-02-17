@@ -122,9 +122,12 @@ export default function TopReviewersPage() {
           </div>
         </div>
 
-        {/* Instructor */}
+        {/* Instructor — The Benchmark */}
         {instructor && (
           <section className="mb-16">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              The Benchmark
+            </h2>
             <div className="border border-rose-200 rounded-lg p-6 bg-gradient-to-r from-rose-50 to-white">
               <div className="flex items-center gap-5">
                 <img
@@ -138,7 +141,11 @@ export default function TopReviewersPage() {
                       @{instructor.login}
                     </h3>
                     <TierBadge tier="Instructor" />
+                    <span className="text-sm font-mono text-rose-600">10.0/10</span>
                   </div>
+                  <p className="text-sm text-gray-500 mb-2">
+                    Student quality scores are measured relative to the instructor&apos;s review contributions.
+                  </p>
                   <div className="flex gap-4 text-sm text-gray-600">
                     <span>
                       <span className="font-semibold text-gray-900">
@@ -277,8 +284,9 @@ export default function TopReviewersPage() {
             <p className="text-gray-600 mb-4">
               Each review comment earns weighted points based on its content.
               Points are <strong>summed</strong> across all of a reviewer&apos;s comments to produce
-              a total contribution score, then normalized across the class using square-root
-              scaling. This rewards both quality and engagement &mdash; writing more high-quality
+              a total contribution score, then normalized against the <strong>instructor&apos;s
+              contributions as a benchmark</strong> (= 10.0) using square-root scaling.
+              This rewards both quality and engagement &mdash; writing more high-quality
               comments always helps your score, and you are never penalized for being prolific.
             </p>
             <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -295,10 +303,11 @@ export default function TopReviewersPage() {
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">Quality Tiers</h3>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li><span className="font-medium text-emerald-700">Exemplary</span> &mdash; 8.0+/10</li>
-                  <li><span className="font-medium text-blue-700">Strong</span> &mdash; 6.0&ndash;7.9</li>
-                  <li><span className="font-medium text-violet-700">Solid</span> &mdash; 4.0&ndash;5.9</li>
-                  <li><span className="font-medium text-gray-600">Developing</span> &mdash; below 4.0</li>
+                  <li><span className="font-medium text-rose-600">Instructor</span> &mdash; 10.0 (the benchmark)</li>
+                  <li><span className="font-medium text-emerald-700">Exemplary</span> &mdash; 5.0+/10 (50%+ of instructor)</li>
+                  <li><span className="font-medium text-blue-700">Strong</span> &mdash; 3.5&ndash;4.9</li>
+                  <li><span className="font-medium text-violet-700">Solid</span> &mdash; 2.0&ndash;3.4</li>
+                  <li><span className="font-medium text-gray-600">Developing</span> &mdash; below 2.0</li>
                 </ul>
                 <p className="text-xs text-gray-500 mt-3">
                   Categories stack &mdash; a technical question earns both &ldquo;technical depth&rdquo;
