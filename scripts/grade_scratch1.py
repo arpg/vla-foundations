@@ -271,14 +271,25 @@ class TestRunner:
         self._temp_branch = f"_grading-temp-{int(time.time())}"
 
         try:
-            # Stage and commit all injected files with bot identity
+            # Force-add injected files (they may be in .gitignore on student branches)
             print(f"  📤 Pushing to temp branch: {self._temp_branch}")
+            injected_files = [
+                "tests/internal/test_scratch1_rigor.py",
+                "tests/internal/__init__.py",
+                "tests/conftest.py",
+                "pyproject.toml",
+            ]
+            subprocess.run(
+                ["git", "add", "-f"] + injected_files,
+                cwd=self.repo_path, check=True,
+            )
+
+            # Commit with bot identity
             if self.git_manager:
                 self.git_manager.bot_commit(
                     f"[grading] temp commit for remote test run",
                 )
             else:
-                # Fallback: commit without bot identity
                 subprocess.run(["git", "add", "-A"], cwd=self.repo_path, check=True)
                 subprocess.run(
                     ["git", "commit", "--allow-empty", "-m", "[grading] temp commit for remote test run"],
