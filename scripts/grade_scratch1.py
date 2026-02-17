@@ -101,7 +101,7 @@ class GitManager:
             else:
                 subprocess.run(["git", "add", "-A"], cwd=self.repo_path, check=True)
             subprocess.run(
-                ["git", "commit", "-m", message],
+                ["git", "commit", "--allow-empty", "-m", message],
                 cwd=self.repo_path, capture_output=True, text=True, check=True
             )
             print(f"  🤖 Chris Bot committed: {message}")
