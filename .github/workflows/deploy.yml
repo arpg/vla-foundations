@@ -11,10 +11,10 @@ on:
       - 'private/**'
       - '**.md'
       - '.github/**'
-      - 'data/**'
       - 'pyproject.toml'
       - 'pytest.ini'
       - 'uv.lock'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -29,6 +29,7 @@ jobs:
           script: |
             cd ~/vla-build
             git pull origin main
+            npm install
             npm run build
             rsync -av --delete out/ /var/www/vlm-robotics.dev/out/
             echo "Deployment completed at $(date)"

@@ -86,6 +86,22 @@ export default function CoursePage() {
             </div>
           </section>
 
+          {/* Community */}
+          <section>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Community</h2>
+            <div className="grid gap-4 mb-8">
+              <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Top Reviewers</h3>
+                <p className="text-gray-600 mb-4">
+                  Celebrating peer review engagement across textbook audit PRs.
+                </p>
+                <Link href="/course/top-reviewers" className="text-blue-600 hover:text-blue-800 font-medium">
+                  View Leaderboard →
+                </Link>
+              </div>
+            </div>
+          </section>
+
           {/* Repository */}
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Course Repository</h2>
