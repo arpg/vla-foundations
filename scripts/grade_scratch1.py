@@ -291,8 +291,10 @@ class TestRunner:
                 cwd=self.repo_path, capture_output=True, text=True, check=True,
             )
 
-            # Run tests remotely via SSH (bash -l for login shell so uv is on PATH)
+            # Run tests remotely via SSH
+            # Explicitly add ~/.local/bin to PATH since non-login SSH doesn't source .profile
             ssh_cmd = (
+                f"export PATH=$HOME/.local/bin:$PATH && "
                 f"cd {self.REMOTE_REPO} && "
                 f"git fetch origin {self._temp_branch} && "
                 f"git checkout -f FETCH_HEAD && "
@@ -302,7 +304,7 @@ class TestRunner:
 
             print(f"  🧪 Running tests on {self.REMOTE_HOST}...")
             result = subprocess.run(
-                ["ssh", "-A", self.REMOTE_HOST, "bash", "-l", "-c", ssh_cmd],
+                ["ssh", "-A", self.REMOTE_HOST, ssh_cmd],
                 capture_output=True, text=True, timeout=300,
             )
 
