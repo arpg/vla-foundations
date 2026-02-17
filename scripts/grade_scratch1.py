@@ -291,19 +291,18 @@ class TestRunner:
                 cwd=self.repo_path, capture_output=True, text=True, check=True,
             )
 
-            # Run tests remotely via SSH
+            # Run tests remotely via SSH (bash -l for login shell so uv is on PATH)
             ssh_cmd = (
-                f"source ~/.local/bin/env 2>/dev/null; "
                 f"cd {self.REMOTE_REPO} && "
                 f"git fetch origin {self._temp_branch} && "
                 f"git checkout -f FETCH_HEAD && "
                 f"rm -f uv.lock && uv sync && "
-                f"uv run pytest tests/internal/test_scratch1_rigor.py -v -m rigor --tb=short"
+                f"uv run pytest tests/internal/test_scratch1_rigor.py -v -m rigor --tb=short 2>&1"
             )
 
             print(f"  🧪 Running tests on {self.REMOTE_HOST}...")
             result = subprocess.run(
-                ["ssh", "-A", self.REMOTE_HOST, ssh_cmd],
+                ["ssh", "-A", self.REMOTE_HOST, "bash", "-l", "-c", ssh_cmd],
                 capture_output=True, text=True, timeout=300,
             )
 
