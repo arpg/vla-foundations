@@ -51,16 +51,19 @@ def _call_attention(attn, x):
     seq_len = x.shape[1]
     causal_mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
-    for args in [(x,), (x, causal_mask)]:
+    # Try with mask first (more specific), then without.
+    # Catch broadly: students may crash on missing mask with AttributeError,
+    # TypeError, RuntimeError, etc.
+    for args in [(x, causal_mask), (x,)]:
         try:
             result = attn(*args)
             # Handle multi-value returns (output, attn_weights, kv_cache, ...)
             if isinstance(result, tuple):
                 return result[0]
             return result
-        except TypeError:
+        except Exception:
             continue
-    raise RuntimeError("CausalSelfAttention forward() could not be called with (x) or (x, mask)")
+    raise RuntimeError("CausalSelfAttention forward() could not be called with (x, mask) or (x)")
 
 
 def _call_model(model, input_ids, targets=None):
