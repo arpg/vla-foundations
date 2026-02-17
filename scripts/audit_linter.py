@@ -32,6 +32,62 @@ def check_semantic_breaks(file_path):
             )
     return errors
 
+def validate_frontmatter(file_path, content, lines):
+    """Validate YAML frontmatter contains required fields."""
+    errors = []
+
+    # Extract frontmatter
+    if not content.startswith('---'):
+        errors.append(
+            f"{file_path}: Missing YAML frontmatter. File must start with '---' followed by "
+            "title, author, paper, and topic fields."
+        )
+        return errors
+
+    # Find the end of frontmatter
+    frontmatter_end = None
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == '---':
+            frontmatter_end = i
+            break
+
+    if frontmatter_end is None:
+        errors.append(
+            f"{file_path}: Malformed YAML frontmatter. Missing closing '---'."
+        )
+        return errors
+
+    frontmatter_lines = lines[1:frontmatter_end]
+    frontmatter_text = '\n'.join(frontmatter_lines)
+
+    # Required fields for audit MDX files
+    required_fields = ['title', 'author', 'topic', 'paper']
+
+    for field in required_fields:
+        # Check if field exists (case-insensitive)
+        if not any(line.strip().lower().startswith(f'{field}:') for line in frontmatter_lines):
+            errors.append(
+                f"{file_path}: Missing required frontmatter field: '{field}'"
+            )
+
+    # Validate field values are not empty
+    for line in frontmatter_lines:
+        stripped = line.strip()
+        if ':' in stripped:
+            field_name, field_value = stripped.split(':', 1)
+            field_name = field_name.strip().lower()
+            field_value = field_value.strip()
+
+            if field_name in required_fields:
+                # Check for empty values or placeholder values
+                if not field_value or field_value in ['""', "''", 'null', 'TBD', 'TODO']:
+                    errors.append(
+                        f"{file_path}: Empty or placeholder value for required field: '{field_name}'"
+                    )
+
+    return errors
+
+
 def check_mdx_syntax(file_path):
     """Check for MDX-specific syntax issues."""
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -40,12 +96,8 @@ def check_mdx_syntax(file_path):
 
     errors = []
 
-    # Check 1: Must have YAML frontmatter at the start
-    if not content.startswith('---'):
-        errors.append(
-            f"{file_path}: Missing YAML frontmatter. File must start with '---' followed by "
-            "title, author, paper, and topic fields."
-        )
+    # Check 1: Validate frontmatter fields
+    errors.extend(validate_frontmatter(file_path, content, lines))
 
     # Check 2: No HTML comments (should use JSX-style {/* */})
     if '<!--' in content:
