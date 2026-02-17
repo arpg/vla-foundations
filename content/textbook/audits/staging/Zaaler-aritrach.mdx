@@ -93,132 +93,356 @@ They differ mainly in:
 
 # Technical Paper Audit: AlphaDrive
 
-**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous  Driving via Reinforcement Learning and Reasoning (arXiv Mar. 2025)
-**Authors**: Huazhong University of Science and Technology and Horizon Robotics
-**Audit Author**: Aritra Chakrabarty
+**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning
+**Authors**: (as listed in the paper)
+**Audit Author**: Aritra
+**Paper**: AlphaDrive (arXiv 2025)
+**Topic**: Vision Foundations
 
 ---
 
-# 1. Summary
+## 1. Summary
+
+AlphaDrive is a **2B-parameter vision-language planner** for autonomous driving that outputs **high-level “meta-actions”** (speed + direction) along with an optional reasoning trace formatted in `<think>...</think>` and a final decision in `<answer>...</answer>`.
+
+The core thesis is that **SFT-only VLM driving planners leave performance and data-efficiency on the table**, and that the RL + reasoning playbook that improved general LLMs can be adapted to driving *if* you redesign rewards for planning. Specifically, AlphaDrive adapts **Group Relative Policy Optimization (GRPO)** and introduces a planning-specific reward suite: **planning accuracy (F1), action-weighting, diversity, and format regularization**, arguing this better reflects (i) unequal safety criticality across actions and (ii) multimodal “multiple-valid-solution” planning.
+
+Because high-quality driving “chain-of-thought” data is scarce, they use a multi-stage reasoning strategy: generate a small batch of reasoning traces using a stronger cloud model (e.g., GPT-4o), manually filter it, SFT warm-up on that reasoning data for stability, then run **RL on the full dataset**.
+
+On MetaAD (120k 3-second clips; 110k train / 10k val), AlphaDrive reports **77.12 overall planning accuracy**, outperforming fine-tuned baselines including a larger Qwen2VL-7B result (61.44).
+
+They further claim **+25.52%** planning accuracy vs an SFT-trained model, and that with only 20% training data they outperform SFT by **35.31%**, emphasizing data-efficiency.
 
 ---
 
-# 2. Architectural Overview
+## 2. Problem Domain & Taxonomy
 
-## 2.1 Platform Architecture
+### 2.1 The Technical Challenge
+**Core problem:** Train a VLM to produce a **safe, correct high-level plan** for the next short horizon (e.g., “next three seconds”), where:
+- there are **two coupled decision axes** (lateral + longitudinal),
+- different decisions have **different safety weights** (stop/brake ≫ keep speed), and
+- many scenarios admit **multiple valid plans** rather than a single correct token.
 
-## 2.2 Video Tokenization
+The paper argues that naive “correctness reward” used in math/programming applications does not transfer cleanly to planning; you need a reward that is robust early in training and resistant to shortcut solutions.
 
-## 2.3 Pre-trained World Foundation Models
+### 2.2 Context
+- **End-to-end driving models** can output trajectories/controls directly from sensors, but they are “black-box” systems that struggle with the long-tail of driving cases because they lack explicit reasoning.
+- **VLM-based planners** shift some of that burden: use vision + language prompting to decide higher-level actions, which can incorporate “commonsense” reasoning. The paper provides an example prompt where the model is asked to plan for the next three seconds using a speed + navigation command.
+- The gap AlphaDrive tries to close is **training strategy**: applying RL and reasoning methods that have shown value in large LMs (DPO/GRPO, chain-of-thought, inference-time scaling), but tailored to the planning structure and evaluation realities in driving.
 
-## Diffusion WFMs
+### 2.3 Approaches
+A useful industry taxonomy for “VLMs in driving”:
 
-## Autoregressive WFMs
+1. **End-to-end control/trajectory networks**
+   - Directly output controls/trajectories from sensors.
+   - Critique in paper: black-box and long-tail brittle.
 
-## 2.5 Architectural Trade-Offs
+2. **VLM high-level planners (meta-actions)**
+   - Output symbolic/linguistic decisions; a downstream system handles continuous control.
+   - AlphaDrive sits here (meta-action F1 evaluation).
 
----
-
-# 3. Data & Scaling
-
-## 3.1 Data Curation Pipeline
-
-## 3.2 Scale Claims
-
-## 3.3 What Scales and What Does Not
----
-
-# 4. Downstream Application
-
-## 4.1 Robotics
-
-## 4.2 Missing Closed-Loop Evidence
-
-## 4.3 The Video-Only Assumption
+3. **RL-augmented VLM planners (AlphaDrive’s focus)**
+   - Use RL to evaluate policies and improve planning performance.
+   - The key: RL must be adapted to planning rewards and multi-solution outputs.
 
 ---
 
-# 5. Critical Synthesis & Sign-Off
+## 3. Architectural Overview (Pipeline-Level)
 
-## 5.1 Load-Bearing Assumptions
-* **Assumption 1**:
-* **Assumption 2**:
+AlphaDrive’s “architecture” is best described as a **training + inference pipeline**.
 
-## 5.2 Reproducibility Assessment
-- Code publicly available?
-- Pre-trained models released?
-- Dataset accessible?
-- Hyperparameters specified?
-- Quantitative evaluation?
+### 3.1 Input/Output Contract
 
-**Score: 3/5 - Somewhat reproducible.**
+- **Input**: front-view image + planning prompt containing the vehicle’s current speed and navigation info.
+- **Navigation**: derived from sparse navigation points (Google Maps-like) and converted into text (e.g., “Go straight for 100m, then turn right”).
+- **Output format**: reasoning inside `<think>` and final answer (meta-action) inside `<answer>` tags; non-conforming outputs receive **format reward = 0** (hard penalty).
 
-## 5.3 Failure Modes
+### 3.2 Base Model Choice
 
-## 5.4 Sign-Off Criteria
-**Decision:** 
+They use **Qwen2VL-2B** as the base model, motivated by:
+
+- better meets latency requirements than larger variants, and
+- better support for RL training (their claim).
+
+**Training hardware**: 16 NVIDIA A800 GPUs.
+
+---
+
+## 4. Training Method & Objective Deep-Dive
+
+### 4.1 GRPO as the RL Backbone
+
+AlphaDrive uses **Group Relative Policy Optimization (GRPO)**. The paper defines GRPO as:
+
+- sample a group of outputs $\{o_i\}_{i=1}^{G}$ from an old policy,
+- optimize a PPO-style clipped objective with KL regularization,
+- compute advantages using **normalized reward within the group**.
+
+They justify GRPO with two reasons:
+
+1. it showed strong stability/effectiveness in general domains (citing Deepseek R1 \[2\]), and
+2. group-relative optimization suits planning because planning admits **multiple valid solutions**.
+
+
+### 4.2 Planning Reward Modeling
+
+AlphaDrive introduces **four rewards**, then combines them into the final RL signal, which is their key contribution.
+
+#### Reward 1 — Planning Accuracy Reward
+They found exact-match reward unstable early (format noise like case sensitivity/extraneous tokens), and “GT included among words” encourages a shortcut (eg. output all possible actions), causing collapse. They adopt **F1-score** for lateral and longitudinal decisions separately for stability and shortcut resistance.
+
+#### Reward 2 — Action-Weighted Reward
+They argue different behaviors have different safety importance (e.g., decelerate/stop more critical than keep speed) and incorporate action weights into the reward.
+
+#### Reward 3 — Planning Diversity Reward
+They observe that during group-based RL, outputs converge to the same solution; since planning is multimodal, they want multiple feasible solutions.
+Algorithmically, they compute frequency of each plan among group outputs and apply **up to 20% reduction**:
+`plan_div_R = 1 - min(0.2, frequency)`
+
+#### Reward 4 — Planning Format Reward
+They enforce `<think>` and `<answer>` tags; if the output doesn’t conform, **format reward is 0**.
+
+#### Reward Composition
+
+They multiply accuracy × action-weight × diversity to compute a **planning quality reward**, separately for speed and direction planning, and combine with format reward for GRPO updates.
+
+
+### 4.3 Reasoning Training
+
+They tried incorporating reasoning steps directly into RL, but results were suboptimal due to:
+
+- insufficient perception of key elements (e.g., traffic lights),
+- disorganized reasoning with weak causal links,
+- overly long and ineffective reasoning.
+
+So they use a stronger cloud model (e.g., GPT-4o) to generate concise reasoning conditioned on real actions + state + nav, manually filter errors, and distill via SFT.
+
+Finally, they train with:
+
+- **SFT warm-up** on a small amount of data (dense supervision, stable), then
+- **RL training** with the full dataset (exploration + reward shaping).
 
 ---
 
-# References
+## 5. Data & Scaling
+
+### 5.1 Dataset
+
+They adopt **MetaAD** \[*NOTE: Could not find this dataset anywhere, neither could their reviewers at ICLR 2026*\] as the benchmark:
+
+- **120k** real-world driving clips, each **3 seconds**,
+- multi-sensor + perception annotations,
+- balanced distribution over environments and planning actions,
+- split into **110k train / 10k validation**.
+
+### 5.2 Evaluation Metrics
+
+- **Planning**: F1-score for all categories of lateral + longitudinal meta-actions, aggregated into overall planning accuracy.
+- **Reasoning**: similarity between generated reasoning and annotated reasoning using BLEU-4, CIDEr, and METEOR.
+
+
+### 5.3 Main Performance Results
+
+From the main results table:
+
+- AlphaDrive (2B) reports **77.12** overall planning accuracy.
+- The strongest listed fine-tuned baseline Qwen2VL-7B (*fine-tuned on the Meta-AD dataset*) reports **61.44** accuracy.
+
+They also state:
+
+- planning accuracy improves by **25.5%** vs Qwen2VL-7B and improves key decisions like steering and accel/decel.
+
+And in the contributions:
+
+- **+25.52% vs SFT-trained model**, and
+- **+35.31% with only 20% training data** compared to SFT-trained.
+
+### 5.4 Data-Efficiency Scaling
+
+They measure SFT vs RL vs SFT+RL at 20k, 50k, 110k training sizes:
+
+- **20k**: SFT 41.12, RL 45.46, SFT+RL 55.64
+- **50k**: SFT 53.02, RL 59.33, SFT+RL 70.83
+- **110k**: SFT 65.40, RL 72.41, SFT+RL 77.12
+
+
+### 5.5 Reasoning Strategy Ablation
+
+They compare reasoning training modes and show the best overall score for the **SFT+RL with reasoning enabled** condition (77.12).
 
 ---
+
+## 6. Robotic Grounding & Physicality Gap
+
+### 6.1 The Precision Gap
+
+AlphaDrive plans in a **low-frequency, discrete meta-action space** (speed + direction), which is intentionally easier than continuous control.
+
+**Engineering trade-off:**
+
+- **Pro:** avoids asking a VLM to output precise trajectories at high Hz.
+- **Con:** shifts risk to the interface between **symbolic plan → downstream controller**. Need to prove that the downstream stack can **robustly** interpret “decelerate, left” in dense traffic.
+
+### 6.2 Benchmark Critique
+
+- The benchmark is 3-second clips (short horizon).
+- The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation. Although a question of what exactly is "long-horizon" is important, as in driving scenarions, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
+
+### 6.3 “Emergent multimodal planning” claim
+
+They state that after RL, AlphaDrive shows “emergent multimodal planning capabilities,” generating multiple reasonable plans, and that this could improve safety/efficiency.
+This is consistent with the diversity reward motivation, but it creates a deployment question: **how do you select among multiple plans safely and consistently?**
+
+---
+
+## 7. Critical Synthesis
+
+### 7.1 Load-Bearing Assumptions
+
+1. **Reward alignment assumption**
+   The 4-reward design (F1 accuracy + action weights + diversity + format) must correlate with “better driving,” not just better label matching.
+
+2. **Multi-solution optimization assumption**
+   GRPO’s group-relative ranking is assumed to be a good match for planning where multiple valid solutions exist.
+
+3. **Reasoning usefulness assumption**
+   Distilled reasoning is assumed to improve decisions, not merely produce nicer explanations; they explicitly found RL-only reasoning to be messy. But, how do we know that decisions are actually improving because of better reasoning, rather than just better reward optimization?
+
+### 7.2 Reproducibility Assessment
+
+**Pros:**
+
+- Concrete equations for GRPO and explicit reward pseudo-code.
+- Clean ablation studies on data size and reasoning strategies.
+
+**Gaps:**
+
+- Claims about latency motivation (2B chosen to meet latency requirements) are not paired here with actual runtime numbers.
+- “Emergent multimodal planning” is asserted, but not fully closed-loop validated with a selection policy and safety metrics.
+- The MetaAD dataset is not publicly available, which hinders reproducibility and external validation.
+
+### 7.3 Failure Modes
+
+1. **Perception-limited reasoning (traffic lights / key cues)**
+   They explicitly note insufficient perception of key elements like traffic lights harmed direct RL reasoning.
+   - Risk: confident but wrong plans when cues are present but not used.
+
+2. **Diversity reward producing “diverse but unsafe” plans**
+   Diversity is rewarded by penalizing frequency among sampled answers.
+   - Risk: incentivize disagreement without feasibility grounding, making downstream selection harder.
+
+3. **Format-induced brittleness**
+   Format reward is hard-zero when tags fail.
+   - Risk: rare formatting drift can be catastrophic in a production parser unless you robustify extraction.
+
+### 7.4 The Next 10,000 GPU-hour Experiment
+
+**Experiment A — “Causal reasoning validity” instead of BLEU/CIDEr**
+- Problem: reasoning evaluation uses BLEU/CIDEr/METEOR similarity.
+- Proposal: build a labeled eval slice with causal factor tags (red light present, pedestrian crossing, stopped lead vehicle, occlusion). Score:
+  - whether reasoning cites the correct causal factors
+  - whether counterfactual masking flips the plan appropriately
+- Success: improvement in causal correctness *and* planning F1.
+
+**Experiment B — “Multimodal plan selection” in closed-loop**
+- Motivation: they claim multimodal planning emerges post-RL.
+- Proposal: generate K plans, run a safety/rule feasibility filter, select, then evaluate closed-loop safety proxies (hard-brake rate, time-to-collision proxy, rule violations).
+
+### 7.5 Sign-Off Criteria
+
+**Technical recommendation:**
+
+- **Sign off for research adoption:** Yes — strong evidence that tailored RL (GRPO) + planning reward engineering + reasoning distillation improves a high-level VLM planner and yields better data-efficiency.
+- **Sign off for production readiness:** Conditional No — missing inference reality metrics and closed-loop validation for multi-plan selection; format brittleness needs hardened parsing and fallback policies.
+
+---
+
+## References
+
+\[1\] AlphaDrive: “AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning,” arXiv 2025.
+
+\[2\] DeepSeek-R1: "Incentivizing Reasoning Capability in LLMs via Reinforcement Learning," arXiv 2025.
+
+\[3\] PPO: "Proximal Policy Optimization Algorithms," arXiv 2017.
+
+\[4\] DPO: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model," arXiv 2023.
+
+\[5\] DeepSeekMath: "DeepSeek-Math: Pushing the Limits of Mathematical Reasoning in Open Language Models," arXiv 2024.
+
+\[6\] CoT: "Chain of Thought Prompting Elicits Reasoning in Large Language Models," arXiv 2022.
+
+\[7\] Qwen2-VL: "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution," arXiv 2024.
 
 
 # Technical Paper Audit: EMMA
 
-**Title**: EMMA: End-to-End Multimodal Model for  Autonomous Driving (arXiv Sep. 2025)
+**Title**: EMMA: End-to-End Multimodal Model for Autonomous Driving (arXiv Sep. 2025)
 **Authors**: Waymo LLC
 **Audit Author**: Zack Allen
 
 ---
 
-# 1. Summary
+## 1. Summary
+
+EMMA is full end-to-end autonomous driving system and its novel element is adapting this formulation for MLLMs for autonomous driving. This means sensor data in and future trajectory waypoints out. The modal has a text encoder and a vision encoder. The text encoder takes in high-level commanding (i.e. simple commands from Google Maps) and historical ego status of the vehicle. In autonomous driving, the ego vehicle is the autonomous vehicle where as the other vehicles are called target vehicles. The history of the ego vehicle contains the past set of trajectory waypoints expressed in a birds eye view space expressed as plain text without specialized tokens. They claim this could be extended for velocity and acceleration but do not include that analysis in this paper. This text information is combined with 360 birds eye camera data. This data is fed into Gemini or PaLI which produces ego future waypoints. Additionally, the model produces driving rationale through chain of thought reasoning. To achieve accurate chain of thought reasoning, they structure the driving rationale in 4 types: scene description (weather, time, road conditions), critical objects (model must idenitify their precise 3D coordinates), behavior description of critical objects (use concrete example prompt and answer to get valid descriptions), and meta driving decision (12 categories of driving evaluated at 3 different timestamps (0, 1, 3 seconds) with additional information to describe speed changes if necessary). In order to train the model, they perform instruction tuning to jointly train the following tasks: spatial reasoning (3D object detection represented in text), road graph estimation (lane markings, signs, lane curvature, merges/splits, direction of traffic, all converted into a text encoded road graph of waypoints), and scene understanding (immediate checking of road obstructions).
 
 ---
 
-# 2. Architectural Overview
+## 2. Architectural Overview
+The architecture is a multimodal large language model. It takes in routing commands and vehicle ego history in text and 360 camera streams in vision. This raw information is directly fed into Gemini 1.0 Nano-1 or PaLI. The particular LLM has been trained using the three task definitions: spatial reasoning, road graph estimation, and scene understanding. The data sets for this training include driving data from nuScenes, Waymo Open Motion Dataset, and an internally developed dataset, object detection data from Waymo Open dataset and an internal detection dataset, and road graph data from an internal road graph dataset. Using this information (not sure if the paper agrees with this considering they say O_traj can be generated before O_rationale), the model produces multiple possible trajectories which are then averaged to produce the best future trajectory. This trajectory is then compared against ground truth data from the driver.
 
-## 2.1 Platform Architecture
-
-## 2.2 Video Tokenization
-
-## 2.3 Pre-trained World Foundation Models
-
-## Diffusion WFMs
-
-## Autoregressive WFMs
-
-## 2.5 Architectural Trade-Offs
+### 2.1 Architectural Trade-Offs
 
 ---
 
-# 3. Data & Scaling
+## 3. Data & Scaling
 
-## 3.1 Data Curation Pipeline
+### 3.1 Data Curation Pipeline
 
-## 3.2 Scale Claims
+Driving Motion Datasets
+nuScenes - 1000 scenes, 20 sec clips, -> 18,686 training examples
+WOMD - 103k real world urban and suburban, 20 sec clips, -> 487,061 training examples of 9 second windows (1 second prior, 8 seconds prediction)
+Internal motion dataset - 24 million real world, 30 seconds long -> sample just one frame
 
-## 3.3 What Scales and What Does Not
+Object Detection Datasets
+WOD - 1150 20 second scenes
+Internal Object Detection Dataset - 12 million examples -> prioritize diverse objects sample one every 3 seconds
+
+Road Graph Dataset
+Internal Road Graph Dataset - focus on diverse scenarios and geo-locations, sample one every 30 seconds (same as motion planning dataset)
+
+### 3.2 Scale Claims
+
+Model is self supervised depending only on future locations of the ego vehicle with no dedicated human labels needed. They claim EMMA hasn't plateaued on their mega-scale dataset. Still could do better with more data.
+
+### 3.3 What Scales and What Does Not
+- Current model only processes a limited number of frames (up to 4) reducing long term reasoning.
+- No gaurantee that the objects, road graph elements, and chain of thought will be consistent (although they state that often they are.)
+- No closed loop evaluation so no testing of solution wiht full sensor suite.
+- nuScenes' limitations like collision rate are sensitive to hyperparameter choices also lack planning diversity and can be solved strictly with ego history.
+- Need for inference time speed up by optiizing and distilling model to compact form.
+
 ---
 
-# 4. Downstream Application
+## 4. Downstream Application
 
-## 4.1 Robotics
+### 4.1 Robotics
 
-## 4.2 Missing Closed-Loop Evidence
+Id argue if you could disseminate a core set of manipulation based tasks with ground truths based on some sort of fixed solution finding system, the fundamental principles from this paper could be applied.
 
-## 4.3 The Video-Only Assumption
+### 4.2 Missing Closed-Loop Evidence
+
+### 4.3 The Video-Only Assumption
 
 ---
 
-# 5. Critical Synthesis & Sign-Off
+## 5. Critical Synthesis & Sign-Off
 
-## 5.1 Load-Bearing Assumptions
+### 5.1 Load-Bearing Assumptions
 * **Assumption 1**:
 * **Assumption 2**:
 
-## 5.2 Reproducibility Assessment
+### 5.2 Reproducibility Assessment
 - Code publicly available?
 - Pre-trained models released?
 - Dataset accessible?
@@ -227,71 +451,66 @@ They differ mainly in:
 
 **Score: 3/5 - Somewhat reproducible.**
 
-## 5.3 Failure Modes
+### 5.3 Failure Modes
 
-## 5.4 Sign-Off Criteria
-**Decision:** 
+### 5.4 Sign-Off Criteria
+**Decision:**
 
 ---
 
-# References
+## References
 
 ---
 
 # Technical Paper Audit: Alpamayo-R1
 
-**Title**: Alpamayo-R1: Bridging Reasoning and Action Prediction  for Generalizable Autonomous Driving in the Long Tail (arXiv Jan. 2026)
+**Title**: Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail (arXiv Jan. 2026)
 **Authors**: Nvidia
 **Audit Author**: Aritra Chakrabarty and Zack Allen
 
 ---
 
-# 1. Summary
+## 1. Summary
 
 ---
 
-# 2. Architectural Overview
+## 2. Architectural Overview
 
-## 2.1 Platform Architecture
+### 2.1 Chain-of-Causation (CoC) Reasoning
 
-## 2.2 Video Tokenization
+### 2.2 Flow-Matching Trajectory Decoder
 
-## 2.3 Pre-trained World Foundation Models
-
-## Diffusion WFMs
-
-## Autoregressive WFMs
-
-## 2.5 Architectural Trade-Offs
+### 2.3 Architectural Trade-Offs
 
 ---
 
-# 3. Data & Scaling
+## 3. Data & Scaling
 
-## 3.1 Data Curation Pipeline
+### 3.1 Data Curation Pipeline
 
-## 3.2 Scale Claims
+### 3.2 Scale Claims
 
-## 3.3 What Scales and What Does Not
----
-
-# 4. Downstream Application
-
-## 4.1 Robotics
-
-## 4.2 Missing Closed-Loop Evidence
-
-## 4.3 The Video-Only Assumption
+### 3.3 What Scales and What Does Not
 
 ---
 
-# 5. Critical Synthesis & Sign-Off
+## 4. Downstream Application
 
-## 5.1 Load-Bearing Assumptions
+### 4.1 Robotics
+
+### 4.2 Missing Closed-Loop Evidence
+
+### 4.3 Real-Time Deployment
+
+---
+
+## 5. Critical Synthesis & Sign-Off
+
+### 5.1 Load-Bearing Assumptions
 * **Assumption 1**:
 * **Assumption 2**:
 
-## 5.2 Reproducibility Assessment
+### 5.2 Reproducibility Assessment
 - Code publicly available?
 - Pre-trained models released?
 - Dataset accessible?
@@ -300,13 +519,13 @@ They differ mainly in:
 
 **Score: 3/5 - Somewhat reproducible.**
 
-## 5.3 Failure Modes
+### 5.3 Failure Modes
 
-## 5.4 Sign-Off Criteria
-**Decision:** 
+### 5.4 Sign-Off Criteria
+**Decision:**
 
 ---
 
-# References
+## References
 
 ---
