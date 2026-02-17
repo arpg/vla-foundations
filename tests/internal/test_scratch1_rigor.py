@@ -297,8 +297,8 @@ def test_training_convergence(small_config, device):
         logits, loss = _call_model(model, input_ids, targets)
         initial_losses.append(loss.item())
 
-    # Train for 50 steps
-    for step in range(50):
+    # Train for 100 steps
+    for step in range(100):
         idx = step % num_samples
         batch = data[idx:idx+1].to(device)
         input_ids = batch[:, :-1]
@@ -324,18 +324,11 @@ def test_training_convergence(small_config, device):
     initial_loss = sum(initial_losses) / len(initial_losses)
     final_loss = sum(final_losses) / len(final_losses)
 
-    # Check that loss decreased
-    improvement = initial_loss - final_loss
-    assert improvement > 0.1, \
-        f"Loss did not decrease significantly. Initial: {initial_loss:.3f}, Final: {final_loss:.3f}. " \
-        f"Check your training loop implementation."
-
-    # Check that final loss is reasonable
-    # For random 256-way classification, loss ~= log(256) ~= 5.5
-    # After training, should be noticeably lower
-    assert final_loss < 5.0, \
-        f"Final loss too high ({final_loss:.3f}). Model is not learning. " \
-        f"Check gradient flow and loss computation."
+    # Check that loss decreased by at least 20% of the initial loss
+    drop_pct = (initial_loss - final_loss) / initial_loss
+    assert drop_pct > 0.20, \
+        f"Loss did not decrease by at least 20%. Initial: {initial_loss:.3f}, Final: {final_loss:.3f} " \
+        f"({drop_pct*100:.1f}% drop). Check your training loop implementation."
 
     return initial_loss, final_loss  # Return for partial credit calculation
 
