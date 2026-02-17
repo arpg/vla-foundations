@@ -25,6 +25,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* CDN fallback for KaTeX CSS - ensures it loads on GitHub Pages */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css"
+          integrity="sha384-yp+jpRNKIa0xGrYaVtwImDXkFq7ZOCV5kJZVDg/uAFfYPmtFcKr0sxhVJy1HqnWD"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
