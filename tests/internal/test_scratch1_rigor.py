@@ -40,6 +40,45 @@ def _make_causal_attention(dim, num_heads, max_seq_len, dropout=0.0):
         return CausalSelfAttention(dim=dim, num_heads=num_heads, dropout=dropout)
 
 
+def _call_attention(attn, x):
+    """Call CausalSelfAttention flexibly.
+
+    Some students' forward() requires a mask argument (they moved mask creation
+    to the Transformer level).  Try without mask first, then with an explicit
+    causal mask.  Also handle implementations that return extra values
+    (attention weights, KV-cache) beyond the output tensor.
+    """
+    seq_len = x.shape[1]
+    causal_mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+
+    for args in [(x,), (x, causal_mask)]:
+        try:
+            result = attn(*args)
+            # Handle multi-value returns (output, attn_weights, kv_cache, ...)
+            if isinstance(result, tuple):
+                return result[0]
+            return result
+        except TypeError:
+            continue
+    raise RuntimeError("CausalSelfAttention forward() could not be called with (x) or (x, mask)")
+
+
+def _call_model(model, input_ids, targets=None):
+    """Call DecoderOnlyTransformer.forward() flexibly.
+
+    Some students return extra values (attention weights, KV-cache) beyond
+    (logits, loss).  Always return (logits, loss).
+    """
+    if targets is not None:
+        result = model(input_ids, targets)
+    else:
+        result = model(input_ids)
+
+    if isinstance(result, tuple):
+        return result[0], result[1]
+    return result, None
+
+
 @pytest.fixture
 def device():
     """Get available device"""
@@ -147,7 +186,7 @@ def test_causal_mask_leakage():
     x = torch.arange(seq_len).float().view(1, seq_len, 1).expand(batch_size, seq_len, dim)
     x = x + torch.randn(batch_size, seq_len, dim) * 0.1  # Add small noise
 
-    output = attn(x)
+    output = _call_attention(attn, x)
 
     # Check output shape
     assert output.shape == x.shape, f"Attention output shape mismatch: {output.shape} != {x.shape}"
@@ -160,8 +199,8 @@ def test_causal_mask_leakage():
     x_modified[:, seq_len//2:, :] = torch.randn_like(x_modified[:, seq_len//2:, :]) * 1000  # Drastically change future
 
     with torch.no_grad():
-        output_original = attn(x)
-        output_modified = attn(x_modified)
+        output_original = _call_attention(attn, x)
+        output_modified = _call_attention(attn, x_modified)
 
     # Outputs for positions 0 to seq_len//2-1 should be identical (within numerical precision)
     early_positions = slice(0, seq_len//2)
@@ -182,7 +221,7 @@ def test_causal_attention_shape_preservation():
     attn = _make_causal_attention(dim=dim, num_heads=num_heads, max_seq_len=32)
     x = torch.randn(batch_size, seq_len, dim)
 
-    output = attn(x)
+    output = _call_attention(attn, x)
     assert output.shape == (batch_size, seq_len, dim), \
         f"Attention output shape {output.shape} != expected {(batch_size, seq_len, dim)}"
 
@@ -195,11 +234,11 @@ def test_causal_attention_shape_preservation():
 @pytest.mark.skipif(not IMPORT_SUCCESS, reason="Import failed")
 def test_rope_embeddings():
     """Test RoPE is applied correctly"""
-    dim = 64
+    head_dim = 32
     max_seq_len = 32
-    rope = RotaryPositionalEmbedding(dim=dim, max_seq_len=max_seq_len)
+    rope = RotaryPositionalEmbedding(dim=head_dim, max_seq_len=max_seq_len)
 
-    batch_size, num_heads, seq_len, head_dim = 2, 4, 16, dim // 4
+    batch_size, num_heads, seq_len = 2, 4, 16
     q = torch.randn(batch_size, num_heads, seq_len, head_dim)
     k = torch.randn(batch_size, num_heads, seq_len, head_dim)
 
@@ -252,7 +291,7 @@ def test_training_convergence(small_config, device):
         input_ids = batch[:, :-1]
         targets = batch[:, 1:]
 
-        logits, loss = model(input_ids, targets)
+        logits, loss = _call_model(model, input_ids, targets)
         initial_losses.append(loss.item())
 
     # Train for 50 steps
@@ -263,7 +302,7 @@ def test_training_convergence(small_config, device):
         targets = batch[:, 1:]
 
         optimizer.zero_grad()
-        logits, loss = model(input_ids, targets)
+        logits, loss = _call_model(model, input_ids, targets)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
@@ -276,7 +315,7 @@ def test_training_convergence(small_config, device):
             input_ids = batch[:, :-1]
             targets = batch[:, 1:]
 
-            logits, loss = model(input_ids, targets)
+            logits, loss = _call_model(model, input_ids, targets)
             final_losses.append(loss.item())
 
     initial_loss = sum(initial_losses) / len(initial_losses)
@@ -314,7 +353,7 @@ def test_model_forward_pass(small_config, device):
     targets = torch.randint(0, small_config["vocab_size"], (batch_size, seq_len)).to(device)
 
     # Test forward with targets (training mode)
-    logits, loss = model(input_ids, targets)
+    logits, loss = _call_model(model, input_ids, targets)
 
     assert logits.shape == (batch_size, seq_len, small_config["vocab_size"]), \
         f"Logits shape {logits.shape} incorrect"
@@ -322,7 +361,7 @@ def test_model_forward_pass(small_config, device):
     assert torch.isfinite(loss), "Loss is NaN or Inf"
 
     # Test forward without targets (inference mode)
-    logits_only, loss_only = model(input_ids)
+    logits_only, loss_only = _call_model(model, input_ids)
     assert logits_only.shape == (batch_size, seq_len, small_config["vocab_size"]), \
         f"Logits shape {logits_only.shape} incorrect"
     assert loss_only is None, "Loss should be None when no targets provided"
