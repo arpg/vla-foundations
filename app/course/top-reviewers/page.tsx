@@ -275,9 +275,11 @@ export default function TopReviewersPage() {
           </h2>
           <div className="prose prose-sm prose-slate max-w-none">
             <p className="text-gray-600 mb-4">
-              Each review comment is scored using heuristic rules based on its content.
-              Points are awarded per comment, then averaged across all comments to produce
-              a 0&ndash;10 quality score.
+              Each review comment earns weighted points based on its content.
+              Points are <strong>summed</strong> across all of a reviewer&apos;s comments to produce
+              a total contribution score, then normalized across the class using square-root
+              scaling. This rewards both quality and engagement &mdash; writing more high-quality
+              comments always helps your score, and you are never penalized for being prolific.
             </p>
             <div className="grid md:grid-cols-2 gap-4 mb-6">
               <div className="border border-gray-200 rounded-lg p-4">
@@ -299,8 +301,10 @@ export default function TopReviewersPage() {
                   <li><span className="font-medium text-gray-600">Developing</span> &mdash; below 4.0</li>
                 </ul>
                 <p className="text-xs text-gray-500 mt-3">
-                  A single high-quality comment can score higher than many brief ones.
-                  Categories can stack &mdash; a technical question earns both &ldquo;technical depth&rdquo; and &ldquo;clarification&rdquo; points.
+                  Categories stack &mdash; a technical question earns both &ldquo;technical depth&rdquo;
+                  and &ldquo;clarification&rdquo; points. Scores are normalized with &radic; scaling
+                  against the class maximum, so doubling your contribution raises your score
+                  by ~41%, not 100%.
                 </p>
               </div>
             </div>

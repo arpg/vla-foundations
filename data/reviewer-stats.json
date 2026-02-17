@@ -1,105 +1,6 @@
 {
-  "generated_at": "2026-02-17T20:43:47.139592+00:00",
+  "generated_at": "2026-02-17T21:16:55.896981+00:00",
   "reviewers": [
-    {
-      "login": "gyanigk",
-      "avatar_url": "https://avatars.githubusercontent.com/u/15231699?v=4",
-      "name": "gyanigk",
-      "total_comments": 1,
-      "inline_comments": 1,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        32
-      ],
-      "quality_score": 6.2,
-      "quality_tier": "Strong",
-      "is_instructor": false,
-      "sample_comments": [
-        "It is a big claim for using Hybrid-Mamba-MLP-transformer. Are there any other approaches that have improved since then?"
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 0,
-        "clarification_request": 1,
-        "praise": 0
-      }
-    },
-    {
-      "login": "Soorej30",
-      "avatar_url": "https://avatars.githubusercontent.com/u/51072916?v=4",
-      "name": "Soorej30",
-      "total_comments": 1,
-      "inline_comments": 0,
-      "discussion_comments": 1,
-      "prs_reviewed": [
-        32
-      ],
-      "quality_score": 5.0,
-      "quality_tier": "Solid",
-      "is_instructor": false,
-      "sample_comments": [
-        "@crheckman could you please take a look? Thank you"
-      ],
-      "comment_categories": {
-        "technical_depth": 0,
-        "constructive_suggestion": 1,
-        "clarification_request": 1,
-        "praise": 0
-      }
-    },
-    {
-      "login": "yi-shiuan-tung",
-      "avatar_url": "https://avatars.githubusercontent.com/u/3212878?v=4",
-      "name": "yi-shiuan-tung",
-      "total_comments": 4,
-      "inline_comments": 4,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        27,
-        32,
-        48
-      ],
-      "quality_score": 4.7,
-      "quality_tier": "Solid",
-      "is_instructor": false,
-      "sample_comments": [
-        "The value function represents the discounted sum of rewards at a given state. Group-relative rewards seems to be an approximation and doesn't consider future steps. Is there an insight into why this w...",
-        "How would this be used it production? To generate possible future sequences in real time (maybe for MPC)? Or would it be used for RL offline for finetuning a policy? The feasibility might be different...",
-        "What are the rewards for RL methods? In the latter sections, you mention RL doesn't require human annotations, how are the rewards determined?"
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 2,
-        "clarification_request": 4,
-        "praise": 0
-      }
-    },
-    {
-      "login": "callie-jones",
-      "avatar_url": "https://avatars.githubusercontent.com/u/17131467?v=4",
-      "name": "callie-jones",
-      "total_comments": 3,
-      "inline_comments": 3,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        32,
-        57
-      ],
-      "quality_score": 3.8,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "It might be useful to add more metrics around this. Maybe mention number of diffusion steps, latency per subgoal, etc.",
-        "How does the model ensure these subgoals are physically reachable or collision-free?",
-        "Are the reported accuracies all from the same evaluation setup?"
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 1,
-        "clarification_request": 2,
-        "praise": 0
-      }
-    },
     {
       "login": "lorinachey",
       "avatar_url": "https://avatars.githubusercontent.com/u/45807309?v=4",
@@ -113,8 +14,6 @@
         32,
         57
       ],
-      "quality_score": 3.1,
-      "quality_tier": "Developing",
       "is_instructor": false,
       "sample_comments": [
         "I'm not sure about this...I'm fairly certain action tokens are generated and fed to the action expert in Pi0 which means you could hypothetically change the tokenization before feeding it to the actio...",
@@ -126,59 +25,63 @@
         "constructive_suggestion": 3,
         "clarification_request": 14,
         "praise": 4
-      }
+      },
+      "quality_score": 10.0,
+      "quality_tier": "Exemplary"
     },
     {
-      "login": "Hhy903",
-      "avatar_url": "https://avatars.githubusercontent.com/u/103019577?v=4",
-      "name": "Hhy903",
-      "total_comments": 6,
-      "inline_comments": 5,
+      "login": "Zaaler",
+      "avatar_url": "https://avatars.githubusercontent.com/u/6465181?v=4",
+      "name": "Zaaler",
+      "total_comments": 25,
+      "inline_comments": 25,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        48,
+        57
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "The opening to the audit does a comparison of the individual papers. Then the massive paper audits with all the good stuff. When I started reading the introduction to this audit, I didn't realize the...",
+        "Good summary of contents. I think the introduction should contain more of a fusion of the information with a statement that you can make now that you have read these papers. The final sentence of the...",
+        "Might be valuable to discuss the crux of real-time world model simulation. Is it that the world model cant be updated in real time, so any AV control inputs can be simulated into the future? If so, wh..."
+      ],
+      "comment_categories": {
+        "technical_depth": 2,
+        "constructive_suggestion": 2,
+        "clarification_request": 11,
+        "praise": 2
+      },
+      "quality_score": 7.6,
+      "quality_tier": "Strong"
+    },
+    {
+      "login": "krusnim",
+      "avatar_url": "https://avatars.githubusercontent.com/u/111299311?v=4",
+      "name": "krusnim",
+      "total_comments": 12,
+      "inline_comments": 11,
       "discussion_comments": 1,
       "prs_reviewed": [
         27,
         32,
+        48,
         57
       ],
-      "quality_score": 3.1,
-      "quality_tier": "Developing",
       "is_instructor": false,
       "sample_comments": [
-        "ViNT focuses on geometric progress toward goals, but how might the framework incorporate higher-level semantic or social reasoning (e.g., avoiding human interaction zones) when multiple trajectories a...",
-        "One additional question, whether the normalized waypoint abstraction might rely heavily on stable low-level controllers \u2014 could differences in controller dynamics limit cross-embodiment robustness in...",
-        "Whether grounding through multimodal perception provides substantially new reasoning signals, or mainly serves as an auxiliary constraint compared to text-only training\uff1f"
+        "I don't understand _why_ Genie used this platformer data. (Are platformers specifically what Genie is \"for?\") They boast that this \"generalizes beyond gaming to robotic manipulation,\" but that seems v...",
+        "Hmm, yes, we do focus mostly on grasping and similar tasks. We should expand on other tasks. We hardly talk about MotionLM at all.\r\n\r\nI don't totally understand why FAST handles discontinuities well,...",
+        "I'm not 100% sure I'm interpreting the FAST paper correctly. My impression is that they tear out all of pi0's \"action expert\" / flow matching system and use FAST instead in pi0-FAST. But it's made mor..."
       ],
       "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 2,
+        "technical_depth": 3,
+        "constructive_suggestion": 5,
         "clarification_request": 4,
-        "praise": 0
-      }
-    },
-    {
-      "login": "cKohl10",
-      "avatar_url": "https://avatars.githubusercontent.com/u/82614880?v=4",
-      "name": "cKohl10",
-      "total_comments": 2,
-      "inline_comments": 1,
-      "discussion_comments": 1,
-      "prs_reviewed": [
-        23,
-        48
-      ],
-      "quality_score": 3.1,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "@crheckman I believe all the final changes have been made and are ready for your review",
-        "What is the advantage to dropping the CLS token? Is this intentional?"
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 0,
-        "clarification_request": 1,
-        "praise": 0
-      }
+        "praise": 1
+      },
+      "quality_score": 7.0,
+      "quality_tier": "Strong"
     },
     {
       "login": "aritrach",
@@ -194,8 +97,6 @@
         48,
         57
       ],
-      "quality_score": 3.0,
-      "quality_tier": "Developing",
       "is_instructor": false,
       "sample_comments": [
         "Was their target in the paper to use this world model for training purposes? Or was it to actually control vehicles in real time? If they are addressing it as a limitation, I'm wondering what their or...",
@@ -207,89 +108,63 @@
         "constructive_suggestion": 0,
         "clarification_request": 7,
         "praise": 0
-      }
+      },
+      "quality_score": 5.6,
+      "quality_tier": "Solid"
     },
     {
-      "login": "krusnim",
-      "avatar_url": "https://avatars.githubusercontent.com/u/111299311?v=4",
-      "name": "krusnim",
-      "total_comments": 12,
-      "inline_comments": 11,
+      "login": "Hhy903",
+      "avatar_url": "https://avatars.githubusercontent.com/u/103019577?v=4",
+      "name": "Hhy903",
+      "total_comments": 6,
+      "inline_comments": 5,
       "discussion_comments": 1,
       "prs_reviewed": [
         27,
         32,
-        48,
         57
       ],
-      "quality_score": 2.8,
-      "quality_tier": "Developing",
       "is_instructor": false,
       "sample_comments": [
-        "I don't understand _why_ Genie used this platformer data. (Are platformers specifically what Genie is \"for?\") They boast that this \"generalizes beyond gaming to robotic manipulation,\" but that seems v...",
-        "Hmm, yes, we do focus mostly on grasping and similar tasks. We should expand on other tasks. We hardly talk about MotionLM at all.\r\n\r\nI don't totally understand why FAST handles discontinuities well,...",
-        "I'm not 100% sure I'm interpreting the FAST paper correctly. My impression is that they tear out all of pi0's \"action expert\" / flow matching system and use FAST instead in pi0-FAST. But it's made mor..."
-      ],
-      "comment_categories": {
-        "technical_depth": 3,
-        "constructive_suggestion": 5,
-        "clarification_request": 4,
-        "praise": 1
-      }
-    },
-    {
-      "login": "antony-zhao",
-      "avatar_url": "https://avatars.githubusercontent.com/u/47766594?v=4",
-      "name": "antony-zhao",
-      "total_comments": 5,
-      "inline_comments": 5,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        27,
-        48,
-        57
-      ],
-      "quality_score": 2.8,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "Just to clarify are they taking the outputs that correspond to the output? Or how do they know that this is actually encoding the difference between the current observation and goal, or is it more lik...",
-        "Out of curiosity, do the authors specify how much this helps or how much offset is typically applied?  Adding a residual component outside the VLA to improve precision makes sense, but I was wondering...",
-        "It looks like most of these models have much lower inference speeds compared to a standard simulator. Is there another way to get around this lower speed, like using larger batches in parallel, or is..."
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 0,
-        "clarification_request": 4,
-        "praise": 0
-      }
-    },
-    {
-      "login": "zlaouar",
-      "avatar_url": "https://avatars.githubusercontent.com/u/33535050?v=4",
-      "name": "zlaouar",
-      "total_comments": 5,
-      "inline_comments": 5,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        27,
-        48,
-        57
-      ],
-      "quality_score": 2.8,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "I would appreciate a brief history of world models dating back from the 80s/90s. This paper gives a good introduction: [World Models](https://arxiv.org/pdf/1803.10122)\n\nThis dispels the idea that worl...",
-        "I don't have a reference for some of the variables used, like $N_q$. I recommend defining the variables in place or adopting a textual description instead.",
-        "This makes it seem like these are the only components necessary for robotic navigation with VLAs. Is this what you mean?"
+        "ViNT focuses on geometric progress toward goals, but how might the framework incorporate higher-level semantic or social reasoning (e.g., avoiding human interaction zones) when multiple trajectories a...",
+        "One additional question, whether the normalized waypoint abstraction might rely heavily on stable low-level controllers \u2014 could differences in controller dynamics limit cross-embodiment robustness in...",
+        "Whether grounding through multimodal perception provides substantially new reasoning signals, or mainly serves as an auxiliary constraint compared to text-only training\uff1f"
       ],
       "comment_categories": {
         "technical_depth": 1,
         "constructive_suggestion": 2,
-        "clarification_request": 2,
+        "clarification_request": 4,
         "praise": 0
-      }
+      },
+      "quality_score": 5.2,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "yi-shiuan-tung",
+      "avatar_url": "https://avatars.githubusercontent.com/u/3212878?v=4",
+      "name": "yi-shiuan-tung",
+      "total_comments": 4,
+      "inline_comments": 4,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        27,
+        32,
+        48
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "The value function represents the discounted sum of rewards at a given state. Group-relative rewards seems to be an approximation and doesn't consider future steps. Is there an insight into why this w...",
+        "How would this be used it production? To generate possible future sequences in real time (maybe for MPC)? Or would it be used for RL offline for finetuning a policy? The feasibility might be different...",
+        "What are the rewards for RL methods? In the latter sections, you mention RL doesn't require human annotations, how are the rewards determined?"
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 2,
+        "clarification_request": 4,
+        "praise": 0
+      },
+      "quality_score": 5.2,
+      "quality_tier": "Solid"
     },
     {
       "login": "Jdvakil",
@@ -303,8 +178,6 @@
         27,
         48
       ],
-      "quality_score": 2.5,
-      "quality_tier": "Developing",
       "is_instructor": false,
       "sample_comments": [
         "What are some examples of multi-modal data? In robotics it could mean different sources of data (sensors, exo/ego camera, audio, ++) but in the broader vision multi-modal data is used across AI/ML. Th...",
@@ -316,7 +189,214 @@
         "constructive_suggestion": 1,
         "clarification_request": 3,
         "praise": 0
-      }
+      },
+      "quality_score": 5.0,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "jt7347",
+      "avatar_url": "https://avatars.githubusercontent.com/u/124174685?v=4",
+      "name": "jt7347",
+      "total_comments": 10,
+      "inline_comments": 9,
+      "discussion_comments": 1,
+      "prs_reviewed": [
+        27,
+        32,
+        57
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
+        "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist...",
+        "It currently does not do so explicitly - there's emergent behaviors that they talk of, but this is largely learned from the datasets training itself - for example, modelling trajectory behavior around..."
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 2,
+        "clarification_request": 2,
+        "praise": 2
+      },
+      "quality_score": 4.5,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "antony-zhao",
+      "avatar_url": "https://avatars.githubusercontent.com/u/47766594?v=4",
+      "name": "antony-zhao",
+      "total_comments": 5,
+      "inline_comments": 5,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        27,
+        48,
+        57
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "Just to clarify are they taking the outputs that correspond to the output? Or how do they know that this is actually encoding the difference between the current observation and goal, or is it more lik...",
+        "Out of curiosity, do the authors specify how much this helps or how much offset is typically applied?  Adding a residual component outside the VLA to improve precision makes sense, but I was wondering...",
+        "It looks like most of these models have much lower inference speeds compared to a standard simulator. Is there another way to get around this lower speed, like using larger batches in parallel, or is..."
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 0,
+        "clarification_request": 4,
+        "praise": 0
+      },
+      "quality_score": 4.5,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "zlaouar",
+      "avatar_url": "https://avatars.githubusercontent.com/u/33535050?v=4",
+      "name": "zlaouar",
+      "total_comments": 5,
+      "inline_comments": 5,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        27,
+        48,
+        57
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "I would appreciate a brief history of world models dating back from the 80s/90s. This paper gives a good introduction: [World Models](https://arxiv.org/pdf/1803.10122)\n\nThis dispels the idea that worl...",
+        "I don't have a reference for some of the variables used, like $N_q$. I recommend defining the variables in place or adopting a textual description instead.",
+        "This makes it seem like these are the only components necessary for robotic navigation with VLAs. Is this what you mean?"
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 2,
+        "clarification_request": 2,
+        "praise": 0
+      },
+      "quality_score": 4.5,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "callie-jones",
+      "avatar_url": "https://avatars.githubusercontent.com/u/17131467?v=4",
+      "name": "callie-jones",
+      "total_comments": 3,
+      "inline_comments": 3,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        32,
+        57
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "It might be useful to add more metrics around this. Maybe mention number of diffusion steps, latency per subgoal, etc.",
+        "How does the model ensure these subgoals are physically reachable or collision-free?",
+        "Are the reported accuracies all from the same evaluation setup?"
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 1,
+        "clarification_request": 2,
+        "praise": 0
+      },
+      "quality_score": 4.0,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "cKohl10",
+      "avatar_url": "https://avatars.githubusercontent.com/u/82614880?v=4",
+      "name": "cKohl10",
+      "total_comments": 2,
+      "inline_comments": 1,
+      "discussion_comments": 1,
+      "prs_reviewed": [
+        23,
+        48
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "@crheckman I believe all the final changes have been made and are ready for your review",
+        "What is the advantage to dropping the CLS token? Is this intentional?"
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 0,
+        "clarification_request": 1,
+        "praise": 0
+      },
+      "quality_score": 3.0,
+      "quality_tier": "Developing"
+    },
+    {
+      "login": "gyanigk",
+      "avatar_url": "https://avatars.githubusercontent.com/u/15231699?v=4",
+      "name": "gyanigk",
+      "total_comments": 1,
+      "inline_comments": 1,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        32
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "It is a big claim for using Hybrid-Mamba-MLP-transformer. Are there any other approaches that have improved since then?"
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 0,
+        "clarification_request": 1,
+        "praise": 0
+      },
+      "quality_score": 3.0,
+      "quality_tier": "Developing"
+    },
+    {
+      "login": "Soorej30",
+      "avatar_url": "https://avatars.githubusercontent.com/u/51072916?v=4",
+      "name": "Soorej30",
+      "total_comments": 1,
+      "inline_comments": 0,
+      "discussion_comments": 1,
+      "prs_reviewed": [
+        32
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "@crheckman could you please take a look? Thank you"
+      ],
+      "comment_categories": {
+        "technical_depth": 0,
+        "constructive_suggestion": 1,
+        "clarification_request": 1,
+        "praise": 0
+      },
+      "quality_score": 2.7,
+      "quality_tier": "Developing"
+    },
+    {
+      "login": "kalhamilton",
+      "avatar_url": "https://avatars.githubusercontent.com/u/220243599?v=4",
+      "name": "kalhamilton",
+      "total_comments": 4,
+      "inline_comments": 3,
+      "discussion_comments": 1,
+      "prs_reviewed": [
+        23,
+        32,
+        48
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "In your presentation, you mentioned that the model only had 8 latent actions. I'm curious if there's a constraint here where the number of actions that work for 2D-gaming is inherently not enough to t...",
+        "Are there alternatives to video data for introducing physical learning into the model? It seems like there is a gap between learning the scene and translating into functional motor commands based on y...",
+        "@crheckman I didn't squash commits since this is a work in progress and we won't be merging into staging yet. LMK if you're holding strict to that requirement and I can fix"
+      ],
+      "comment_categories": {
+        "technical_depth": 0,
+        "constructive_suggestion": 0,
+        "clarification_request": 1,
+        "praise": 0
+      },
+      "quality_score": 1.9,
+      "quality_tier": "Developing"
     },
     {
       "login": "crheckman",
@@ -332,8 +412,6 @@
         48,
         57
       ],
-      "quality_score": 2.2,
-      "quality_tier": "Instructor",
       "is_instructor": true,
       "sample_comments": [
         "Connecting this section with the improvements later (frequency-space tokenization) gives a clue: it all comes down to evaluations. If you are trying to behavior clone and calculating error on an L2 c-...",
@@ -345,87 +423,9 @@
         "constructive_suggestion": 13,
         "clarification_request": 36,
         "praise": 3
-      }
-    },
-    {
-      "login": "Zaaler",
-      "avatar_url": "https://avatars.githubusercontent.com/u/6465181?v=4",
-      "name": "Zaaler",
-      "total_comments": 25,
-      "inline_comments": 25,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        48,
-        57
-      ],
-      "quality_score": 1.6,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "The opening to the audit does a comparison of the individual papers. Then the massive paper audits with all the good stuff. When I started reading the introduction to this audit, I didn't realize the...",
-        "Good summary of contents. I think the introduction should contain more of a fusion of the information with a statement that you can make now that you have read these papers. The final sentence of the...",
-        "Might be valuable to discuss the crux of real-time world model simulation. Is it that the world model cant be updated in real time, so any AV control inputs can be simulated into the future? If so, wh..."
-      ],
-      "comment_categories": {
-        "technical_depth": 2,
-        "constructive_suggestion": 2,
-        "clarification_request": 11,
-        "praise": 2
-      }
-    },
-    {
-      "login": "jt7347",
-      "avatar_url": "https://avatars.githubusercontent.com/u/124174685?v=4",
-      "name": "jt7347",
-      "total_comments": 10,
-      "inline_comments": 9,
-      "discussion_comments": 1,
-      "prs_reviewed": [
-        27,
-        32,
-        57
-      ],
-      "quality_score": 1.4,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
-        "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist...",
-        "It currently does not do so explicitly - there's emergent behaviors that they talk of, but this is largely learned from the datasets training itself - for example, modelling trajectory behavior around..."
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 2,
-        "clarification_request": 2,
-        "praise": 2
-      }
-    },
-    {
-      "login": "kalhamilton",
-      "avatar_url": "https://avatars.githubusercontent.com/u/220243599?v=4",
-      "name": "kalhamilton",
-      "total_comments": 4,
-      "inline_comments": 3,
-      "discussion_comments": 1,
-      "prs_reviewed": [
-        23,
-        32,
-        48
-      ],
-      "quality_score": 0.6,
-      "quality_tier": "Developing",
-      "is_instructor": false,
-      "sample_comments": [
-        "In your presentation, you mentioned that the model only had 8 latent actions. I'm curious if there's a constraint here where the number of actions that work for 2D-gaming is inherently not enough to t...",
-        "Are there alternatives to video data for introducing physical learning into the model? It seems like there is a gap between learning the scene and translating into functional motor commands based on y...",
-        "@crheckman I didn't squash commits since this is a work in progress and we won't be merging into staging yet. LMK if you're holding strict to that requirement and I can fix"
-      ],
-      "comment_categories": {
-        "technical_depth": 0,
-        "constructive_suggestion": 0,
-        "clarification_request": 1,
-        "praise": 0
-      }
+      },
+      "quality_score": 0.0,
+      "quality_tier": "Instructor"
     }
   ],
   "audit_prs": [

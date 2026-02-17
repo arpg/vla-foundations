@@ -119,12 +119,9 @@ def categorize_comment(body: str) -> dict[str, bool]:
     return categories
 
 
-def compute_quality_score(categories_totals: dict[str, int], total_comments: int) -> float:
-    """Compute a 0-10 quality score from aggregated category counts."""
-    if total_comments == 0:
-        return 0.0
-
-    raw_score = (
+def compute_raw_points(categories_totals: dict[str, int]) -> int:
+    """Compute total weighted contribution points (not averaged)."""
+    return (
         categories_totals.get("technical_depth", 0) * SCORE_WEIGHTS["technical_depth"]
         + categories_totals.get("constructive_suggestion", 0) * SCORE_WEIGHTS["constructive_suggestion"]
         + categories_totals.get("clarification_request", 0) * SCORE_WEIGHTS["clarification_request"]
@@ -132,11 +129,20 @@ def compute_quality_score(categories_totals: dict[str, int], total_comments: int
         + categories_totals.get("brief_low_effort", 0) * SCORE_WEIGHTS["brief_low_effort"]
     )
 
-    # Normalize: average score per comment, scaled to 0-10
-    # Max possible per comment = 3+2+2+1 = 8 (all categories hit)
-    per_comment = raw_score / total_comments
-    score = min(10.0, per_comment * (10.0 / 8.0))
-    return round(score, 1)
+
+def normalize_scores(raw_points_list: list[int]) -> list[float]:
+    """Normalize raw points to 0-10 using sqrt scaling against class max.
+
+    sqrt scaling rewards both quality and volume without making it a
+    pure comment-count contest. A reviewer with 2x the raw points scores
+    ~1.4x, not 2x.
+    """
+    import math
+    max_raw = max(raw_points_list) if raw_points_list else 1
+    if max_raw == 0:
+        return [0.0] * len(raw_points_list)
+    sqrt_max = math.sqrt(max_raw)
+    return [round(math.sqrt(r) / sqrt_max * 10, 1) for r in raw_points_list]
 
 
 def quality_tier(score: float) -> str:
@@ -308,14 +314,13 @@ def main():
 
         print(f"  → {pr_total} reviewer comments (excluding bots)")
 
-    # Finalize reviewer objects
-    reviewer_list = []
+    # Pass 1: collect raw data per reviewer
+    pre_list = []
     for login, data in reviewers.items():
         total = data["total_comments"]
         cats = data["category_totals"]
-        score = compute_quality_score(cats, total)
+        raw = compute_raw_points(cats)
 
-        # Pick up to 3 sample comments (longest ones as likely most substantive)
         bodies = sorted(data["comments_bodies"], key=len, reverse=True)
         samples = []
         for b in bodies[:3]:
@@ -324,8 +329,7 @@ def main():
                 preview += "..."
             samples.append(preview)
 
-        is_instructor = data["login"] in INSTRUCTOR_LOGINS
-        reviewer_list.append({
+        pre_list.append({
             "login": data["login"],
             "avatar_url": data["avatar_url"],
             "name": data["name"],
@@ -333,12 +337,33 @@ def main():
             "inline_comments": data["inline_comments"],
             "discussion_comments": data["discussion_comments"],
             "prs_reviewed": sorted(data["prs_reviewed"]),
-            "quality_score": score,
-            "quality_tier": "Instructor" if is_instructor else quality_tier(score),
-            "is_instructor": is_instructor,
+            "is_instructor": data["login"] in INSTRUCTOR_LOGINS,
             "sample_comments": samples,
             "comment_categories": cats,
+            "_raw_points": raw,
         })
+
+    # Pass 2: normalize scores across the class (students only for scaling)
+    student_raws = [p["_raw_points"] for p in pre_list if not p["is_instructor"]]
+    student_scores = normalize_scores(student_raws)
+
+    # Build final list with normalized scores
+    reviewer_list = []
+    student_idx = 0
+    for p in pre_list:
+        if p["is_instructor"]:
+            score = 0.0  # not scored
+            tier = "Instructor"
+        else:
+            score = student_scores[student_idx]
+            tier = quality_tier(score)
+            student_idx += 1
+
+        entry = dict(p)
+        del entry["_raw_points"]
+        entry["quality_score"] = score
+        entry["quality_tier"] = tier
+        reviewer_list.append(entry)
 
     # Sort by quality score descending, then by total comments descending
     reviewer_list.sort(key=lambda r: (-r["quality_score"], -r["total_comments"]))
