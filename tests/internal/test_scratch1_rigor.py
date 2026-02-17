@@ -297,8 +297,8 @@ def test_training_convergence(small_config, device):
         logits, loss = _call_model(model, input_ids, targets)
         initial_losses.append(loss.item())
 
-    # Train for 100 steps
-    for step in range(100):
+    # Train for 1000 steps
+    for step in range(1000):
         idx = step % num_samples
         batch = data[idx:idx+1].to(device)
         input_ids = batch[:, :-1]
