@@ -18,7 +18,10 @@ from pathlib import Path
 AUDIT_PRS = [23, 27, 32, 48, 54, 55, 57, 61]
 
 # Exclude these users from the reviewer leaderboard
-EXCLUDED_LOGINS = {"crheckman", "crh-bot"}
+EXCLUDED_LOGINS = {"crh-bot"}
+
+# Show these users with "Instructor" tier instead of computed tier
+INSTRUCTOR_LOGINS = {"crheckman"}
 
 # Quality scoring weights
 SCORE_WEIGHTS = {
@@ -303,7 +306,7 @@ def main():
             "total_comments": pr_total,
         })
 
-        print(f"  → {pr_total} reviewer comments (excluding instructor/bots)")
+        print(f"  → {pr_total} reviewer comments (excluding bots)")
 
     # Finalize reviewer objects
     reviewer_list = []
@@ -321,6 +324,7 @@ def main():
                 preview += "..."
             samples.append(preview)
 
+        is_instructor = data["login"] in INSTRUCTOR_LOGINS
         reviewer_list.append({
             "login": data["login"],
             "avatar_url": data["avatar_url"],
@@ -330,7 +334,8 @@ def main():
             "discussion_comments": data["discussion_comments"],
             "prs_reviewed": sorted(data["prs_reviewed"]),
             "quality_score": score,
-            "quality_tier": quality_tier(score),
+            "quality_tier": "Instructor" if is_instructor else quality_tier(score),
+            "is_instructor": is_instructor,
             "sample_comments": samples,
             "comment_categories": cats,
         })

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-17T18:09:15.253679+00:00",
+  "generated_at": "2026-02-17T20:43:47.139592+00:00",
   "reviewers": [
     {
       "login": "gyanigk",
@@ -13,6 +13,7 @@
       ],
       "quality_score": 6.2,
       "quality_tier": "Strong",
+      "is_instructor": false,
       "sample_comments": [
         "It is a big claim for using Hybrid-Mamba-MLP-transformer. Are there any other approaches that have improved since then?"
       ],
@@ -35,6 +36,7 @@
       ],
       "quality_score": 5.0,
       "quality_tier": "Solid",
+      "is_instructor": false,
       "sample_comments": [
         "@crheckman could you please take a look? Thank you"
       ],
@@ -59,6 +61,7 @@
       ],
       "quality_score": 4.7,
       "quality_tier": "Solid",
+      "is_instructor": false,
       "sample_comments": [
         "The value function represents the discounted sum of rewards at a given state. Group-relative rewards seems to be an approximation and doesn't consider future steps. Is there an insight into why this w...",
         "How would this be used it production? To generate possible future sequences in real time (maybe for MPC)? Or would it be used for RL offline for finetuning a policy? The feasibility might be different...",
@@ -84,6 +87,7 @@
       ],
       "quality_score": 3.8,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "It might be useful to add more metrics around this. Maybe mention number of diffusion steps, latency per subgoal, etc.",
         "How does the model ensure these subgoals are physically reachable or collision-free?",
@@ -111,6 +115,7 @@
       ],
       "quality_score": 3.1,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "I'm not sure about this...I'm fairly certain action tokens are generated and fed to the action expert in Pi0 which means you could hypothetically change the tokenization before feeding it to the actio...",
         "This writeup mentions \"physical commonsense\" a lot, but I'm not sure what that looks like in terms of reasoning and training. For example, are we using natural language based descriptions as inputs in...",
@@ -137,6 +142,7 @@
       ],
       "quality_score": 3.1,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "ViNT focuses on geometric progress toward goals, but how might the framework incorporate higher-level semantic or social reasoning (e.g., avoiding human interaction zones) when multiple trajectories a...",
         "One additional question, whether the normalized waypoint abstraction might rely heavily on stable low-level controllers \u2014 could differences in controller dynamics limit cross-embodiment robustness in...",
@@ -162,6 +168,7 @@
       ],
       "quality_score": 3.1,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "@crheckman I believe all the final changes have been made and are ready for your review",
         "What is the advantage to dropping the CLS token? Is this intentional?"
@@ -189,6 +196,7 @@
       ],
       "quality_score": 3.0,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "Was their target in the paper to use this world model for training purposes? Or was it to actually control vehicles in real time? If they are addressing it as a limitation, I'm wondering what their or...",
         "Is the reasoning for improvement just attributed to data distribution shift here? Or are methods like chain of thought still used?",
@@ -216,6 +224,7 @@
       ],
       "quality_score": 2.8,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "I don't understand _why_ Genie used this platformer data. (Are platformers specifically what Genie is \"for?\") They boast that this \"generalizes beyond gaming to robotic manipulation,\" but that seems v...",
         "Hmm, yes, we do focus mostly on grasping and similar tasks. We should expand on other tasks. We hardly talk about MotionLM at all.\r\n\r\nI don't totally understand why FAST handles discontinuities well,...",
@@ -242,6 +251,7 @@
       ],
       "quality_score": 2.8,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "Just to clarify are they taking the outputs that correspond to the output? Or how do they know that this is actually encoding the difference between the current observation and goal, or is it more lik...",
         "Out of curiosity, do the authors specify how much this helps or how much offset is typically applied?  Adding a residual component outside the VLA to improve precision makes sense, but I was wondering...",
@@ -268,6 +278,7 @@
       ],
       "quality_score": 2.8,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "I would appreciate a brief history of world models dating back from the 80s/90s. This paper gives a good introduction: [World Models](https://arxiv.org/pdf/1803.10122)\n\nThis dispels the idea that worl...",
         "I don't have a reference for some of the variables used, like $N_q$. I recommend defining the variables in place or adopting a textual description instead.",
@@ -294,6 +305,7 @@
       ],
       "quality_score": 2.5,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "What are some examples of multi-modal data? In robotics it could mean different sources of data (sensors, exo/ego camera, audio, ++) but in the broader vision multi-modal data is used across AI/ML. Th...",
         "I would like to see more description on what these real-valued positions are on the actuators, or even what continuous control variables would be.",
@@ -304,6 +316,35 @@
         "constructive_suggestion": 1,
         "clarification_request": 3,
         "praise": 0
+      }
+    },
+    {
+      "login": "crheckman",
+      "avatar_url": "https://avatars.githubusercontent.com/u/9009669?v=4",
+      "name": "crheckman",
+      "total_comments": 103,
+      "inline_comments": 95,
+      "discussion_comments": 8,
+      "prs_reviewed": [
+        23,
+        27,
+        32,
+        48,
+        57
+      ],
+      "quality_score": 2.2,
+      "quality_tier": "Instructor",
+      "is_instructor": true,
+      "sample_comments": [
+        "Connecting this section with the improvements later (frequency-space tokenization) gives a clue: it all comes down to evaluations. If you are trying to behavior clone and calculating error on an L2 c-...",
+        "I appreciate the \"naive introspection\" (NI) being performed here. I think it's generally a good first pass to ask ourselves \"how do I think I do this\" when it comes to observing gaps between robot cap...",
+        "I think you need to mention something about computational efficiency too.\n\nWe need to address the computational feasibility of the WFM in the control loop. If we run the WFM and VLA in parallel for pr..."
+      ],
+      "comment_categories": {
+        "technical_depth": 29,
+        "constructive_suggestion": 13,
+        "clarification_request": 36,
+        "praise": 3
       }
     },
     {
@@ -319,6 +360,7 @@
       ],
       "quality_score": 1.6,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "The opening to the audit does a comparison of the individual papers. Then the massive paper audits with all the good stuff. When I started reading the introduction to this audit, I didn't realize the...",
         "Good summary of contents. I think the introduction should contain more of a fusion of the information with a statement that you can make now that you have read these papers. The final sentence of the...",
@@ -345,6 +387,7 @@
       ],
       "quality_score": 1.4,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
         "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist...",
@@ -371,6 +414,7 @@
       ],
       "quality_score": 0.6,
       "quality_tier": "Developing",
+      "is_instructor": false,
       "sample_comments": [
         "In your presentation, you mentioned that the model only had 8 latent actions. I'm curious if there's a constraint here where the number of actions that work for 2D-gaming is inherently not enough to t...",
         "Are there alternatives to video data for introducing physical learning into the model? It seems like there is a gap between learning the scene and translating into functional motor commands based on y...",
@@ -391,7 +435,7 @@
       "authors": [
         "kalhamilton"
       ],
-      "total_comments": 11
+      "total_comments": 45
     },
     {
       "number": 27,
@@ -399,7 +443,7 @@
       "authors": [
         "Hhy903"
       ],
-      "total_comments": 18
+      "total_comments": 33
     },
     {
       "number": 32,
@@ -407,7 +451,7 @@
       "authors": [
         "Soorej30"
       ],
-      "total_comments": 17
+      "total_comments": 44
     },
     {
       "number": 48,
@@ -415,7 +459,7 @@
       "authors": [
         "cKohl10"
       ],
-      "total_comments": 32
+      "total_comments": 46
     },
     {
       "number": 54,
@@ -439,7 +483,7 @@
       "authors": [
         "jt7347"
       ],
-      "total_comments": 36
+      "total_comments": 49
     },
     {
       "number": 61,

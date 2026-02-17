@@ -13,6 +13,7 @@ interface Reviewer {
   prs_reviewed: number[];
   quality_score: number;
   quality_tier: string;
+  is_instructor?: boolean;
   sample_comments: string[];
   comment_categories: {
     technical_depth: number;
@@ -42,6 +43,7 @@ function getReviewerData(): ReviewerData {
 }
 
 const TIER_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  Instructor: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
   Exemplary: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
   Strong: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
   Solid: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
@@ -67,9 +69,13 @@ export default function TopReviewersPage() {
   const data = getReviewerData();
   const { reviewers, audit_prs } = data;
 
-  // Sort by a composite: quality_score * 0.6 + normalized_comment_volume * 0.4
-  const maxComments = Math.max(...reviewers.map((r) => r.total_comments));
-  const ranked = [...reviewers].sort((a, b) => {
+  // Separate instructor from students
+  const instructor = reviewers.find((r) => r.is_instructor);
+  const students = reviewers.filter((r) => !r.is_instructor);
+
+  // Sort students by composite: quality_score * 0.6 + normalized_comment_volume * 0.4
+  const maxComments = Math.max(...students.map((r) => r.total_comments), 1);
+  const ranked = [...students].sort((a, b) => {
     const scoreA = a.quality_score * 0.6 + (a.total_comments / maxComments) * 10 * 0.4;
     const scoreB = b.quality_score * 0.6 + (b.total_comments / maxComments) * 10 * 0.4;
     return scoreB - scoreA;
@@ -115,6 +121,49 @@ export default function TopReviewersPage() {
             </div>
           </div>
         </div>
+
+        {/* Instructor */}
+        {instructor && (
+          <section className="mb-16">
+            <div className="border border-rose-200 rounded-lg p-6 bg-gradient-to-r from-rose-50 to-white">
+              <div className="flex items-center gap-5">
+                <img
+                  src={instructor.avatar_url}
+                  alt={instructor.login}
+                  className="w-16 h-16 rounded-full ring-2 ring-rose-300"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-1">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      @{instructor.login}
+                    </h3>
+                    <TierBadge tier="Instructor" />
+                  </div>
+                  <div className="flex gap-4 text-sm text-gray-600">
+                    <span>
+                      <span className="font-semibold text-gray-900">
+                        {instructor.total_comments}
+                      </span>{" "}
+                      comments
+                    </span>
+                    <span>
+                      <span className="font-semibold text-gray-900">
+                        {instructor.prs_reviewed.length}
+                      </span>{" "}
+                      PRs reviewed
+                    </span>
+                    <span>
+                      <span className="font-semibold text-gray-900">
+                        {instructor.inline_comments}
+                      </span>{" "}
+                      inline
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Top 3 Podium */}
         <section className="mb-16">
@@ -168,8 +217,8 @@ export default function TopReviewersPage() {
           </div>
         </section>
 
-        {/* Charts (client component) */}
-        <ReviewerCharts reviewers={reviewers} auditPrs={audit_prs} />
+        {/* Charts (client component) — students only */}
+        <ReviewerCharts reviewers={students} auditPrs={audit_prs} />
 
         {/* Full Reviewer Grid */}
         <section className="mt-16">
@@ -230,7 +279,7 @@ export default function TopReviewersPage() {
               day: "numeric",
             })}
             . Quality scores are heuristic-based (comment length, technical references, constructiveness).
-            Instructor and bot comments are excluded.
+            Bot comments are excluded. Instructor shown separately from student rankings.
           </p>
         </div>
       </div>
