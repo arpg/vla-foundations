@@ -159,6 +159,14 @@ class GitManager:
         branch_name = pr_info["headRefName"]
         author = pr_info["author"]["login"]
 
+        # Delete stale local branch if it exists (from prior grading runs)
+        subprocess.run(
+            ["git", "branch", "-D", branch_name],
+            cwd=self.repo_path,
+            capture_output=True,
+            text=True,
+        )
+
         # Fetch and checkout PR branch
         print(f"  🔄 Fetching PR branch: {branch_name}")
         subprocess.run(
@@ -177,6 +185,33 @@ class GitManager:
         )
 
         return branch_name, author
+
+    def commit_report_to_branch(self, report_content: str, branch_name: str, score_summary: str):
+        """Commit public grading report to student branch as crh-bot and push"""
+        report_dir = self.repo_path / "grading_reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = report_dir / "GRADING_REPORT.md"
+        report_file.write_text(report_content)
+
+        self.set_bot_identity()
+        try:
+            subprocess.run(
+                ["git", "add", "grading_reports/GRADING_REPORT.md"],
+                cwd=self.repo_path, check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", f"Add automated grading report ({score_summary})"],
+                cwd=self.repo_path, capture_output=True, text=True, check=True,
+            )
+            subprocess.run(
+                ["git", "push", "origin", f"HEAD:{branch_name}"],
+                cwd=self.repo_path, capture_output=True, text=True, check=True,
+            )
+            print(f"  📤 Grading report pushed to {branch_name}")
+        except subprocess.CalledProcessError as e:
+            print(f"  ⚠️  Failed to push report: {e.stderr if e.stderr else e}")
+        finally:
+            self.restore_identity()
 
     def restore_original_state(self):
         """Restore to original branch and unstash if needed"""
@@ -1030,7 +1065,16 @@ class Scratch1Grader:
                 execution_time=(datetime.now() - start_time).total_seconds(),
             )
 
-            print(f"  ✓ Score: {total_points}/100")
+            print(f"  ✓ Score: {total_points}/70 (automated)")
+
+            # Commit public report to student branch as crh-bot
+            if not self.dry_run:
+                public_content = self.report_generator.generate_public_report(report)
+                score_summary = f"{total_points}/70"
+                self.git_manager.commit_report_to_branch(
+                    public_content, branch_name, score_summary
+                )
+
             return report
 
         except Exception as e:
