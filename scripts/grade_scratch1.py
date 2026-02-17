@@ -16,6 +16,7 @@ import argparse
 import json
 import re
 import sys
+import time
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Tuple
@@ -206,11 +207,16 @@ class GitManager:
 # ============================================================================
 
 class TestRunner:
-    """Runs pytest and captures results"""
+    """Runs pytest remotely on arpg-4090 (RTX 4090 GPU) and captures results"""
 
-    def __init__(self, repo_path: Path):
+    REMOTE_HOST = "arpg-4090"
+    REMOTE_REPO = "~/vla-foundations"
+
+    def __init__(self, repo_path: Path, git_manager: 'GitManager' = None):
         self.repo_path = repo_path
         self.test_file = repo_path / "tests" / "internal" / "test_scratch1_rigor.py"
+        self.git_manager = git_manager
+        self._temp_branch = None
 
     def inject_internal_tests(self):
         """Copy internal tests and dependencies from main branch to current branch"""
@@ -248,12 +254,10 @@ class TestRunner:
             )
             (self.repo_path / "pyproject.toml").write_text(result.stdout)
 
-            # Remove old lock and sync
+            # Remove old lock file (remote will regenerate)
             lock_file = self.repo_path / "uv.lock"
             if lock_file.exists():
                 lock_file.unlink()
-
-            subprocess.run(["uv", "sync"], cwd=self.repo_path, capture_output=True, check=True)
 
             print(f"  ✓ Internal tests and dependencies injected")
         except subprocess.CalledProcessError as e:
@@ -261,31 +265,63 @@ class TestRunner:
 
     def run_tests(self) -> Dict[str, any]:
         """
-        Run pytest on internal tests
-        Returns: dict with test results
+        Push current state to a temp branch, run pytest on arpg-4090 via SSH,
+        parse and return results, then clean up the temp branch.
         """
-        if not self.test_file.exists():
-            raise FileNotFoundError(f"Test file not found: {self.test_file}")
+        self._temp_branch = f"_grading-temp-{int(time.time())}"
 
-        # Run pytest with verbose output
-        cmd = [
-            "uv", "run", "pytest",
-            str(self.test_file),
-            "-v",
-            "--tb=short",
-            "-m", "rigor",
-        ]
+        try:
+            # Stage and commit all injected files with bot identity
+            print(f"  📤 Pushing to temp branch: {self._temp_branch}")
+            if self.git_manager:
+                self.git_manager.bot_commit(
+                    f"[grading] temp commit for remote test run",
+                )
+            else:
+                # Fallback: commit without bot identity
+                subprocess.run(["git", "add", "-A"], cwd=self.repo_path, check=True)
+                subprocess.run(
+                    ["git", "commit", "--allow-empty", "-m", "[grading] temp commit for remote test run"],
+                    cwd=self.repo_path, capture_output=True, text=True
+                )
 
-        print(f"  🧪 Running tests...")
-        result = subprocess.run(
-            cmd,
-            cwd=self.repo_path,
-            capture_output=True,
-            text=True,
-        )
+            # Push to temp branch
+            subprocess.run(
+                ["git", "push", "origin", f"HEAD:{self._temp_branch}", "--force"],
+                cwd=self.repo_path, capture_output=True, text=True, check=True,
+            )
 
-        # Parse text output
-        return self._parse_text_output(result)
+            # Run tests remotely via SSH
+            ssh_cmd = (
+                f"source ~/.local/bin/env 2>/dev/null; "
+                f"cd {self.REMOTE_REPO} && "
+                f"git fetch origin {self._temp_branch} && "
+                f"git checkout -f FETCH_HEAD && "
+                f"rm -f uv.lock && uv sync && "
+                f"uv run pytest tests/internal/test_scratch1_rigor.py -v -m rigor --tb=short"
+            )
+
+            print(f"  🧪 Running tests on {self.REMOTE_HOST}...")
+            result = subprocess.run(
+                ["ssh", self.REMOTE_HOST, ssh_cmd],
+                capture_output=True, text=True, timeout=300,
+            )
+
+            return self._parse_text_output(result)
+
+        finally:
+            # Clean up temp branch from remote
+            self._cleanup_temp_branch()
+
+    def _cleanup_temp_branch(self):
+        """Delete the temporary branch from the remote"""
+        if self._temp_branch:
+            print(f"  🧹 Cleaning up temp branch: {self._temp_branch}")
+            subprocess.run(
+                ["git", "push", "origin", "--delete", self._temp_branch],
+                cwd=self.repo_path, capture_output=True, text=True,
+            )
+            self._temp_branch = None
 
     def _parse_text_output(self, result: subprocess.CompletedProcess) -> dict:
         """Parse pytest text output"""
@@ -334,12 +370,29 @@ class Scorer:
 
     RUBRIC = {
         "causal_attention": {"points": 15, "tests": ["test_causal_mask_leakage", "test_causal_attention_shape"]},
-        "rmsnorm": {"points": 10, "tests": ["test_rmsnorm_implementation", "test_rmsnorm_numerical"]},
-        "training": {"points": 10, "tests": ["test_training_convergence"]},
-        "rope": {"points": 15, "tests": ["test_rope_embeddings"]},
-        "code_quality": {"points": 20, "tests": ["test_import_success", "test_no_syntax_errors", "test_no_todos_left"]},
-        "report": {"points": 30, "tests": []},  # Manual review
-        "mastery": {"points": 10, "tests": []},  # Manual review
+        "rmsnorm":          {"points": 10, "tests": ["test_rmsnorm_implementation", "test_rmsnorm_numerical"]},
+        "training":         {"points": 10, "tests": ["test_training_convergence"]},
+        "rope":             {"points": 15, "tests": ["test_rope_embeddings"]},
+        "code_quality":     {"points": 10, "tests": ["test_import_success", "test_no_syntax_errors", "test_no_todos_left"]},
+        "model":            {"points": 10, "tests": ["test_model_forward_pass", "test_model_has_trainable"]},
+        "report":           {"points": 30, "tests": []},  # Manual review
+        "mastery":          {"points": 10, "tests": []},  # Manual review
+    }
+
+    # Explicit per-test point allocation (avoids integer division rounding)
+    # Total: 8+7+5+5+10+15+4+3+3+5+5 = 70
+    TEST_POINTS = {
+        "test_causal_mask_leakage": 8,
+        "test_causal_attention_shape_preservation": 7,
+        "test_rmsnorm_implementation": 5,
+        "test_rmsnorm_numerical_stability": 5,
+        "test_training_convergence": 10,
+        "test_rope_embeddings": 15,
+        "test_import_success": 4,
+        "test_no_syntax_errors": 3,
+        "test_no_todos_left": 3,
+        "test_model_forward_pass": 5,
+        "test_model_has_trainable_parameters": 5,
     }
 
     FEEDBACK_TEMPLATES = {
@@ -364,6 +417,14 @@ class Scorer:
             "pass": "✅ Code imports successfully.",
             "fail": "❌ CRITICAL: Code failed to import. See error traceback below.",
         },
+        "model_forward_pass": {
+            "pass": "✅ Model forward pass works end-to-end with correct output shapes.",
+            "fail": "❌ Model forward pass failed. Check that DecoderOnlyTransformer returns (logits, loss) with correct shapes.",
+        },
+        "model_has_trainable_parameters": {
+            "pass": "✅ Model has the expected number of trainable parameters.",
+            "fail": "❌ Model has too few or no trainable parameters. Check your layer initialization.",
+        },
     }
 
     def __init__(self, repo_path: Path):
@@ -373,26 +434,23 @@ class Scorer:
         """Convert pytest results to scored TestResult objects"""
         scored_results = []
 
-        # Map test names to rubric categories
-        test_mapping = {}
-        for category, info in self.RUBRIC.items():
-            for test_name in info["tests"]:
-                test_mapping[test_name] = (category, info["points"])
-
         # Process each test
         for test in test_results.get("tests", []):
             test_name = test["name"].split("::")[-1] if "::" in test["name"] else test["name"]
             outcome = test["outcome"]
 
-            # Find matching rubric category
+            # Find matching rubric category via substring match
             category = None
-            points_possible = 0
             for cat, info in self.RUBRIC.items():
                 for rubric_test in info["tests"]:
                     if rubric_test in test_name:
                         category = cat
-                        points_possible = info["points"] // len(info["tests"]) if info["tests"] else 0
                         break
+                if category:
+                    break
+
+            # Look up explicit point value for this test
+            points_possible = self.TEST_POINTS.get(test_name, 0)
 
             if category:
                 passed = outcome in ["passed", "PASSED"]
@@ -539,6 +597,16 @@ Hi! I've reviewed your submission. Here's what I found:
         for result in rope_results:
             md += f"{result.feedback}\n\n"
 
+        # Model Architecture
+        model_results = results_by_category.get("model", [])
+        model_passed = all(r.passed for r in model_results) if model_results else True
+        md += f"### {'✅' if model_passed else '❌'} Model Architecture\n\n"
+        if model_results:
+            for result in model_results:
+                md += f"{result.feedback}\n\n"
+        else:
+            md += "No model architecture tests ran.\n\n"
+
         # Code Quality
         quality_results = results_by_category.get("code_quality", [])
         quality_passed = all(r.passed for r in quality_results)
@@ -602,8 +670,12 @@ Hi! I've reviewed your submission. Here's what I found:
         quality_points = sum(r.points_earned for r in quality_results)
         quality_max = sum(r.points_possible for r in quality_results)
 
-        automated_total = causal_points + rmsnorm_points + training_points + rope_points + quality_points
-        automated_max = causal_max + rmsnorm_max + training_max + rope_max + quality_max
+        model_results = results_by_category.get("model", [])
+        model_points = sum(r.points_earned for r in model_results)
+        model_max = sum(r.points_possible for r in model_results)
+
+        automated_total = causal_points + rmsnorm_points + training_points + rope_points + quality_points + model_points
+        automated_max = causal_max + rmsnorm_max + training_max + rope_max + quality_max + model_max
 
         percentage = (report.total_points / report.max_points) * 100 if report.max_points > 0 else 0
 
@@ -623,6 +695,7 @@ Hi! I've reviewed your submission. Here's what I found:
 | RMSNorm | {rmsnorm_points} | {rmsnorm_max} | {"✅ Passed" if rmsnorm_points == rmsnorm_max else "❌ Failed"} |
 | Training | {training_points} | {training_max} | {"✅ Passed" if training_points == training_max else "❌ Failed"} |
 | RoPE | {rope_points} | {rope_max} | {"✅ Passed" if rope_points == rope_max else "❌ Failed"} |
+| Model Architecture | {model_points} | {model_max} | {"✅ Passed" if model_points == model_max else "❌ Failed"} |
 | Code Quality | {quality_points} | {quality_max} | {"✅ Passed" if quality_points == quality_max else "❌ Failed"} |
 
 ---
@@ -761,6 +834,16 @@ Check for:
         for result in rope_results:
             md += f"{result.feedback}\n\n"
 
+        # Model Architecture
+        model_results = results_by_category.get("model", [])
+        model_points = sum(r.points_earned for r in model_results)
+        model_max = sum(r.points_possible for r in model_results)
+        md += f"### {'✅' if model_points == model_max else '❌'} Model Architecture ({model_points}/{model_max} pts)\n\n"
+        for result in model_results:
+            md += f"{result.feedback}\n\n"
+            if result.traceback and not result.passed:
+                md += f"<details>\n<summary>🔍 Error Details</summary>\n\n```\n{result.traceback[:500]}\n```\n</details>\n\n"
+
         # Code Quality
         quality_results = results_by_category.get("code_quality", [])
         quality_points = sum(r.points_earned for r in quality_results)
@@ -889,7 +972,7 @@ class Scratch1Grader:
         self.repo_path = repo_path
         self.dry_run = dry_run
         self.git_manager = GitManager(repo_path)
-        self.test_runner = TestRunner(repo_path)
+        self.test_runner = TestRunner(repo_path, git_manager=self.git_manager)
         self.scorer = Scorer(repo_path)
         self.report_generator = ReportGenerator()
 

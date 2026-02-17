@@ -27,6 +27,19 @@ except Exception as e:
     IMPORT_ERROR = str(e)
 
 
+def _make_causal_attention(dim, num_heads, max_seq_len, dropout=0.0):
+    """Instantiate CausalSelfAttention with flexible API.
+
+    The starter code defines CausalSelfAttention(dim, num_heads, dropout) without
+    max_seq_len.  Some students add it, some don't.  Try both signatures so we
+    don't penalise students for following the starter code exactly.
+    """
+    try:
+        return CausalSelfAttention(dim=dim, num_heads=num_heads, max_seq_len=max_seq_len, dropout=dropout)
+    except TypeError:
+        return CausalSelfAttention(dim=dim, num_heads=num_heads, dropout=dropout)
+
+
 @pytest.fixture
 def device():
     """Get available device"""
@@ -123,7 +136,7 @@ def test_causal_mask_leakage():
     num_heads = 4
     max_seq_len = 16
 
-    attn = CausalSelfAttention(dim=dim, num_heads=num_heads, max_seq_len=max_seq_len, dropout=0.0)
+    attn = _make_causal_attention(dim=dim, num_heads=num_heads, max_seq_len=max_seq_len, dropout=0.0)
     attn.eval()  # Disable dropout
 
     batch_size = 2
@@ -166,7 +179,7 @@ def test_causal_attention_shape_preservation():
     num_heads = 4
     batch_size, seq_len = 2, 16
 
-    attn = CausalSelfAttention(dim=dim, num_heads=num_heads, max_seq_len=32)
+    attn = _make_causal_attention(dim=dim, num_heads=num_heads, max_seq_len=32)
     x = torch.randn(batch_size, seq_len, dim)
 
     output = attn(x)
