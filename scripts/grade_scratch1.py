@@ -303,7 +303,7 @@ class TestRunner:
 
             print(f"  🧪 Running tests on {self.REMOTE_HOST}...")
             result = subprocess.run(
-                ["ssh", self.REMOTE_HOST, ssh_cmd],
+                ["ssh", "-A", self.REMOTE_HOST, ssh_cmd],
                 capture_output=True, text=True, timeout=300,
             )
 
