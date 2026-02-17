@@ -65,3 +65,6 @@ pytest.ini
 PRIVATE_REPO_SETUP.md
 SETUP_WITH_GH_CLI.md
 QUICK_REFERENCE.md
+
+# Ignore generated data
+*.pkl
