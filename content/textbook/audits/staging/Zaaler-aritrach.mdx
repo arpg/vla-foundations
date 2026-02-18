@@ -373,96 +373,436 @@ This is consistent with the diversity reward motivation, but it creates a deploy
 
 \[7\] Qwen2-VL: "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution," arXiv 2024.
 
+---
 
 # Technical Paper Audit: EMMA
 
-**Title**: EMMA: End-to-End Multimodal Model for Autonomous Driving (arXiv Sep. 2025)
-**Authors**: Waymo LLC
-**Audit Author**: Zack Allen
+**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning
+**Authors**: (as listed in the paper)
+**Audit Author**: Aritra
+**Paper**: EMMA: End-to-End Multimodal Model for  Autonomous Driving (2025 arXiv)
+**Topic**: MLLM 
 
 ---
 
-## 1. Summary
+# 1. Executive Summary
 
-EMMA is full end-to-end autonomous driving system and its novel element is adapting this formulation for MLLMs for autonomous driving. This means sensor data in and future trajectory waypoints out. The modal has a text encoder and a vision encoder. The text encoder takes in high-level commanding (i.e. simple commands from Google Maps) and historical ego status of the vehicle. In autonomous driving, the ego vehicle is the autonomous vehicle where as the other vehicles are called target vehicles. The history of the ego vehicle contains the past set of trajectory waypoints expressed in a birds eye view space expressed as plain text without specialized tokens. They claim this could be extended for velocity and acceleration but do not include that analysis in this paper. This text information is combined with 360 birds eye camera data. This data is fed into Gemini or PaLI which produces ego future waypoints. Additionally, the model produces driving rationale through chain of thought reasoning. To achieve accurate chain of thought reasoning, they structure the driving rationale in 4 types: scene description (weather, time, road conditions), critical objects (model must idenitify their precise 3D coordinates), behavior description of critical objects (use concrete example prompt and answer to get valid descriptions), and meta driving decision (12 categories of driving evaluated at 3 different timestamps (0, 1, 3 seconds) with additional information to describe speed changes if necessary). In order to train the model, they perform instruction tuning to jointly train the following tasks: spatial reasoning (3D object detection represented in text), road graph estimation (lane markings, signs, lane curvature, merges/splits, direction of traffic, all converted into a text encoded road graph of waypoints), and scene understanding (immediate checking of road obstructions).
+EMMA is a multimodal transformer that unifies perception, mapping, scene understanding, and planning into a single foundation model trained primarily using trajectory supervision. It consumes camera images, ego vehicle motion history, and navigation commands, and directly outputs future ego trajectories along with optional intermediate reasoning, object detections, and road graph representations.
 
----
+Unlike modular autonomy stacks, which explicitly decompose perception, prediction, and planning, EMMA performs these functions implicitly within a single learned latent representation. The model is trained using large-scale multimodal driving data, including over 24 million driving sequences, and instruction tuning across multiple structured driving tasks.
 
-## 2. Architectural Overview
-The architecture is a multimodal large language model. It takes in routing commands and vehicle ego history in text and 360 camera streams in vision. This raw information is directly fed into Gemini 1.0 Nano-1 or PaLI. The particular LLM has been trained using the three task definitions: spatial reasoning, road graph estimation, and scene understanding. The data sets for this training include driving data from nuScenes, Waymo Open Motion Dataset, and an internally developed dataset, object detection data from Waymo Open dataset and an internal detection dataset, and road graph data from an internal road graph dataset. Using this information (not sure if the paper agrees with this considering they say O_traj can be generated before O_rationale), the model produces multiple possible trajectories which are then averaged to produce the best future trajectory. This trajectory is then compared against ground truth data from the driver.
+The central technical claim is that multimodal foundation models can learn a unified internal world model sufficient for autonomous driving planning when trained at sufficient scale.
 
-### 2.1 Architectural Trade-Offs
+From an autonomy engineering perspective, EMMA represents a transition from explicitly engineered autonomy pipelines to learned implicit world-model planners.
 
----
-
-## 3. Data & Scaling
-
-### 3.1 Data Curation Pipeline
-
-Driving Motion Datasets
-nuScenes - 1000 scenes, 20 sec clips, -> 18,686 training examples
-WOMD - 103k real world urban and suburban, 20 sec clips, -> 487,061 training examples of 9 second windows (1 second prior, 8 seconds prediction)
-Internal motion dataset - 24 million real world, 30 seconds long -> sample just one frame
-
-Object Detection Datasets
-WOD - 1150 20 second scenes
-Internal Object Detection Dataset - 12 million examples -> prioritize diverse objects sample one every 3 seconds
-
-Road Graph Dataset
-Internal Road Graph Dataset - focus on diverse scenarios and geo-locations, sample one every 30 seconds (same as motion planning dataset)
-
-### 3.2 Scale Claims
-
-Model is self supervised depending only on future locations of the ego vehicle with no dedicated human labels needed. They claim EMMA hasn't plateaued on their mega-scale dataset. Still could do better with more data.
-
-### 3.3 What Scales and What Does Not
-- Current model only processes a limited number of frames (up to 4) reducing long term reasoning.
-- No gaurantee that the objects, road graph elements, and chain of thought will be consistent (although they state that often they are.)
-- No closed loop evaluation so no testing of solution wiht full sensor suite.
-- nuScenes' limitations like collision rate are sensitive to hyperparameter choices also lack planning diversity and can be solved strictly with ego history.
-- Need for inference time speed up by optiizing and distilling model to compact form.
+However, critical open questions remain around closed-loop stability, safety guarantees, distributional robustness, and interpretability.
 
 ---
 
-## 4. Downstream Application
+# 2. System-Level Problem Formulation
 
-### 4.1 Robotics
+The autonomous driving planner must compute a future ego trajectory conditioned on incomplete, noisy observations and goal constraints.
 
-Id argue if you could disseminate a core set of manipulation based tasks with ground truths based on some sort of fixed solution finding system, the fundamental principles from this paper could be applied.
+Formally, this can be expressed as:
 
-### 4.2 Missing Closed-Loop Evidence
+```
+τ* = argmax P(τ | o₀:t, g)
+```
 
-### 4.3 The Video-Only Assumption
+Where:
 
----
+* τ = future ego trajectory
+* o₀:t = sensor observations
+* g = navigation goal
 
-## 5. Critical Synthesis & Sign-Off
+Traditional pipelines factor this into:
 
-### 5.1 Load-Bearing Assumptions
-* **Assumption 1**:
-* **Assumption 2**:
+```
+Perception → State Estimation → Prediction → Planning
+```
 
-### 5.2 Reproducibility Assessment
-- Code publicly available?
-- Pre-trained models released?
-- Dataset accessible?
-- Hyperparameters specified?
-- Quantitative evaluation?
+EMMA instead directly models:
 
-**Score: 3/5 - Somewhat reproducible.**
+```
+τ ~ P(τ | tokens(image, history, navigation))
+```
 
-### 5.3 Failure Modes
-
-### 5.4 Sign-Off Criteria
-**Decision:**
+This collapses state estimation, prediction, and planning into a single learned probabilistic model.
 
 ---
 
-## References
+# 3. Architecture Deep Dive
+
+## 3.1 Input Representation and Tokenization
+
+EMMA consumes multimodal tokens from three primary sources:
+
+### Vision tokens
+
+Input:
+
+* Multi-camera surround-view RGB images
+* Typical setup: 6–8 cameras covering 360°
+
+Images are encoded using a vision encoder producing visual tokens.
+
+These tokens represent:
+
+* Object geometry
+* Scene structure
+* Spatial relationships
+
+Unlike LiDAR-based pipelines, EMMA must infer depth and geometry implicitly.
+
+This is a major architectural constraint.
 
 ---
 
-# Technical Paper Audit: Alpamayo-R1
+### Ego trajectory history tokens
+
+Past ego motion is encoded as coordinate sequences:
+
+Example:
+
+```
+(0.0, 0.0)
+(1.2, 0.1)
+(2.4, 0.3)
+```
+
+This provides:
+
+* Ego velocity
+* Ego heading
+* Ego acceleration
+
+This enables transformer to infer ego dynamics.
+
+---
+
+### Navigation command tokens
+
+Example:
+
+```
+Turn right in 100 meters
+```
+
+This provides goal conditioning.
+
+---
+
+## 3.2 Transformer Core
+
+The core model is a multimodal transformer derived from Gemini / PaLI architectures.
+
+Processes:
+
+```
+[vision tokens | ego tokens | navigation tokens]
+```
+
+Produces autoregressive output tokens.
+
+Transformer must internally represent:
+
+* Scene geometry
+* Agent states
+* Agent interactions
+* Ego dynamics
+* Planning policy
+
+This is an extremely high-dimensional latent representation.
+
+---
+
+## 3.3 Output Representation
+
+EMMA produces structured outputs in token form.
+
+Primary output:
+
+Future ego trajectory:
+
+```
+(xₜ₊₁, yₜ₊₁)
+(xₜ₊₂, yₜ₊₂)
+...
+```
+
+Secondary outputs (optional):
+
+Object detections:
+
+```
+Vehicle at (10.2, 3.4)
+Pedestrian at (5.3, -1.2)
+```
+
+Road graph:
+
+```
+Lane centerline coordinates
+```
+
+These outputs suggest internal latent world model representation.
+
+---
+
+# 4. Training Pipeline and Dataset Composition
+
+## 4.1 Motion planning datasets
+
+nuScenes:
+
+* 1000 scenes
+* 20 second clips
+* 18,686 training examples
+
+Waymo Open Motion Dataset:
+
+* 103,000 scenes
+* 487,061 training windows
+* 9-second windows
+
+Internal Waymo motion dataset:
+
+* 24 million sequences
+* 30 second clips
+* Dominant dataset component
+
+This scale is several orders of magnitude larger than academic datasets.
+
+---
+
+## 4.2 Object detection datasets
+
+Waymo Open Dataset:
+
+* ~1150 scenes
+
+Internal Waymo detection dataset:
+
+* 12 million labeled examples
+
+Provides object supervision.
+
+---
+
+## 4.3 Road graph dataset
+
+Internal Waymo dataset containing:
+
+* Lane centerlines
+* Intersections
+* Traffic topology
+
+Sampled across geographic diversity.
+
+---
+
+## 4.4 Instruction tuning tasks
+
+Model is instruction tuned across:
+
+- Trajectory prediction
+- Object detection
+- Road graph generation
+
+This creates multitask training signals.
+
+---
+
+# 5. Mechanistic Interpretation: Internal World Model Hypothesis
+
+To predict trajectory accurately, EMMA must internally estimate full scene state.
+
+This includes:
+
+Object positions
+Object velocities
+Object interaction dynamics
+Ego dynamics
+
+Transformer latent state therefore functions as implicit world model.
+
+Formally:
+
+Transformer learns approximation of:
+
+```
+P(Sₜ₊₁ | Sₜ)
+```
+
+Where Sₜ is full world state.
+
+This makes EMMA closer to world model architecture than traditional planner.
+
+---
+
+# 6. Scaling Properties and Training Regime
+
+Dataset scale:
+
+Motion sequences: 24M
+Detection examples: 12M
+
+Total multimodal tokens likely > 10¹¹ tokens.
+
+Foundation model scaling laws apply:
+
+Loss ∝ DatasetSize^-α
+
+Scaling likely critical to performance.
+
+Model likely compute-bound rather than architecture-bound.
+
+---
+
+# 7. Closed-Loop Behavior and Stability Risk
+
+Training is open-loop imitation learning.
+
+Closed-loop deployment introduces feedback effects.
+
+Error at time t affects state at time t+1.
+
+This creates compounding error risk.
+
+This is a known limitation of behavior cloning.
+
+Closed-loop evaluation required to validate stability.
+
+---
+
+# 8. Failure Mode Taxonomy (Autonomy-Critical)
+
+## 8.1 Perception failure
+
+Camera-only perception may fail under:
+
+Low light
+Glare
+Weather
+Occlusion
+
+Failure propagates directly to planner.
+
+No modular fallback.
+
+---
+
+## 8.2 Distribution shift
+
+Model trained on limited geographic distribution.
+
+Performance outside training distribution uncertain.
+
+---
+
+## 8.3 World model incompleteness
+
+Transformer latent space may not encode full state.
+
+This may produce inconsistent planning.
+
+---
+
+## 8.4 Precision and tokenization limits
+
+Coordinate tokenization introduces quantization.
+
+This limits trajectory precision.
+
+---
+
+# 9. Architectural Tradeoff vs Modular Autonomy Stack
+
+**Advantages**:
+
+- Unified architecture
+- Shared representation
+- Scaling efficiency
+
+**Disadvantages**:
+
+- No explicit state representation
+- Hard debugging
+- No safety guarantees
+
+Modular stacks provide stronger engineering guarantees.
+
+Foundation model planners provide stronger scaling potential.
+
+---
+
+# 10. Load-Bearing Assumptions
+
+Assumption 1:
+
+Transformer latent space can represent full scene state.
+
+Assumption 2:
+
+Trajectory supervision sufficient to learn perception.
+
+Assumption 3:
+
+Scaling improves performance without architectural change.
+
+---
+
+# 11. Reproducibility and Engineering Cost
+
+Training requires:
+
+- Millions of GPU hours
+- Internal datasets
+
+External reproduction currently impractical.
+
+This is industrial-scale foundation model.
+
+---
+
+# 12. Research Assessment
+
+- Architectural significance: Extremely high
+- Scientific significance: High
+- Engineering maturity: Moderate
+- Deployment readiness: Unknown
+
+---
+
+# 13. Key Research Questions
+
+Critical unanswered questions:
+
+- Closed-loop stability
+- Safety under distribution shift
+- Scaling limits
+- Interpretability
+
+These determine deployment feasibility.
+
+---
+
+# 14. Internal Engineering Sign-Off Assessment
+
+- Research significance: Approved
+- Production readiness: Not yet sufficient
+
+EMMA represents foundational architectural shift but requires significant validation before production deployment.
+
+---
+
+# 15. References
+
+Waymo LLC, EMMA: End-to-End Multimodal Model for Autonomous Driving, arXiv 2025.
+
+---
+
+# Technical Paper Audit: Alpamayo-R1 (In Progress)
 
 **Title**: Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail (arXiv Jan. 2026)
 **Authors**: Nvidia
