@@ -1,0 +1,123 @@
+---
+title: "Kali Hamilton (kalhamilton): Radar-VLA for Degraded Sensing — Capstone Running Log"
+github: "kalhamilton"
+group: "A"
+lab: "Multi-Modal Sensing Lab"
+status: "in-progress"
+---
+
+# Kali Hamilton: Radar-VLA for Degraded Sensing — Capstone Running Log
+
+**GitHub:** [@kalhamilton](https://github.com/kalhamilton)
+**Group:** A — Multi-Modal Sensing Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Modality misalignment in multi-sensor robotics.
+Camera features live in CLIP space, LiDAR in 3D geometric space, and radar in Range-Doppler-Azimuth space.
+Naively concatenating these creates a "Frankenstein representation" where the action decoder struggles to learn which modality to trust in which situation.
+This manifests as high action quantization error when one modality is degraded (fog, night, rain).
+
+### Base Model
+
+VQ-BeT (CMU, CoRL 2023) — Behavior Generation Pre-Training with VQ-VAE.
+VQ-VAE discretizes continuous actions into a codebook; a Transformer predicts sequences of action tokens.
+Enables pre-training on diverse datasets with action quantization.
+
+### The Delta
+
+Separate VQ-VAE branches for each modality (camera, LiDAR, radar), each producing action predictions in a shared codebook.
+Learned reliability gates: a network predicts confidence weights for each modality based on environmental conditions (visibility metrics, radar SNR, LiDAR density).
+Fused action tokens: a weighted combination of modality-specific predictions before final decoding.
+Training on View-of-Delft (camera + radar + LiDAR) extended with synthetic degradation.
+
+### Data Mix Strategy
+
+**Internet Priors:**
+Llama-3 8B (frozen), pre-trained on approximately 15T tokens of web text, provides language understanding and reasoning.
+Radical ResNet-18 encoder (frozen), pre-trained via cross-modal contrastive learning on nuScenes (~28K scenes), provides radar-to-semantic-space mapping.
+
+**Embodied Data:**
+No real embodied data in the class project phase; this is acknowledged as a limitation.
+Phase 2 extension: 500–1K real navigation trajectories on Hello Stretch 3, collected in fog-machine safety tests, night/low-light outdoor trials, and ARPG environment mapping.
+Mix ratio: 10–15% real data for domain adaptation, 85–90% synthetic for bulk training.
+
+**Synthetic Data (CARLA):**
+10K episodes, approximately 1M radar-language-action tuples.
+Condition distribution: 40% clear, 30% dense fog (visibility < 50 m), 20% night/darkness, 10% rain + fog.
+Language: 50 templated navigation commands.
+Actions: velocity + steering discretized via VQ-VAE into 512 action tokens.
+Radar: Range-Azimuth heatmaps at 256×256 resolution, 30 Hz.
+
+### Compute Requirements
+
+Machine A (primary training): Llama-3 2B INT8 (~2 GB), frozen radar encoder (~100 MB), projector + action head (~150 MB), batch size 8 with gradient accumulation.
+Machine B (data + evaluation): CARLA simulation instances (3–5 parallel), evaluation metrics, checkpoint validation.
+Hardware: 2× RTX 4070s in lab.
+
+### Success Metric
+
+Task Success Rate (TSR): percentage of episodes reaching the goal without collision.
+Key hypothesis: Radar-VLA maintains >75% TSR in fog/night while vision-only drops to <35%.
+Secondary metrics: action L2 error (predicted vs. expert), path efficiency, collision rate.
+
+### Evaluation Scale
+
+400 test episodes: 100 per condition (clear/fog/night/rain+fog) across 4 CARLA maps.
+Automated generation via C-Shenron radar plugin.
+Comparison against three baselines: vision-only VLA, radar-only, radar-VLA.
+Statistical significance via 95% CI bootstrap.
+Expert demonstrations (200 trajectories) for action L2 error ground truth.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#56](https://github.com/arpg/vla-foundations/pull/56) (jdvakil). Scribed during the Multi-Modal Sensing Lab session.*
+
+### Gyanig — Rough Notes
+
+Lots of datasets available; the challenge is finding ways to organize and structure the gaze data.
+Cut off at the chain of thought to verify whether gaze information is meaningful as a supervisory signal.
+
+### Kali — Radar-VLA Notes
+
+Radar data from Korean group K-Radar (high frequency) and View-of-Delft to implement and fine-tune VLA models.
+Radical ResNet encoder trained on driving scenes provides vision features.
+Millimeter-wave and radar sensors bridge to action prediction.
+Possible extension: learning capabilities analogous to a driver's situational awareness.
+Synthetic data generated with CARLA.
+Core issue: not much millimeter-level labeled data available; the system relies on millimeter wave when camera data fails.
+Bridge from radar observations to the action head is the key interface.
+Recommendation: stick to multi-modality — do not work on standalone radar vs camera systems.
+Target inference hardware: NVIDIA Orin.
+TX cascaded radar with 4 receivers and 48 small elements generating data cubes; after processing, produces a point cloud dependent on area of coverage (sparse; large data volume).
+
+### Jay/Carson — Proximity Sensor Notes
+
+Proximity sensors to train a VLA policy.
+Edge computing constraints with synthetic datasets for data generation.
+Edge compute target: 8×8 image resolution may be feasible; encoder must be significantly downsized.
+Open question: how to upscale from 8×8 representations to higher-resolution features, and how to tokenize proximity readings.
+Reconstruct features from sparse proximity inputs.
+Open question: point cloud tokenization and point-cloud-based reasoning for feature extraction.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Kali Hamilton | @kalhamilton | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

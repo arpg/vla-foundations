@@ -1,0 +1,213 @@
+---
+title: "Thanushraam (Tr0612): Cross-Task Generalization in Small VLAs — Capstone Running Log"
+github: "Tr0612"
+group: "B"
+lab: "Action & Policy Benchmark"
+status: "in-progress"
+---
+
+# Thanushraam: Cross-Task Generalization in Small VLAs — Capstone Running Log
+
+**GitHub:** [@Tr0612](https://github.com/Tr0612)
+**Group:** B — Action & Policy Benchmark
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Testing cross-task generalization in small-scale VLA models.
+Current small VLA models (TinyVLA, SmolVLA, OpenVLA) are evaluated on training-distribution tasks; their ability to transfer to novel but related manipulation tasks is underexplored.
+
+### Base Model
+
+TinyVLA, SmolVLA, and OpenVLA as reference architectures.
+A custom VLA stack built from scratch referencing these papers.
+
+### The Delta
+
+A new policy head in which the model learns multiple expert action modules that specialize in different manipulation behaviors, similar to a Mixture-of-Experts (MoE) approach.
+The model is trained on a subset of MetaWorld tasks and evaluated on related but unseen tasks to study cross-task generalization and the effectiveness of modular action specialization.
+Additional simulated datasets added to improve diversity and robustness.
+If resources permit: sim-to-real transfer as an extension.
+
+### Data Mix Strategy
+
+Approximately 60% internet priors through pre-trained vision-language representations.
+Approximately 30% embodied data from Open X-Embodiment (OXE) and MetaWorld for policy learning.
+Approximately 10% synthetic data generated in simulation to cover rare or edge-case manipulation scenarios.
+
+### Compute Requirements
+
+20 hours on RTX 4070 or RTX 5080.
+Aiming to run inference on CPU.
+
+### Success Metric
+
+Task success rate in simulation (primary metric).
+Cross-task generalization gap: performance on training tasks vs. held-out tasks.
+Robustness to language variation: different prompt styles (simple, detailed, task-specific).
+If resources permit: limited real-robot trials on a simple manipulation task for sim-to-real transfer.
+
+### Evaluation Scale
+
+2–3 held-out MetaWorld tasks, each tested with multiple prompt styles.
+20–50 closed-loop rollouts per task (approximately 100–150 total evaluation episodes).
+Additional synthetic evaluation set with domain randomization (lighting shifts, camera noise, distractors): approximately 50–100 perturbed episodes.
+If sim-to-real: small set of real-robot demonstrations collected manually.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#52](https://github.com/arpg/vla-foundations/pull/52) (krusnim). Scribed by Mel; presented by Lorin. No generative tools used to produce this document.*
+
+### Lorin: Utilizing Risk Profiles in VLAs
+
+**Goal:** Change action outputs based on a risk profile.
+This profile should be encoded in an RL policy so the stack is risk-aware.
+Example: get X close to a person without entering a "risk zone."
+
+**Data:** An "OpenVLA or Octo type dataset," possibly Open X-Embodiment (OXE).
+A small collection of simulation data on a robot arm is required for fine-tuning, collected via IsaacSim/IsaacLab.
+
+**Training:** Scaling is a major concern.
+Training an RL policy and then evaluating will take a while.
+It is not necessarily compute-heavy to collect a small dataset and demonstrate one safe and one unsafe trajectory that are meaningfully different.
+
+**Discussion:**
+Thanush asked about dataset details.
+Ideally a mix of internet-scale and fine-tuning data; an exact mix has not been determined yet.
+If computational issues arise, scaling down to minimum is necessary.
+The minimum dataset would be a supervised fine-tuning set created from teleoperation in simulation.
+The project starts with a very simple task: designating a risk zone and a safe zone.
+
+Soorej asked how the safe/unsafe zone will be validated.
+There is a binary classification component, but quantifying how far inside the safe zone the robot is would also be valuable.
+A full understanding of the distribution of actions and their rewards/costs is the goal.
+
+Mel asked about the base VLA.
+Probably OpenVLA, Octo, or SmolVLA — whichever provides easier setup and future scalability (open weights, full robot models).
+
+Mel asked whether there is a particular safe RL work this draws from.
+Statistical analysis tools on the RL training stage are applicable: risk-aware PPO implementations, value iteration/Bellman adjustments.
+A simpler value iteration could be the starting point; distributional RL with PPO is also a strong candidate.
+
+Thanush asked whether a sensor on the arm would help produce data/safety measurements.
+Additional sensors with fixed, rule-based emergency stop policies are valid but redundant.
+There are reasons to not rely solely on rule-based vision or proximity sensors.
+When deploying in real life, if the on-arm camera fails, the system still needs to determine what is safe.
+
+### Thanush: MoE Policy Head for MetaWorld Generalization
+
+**Goal:** Based on TinyVLA, build a VLA stack with a new policy head to learn multiple expert action modules for different manipulation behaviors.
+Train on a fragment of MetaWorld tasks; evaluate on related but unseen tasks to determine generalization capabilities.
+
+**Data:** Sourced from MetaWorld.
+**Training:** On a consumer GPU.
+
+**Discussion:**
+Soorej asked how "difficulty" of tasks is defined.
+Training on easy tasks and testing on difficult ones, and vice versa, should both be evaluated.
+MetaWorld has ten tasks total; if a model trained to open a drawer cannot open a fridge, that is a generalization failure.
+
+Lorin asked about the compute setup.
+TinyVLA has parameters on the order of millions; a consumer GPU should suffice.
+
+Lorin asked whether the plan is to pick an existing architecture like TinyVLA.
+The goal is to build something from scratch and train on a dataset.
+A comparison will then be made after adding the new custom policy head.
+
+### Soorej: Apples-to-Apples Policy Comparison
+
+**Goal:** Compare a diffusion policy, an autoregressive approach, and an RL approach to visuomotor control with identical datasets and architectures — essentially an ablation.
+
+**Data:** Unknown; likely Open X-Embodiment.
+**Training:** 5–10 GPU hours for each model.
+
+**Discussion:**
+Lorin asked about the RL method.
+PPO or GRPO.
+
+Lorin asked whether flow matching was considered.
+Not yet, but it is an interesting possibility.
+
+Mel asked about compute requirements and backbone considerations.
+5–10 GPU hours per model.
+The diffusion backbone will be based on the vision model control paper.
+For autoregression, it will be a plain Transformer.
+
+Thanush asked whether training setups will differ across methods.
+Ideally no.
+
+Lorin asked what dataset will be used.
+Open X-Embodiment, maybe.
+
+Lorin asked about major concerns and plan B.
+Moving to smaller models or a smaller dataset and comparing only RL and autoregression is the fallback.
+
+Lorin asked how outputs in the action space will be compared.
+Currently unsure.
+
+### Mel: Adversarial Strategic Reasoning in VLAs
+
+*(Scribed by Soorej)*
+
+**Goal:** In adversarial multiagent settings, the correct, least-exploitable action outputs are stochastic — but the stochasticity output by a VLA may not match the correct action weights.
+The goal is to generate analytically correct trajectories and fine-tune the VLA so that token probabilities align with strategically optimal mixed-action trajectories.
+
+**Root model:** MiniVLA (or TinyVLA, VQ-BeT).
+**Data:** Partially world model data, partially single-agent robot data, partially generated adversarial data.
+
+**Discussion:**
+Lorin asked whether training is required.
+Yes — fine-tuning with the adversarial data.
+The opponent in all cases will be a fixed policy (not a second VLA) to simplify training.
+The goal is to avoid being exploited by that fixed opponent.
+
+Lorin asked about expected computational cost.
+GPUs are available.
+OpenVLA can apparently be fine-tuned in about a dozen hours; the narrower robot data may reduce the number of training hours needed.
+
+Lorin asked for the simplest possible demonstration.
+A common example is tag; getting more complicated or general than that would be ideal.
+Tag is good because it is very easy to analytically generate mixed probabilistic trajectories.
+
+Lorin noted this project seems more complex than the others and asked about a simpler backup plan.
+One option: focus only on action tokenization — a potential modification of VQ-BeT where the latent action space focuses on encoding the most strategically relevant actions first.
+
+### Overarching Commentary
+
+**Load-bearing walls:**
+Data is the primary load-bearing wall.
+For Lorin and Mel, data generation will be required and difficult to get right.
+Thanush and Soorej will use exclusively existing data — potentially easier but still a bottleneck.
+Simulation is the shared substrate; none of these projects will be deployed on hardware.
+Information decay: all projects simplify more complex problems, losing action information in the process.
+This is a particularly sharp problem for Soorej, where action spaces will differ across methods.
+
+**Unresolved engineering question:**
+The group struggled to identify a single unifying engineering question, given the diversity of projects.
+Generating data in simulation is the central problem for action-centric projects (Lorin and Mel).
+Defining standards for apples-to-apples comparisons is the focus for benchmarking-centric projects (Thanush and Soorej).
+Sharing a general data pipeline for internet-scale and robot data across projects is a potential efficiency gain.
+
+**Most robust initial dissolve:**
+No single most-robust initial dissolve was named.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Thanushraam | @Tr0612 | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*
