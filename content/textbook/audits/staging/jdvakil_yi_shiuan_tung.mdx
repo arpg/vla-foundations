@@ -162,7 +162,7 @@ $$
 3. Map continuous action to bin:
 
 $$
-\hat{a}_d = \left\lfloor \frac{a_d - \text{lower}}{\Delta_d} \right\rfloor
+\hat{a}_d = \left\lfloor \frac{a_d - \mathrm{lower}}{\Delta_d} \right\rfloor
 $$
 
 They overwrite the 256 least-used tokens in the LLaMA vocabulary with action tokens.
@@ -227,11 +227,11 @@ During pretraining, all tasks (including robot actions) are represented as discr
 **Stage 2: Post-training with an action expert for flow matching**
 Post-training adds a separate 300M parameter action expert (on top of the 2B PaliGemma backbone) that predicts continuous action chunks via flow matching.
 
-#### 5.3.3 Objective: Joint Next-Token + Flow-Matching Loss
-$\pi_{0.5}$ jointly optimizes a cross-entropy next-token loss ($\mathcal{L}_{\text{CE}}$) over text and FAST action tokens, alongside a flow-matching loss ($\mathcal{L}_{\text{FM}}$) for the action expert:
+### 5.3.3 Objective: Joint Next-Token + Flow-Matching Loss
+$\pi_{0.5}$ jointly optimizes a cross-entropy next-token loss ($\mathcal{L}_{\mathrm{CE}}$) over text and FAST action tokens, alongside a flow-matching loss ($\mathcal{L}_{\mathrm{FM}}$) for the action expert:
 
 $$
-\mathcal{L} = \mathcal{L}_{\text{CE}} + \lambda \mathcal{L}_{\text{FM}}
+\mathcal{L} = \mathcal{L}_{\mathrm{CE}} + \lambda \mathcal{L}_{\mathrm{FM}}
 $$
 
 Given $(x_t, t)$, the model is trained to predict the flow field $v_t$, which is used for integrating from noise to actions at inference.
