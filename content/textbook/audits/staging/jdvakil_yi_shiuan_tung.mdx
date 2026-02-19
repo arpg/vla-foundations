@@ -1,293 +1,245 @@
+
 ---
-title: "Manipulation: A technical audit"
-author: "Jay Vakil, Yi-Shiuan Tung"
-paper: "Open X-Embodiment, RoboAgent, Octo"
-topic: "Manipulation"
+Title: "Manipulation: A Technical Audit"
+Author: "Jay Vakil, Yi-Shiuan Tung"
+Papers: "Octo, OpenVLA, Pi0.5"
+Topic: "Manipulation"
 ---
 
-### What is Manipulation?
+## Abstract
+Robotic manipulation in unstructured environments remains an open problem in embodied AI. Despite progress in vision-language foundation models, translating internet-scale semantic understanding into contact-rich motor control is challenging. This review examines the current landscape of Vision-Language-Action (VLA) models for manipulation through the lens of the data bottleneck. While language models train on trillions of tokens and vision-language models consume billions of image-text pairs, the robot manipulation community has produced roughly two million trajectories, fragmented across embodiments, labs, and task distributions. The field utilizes three competing strategies to address this limitation: (1) transferring internet-scale pretraining into action spaces, (2) multiplying limited real-world data through augmentation and cross-embodiment pooling, and (3) redesigning the action representation itself. This review traces the architectural lineage from RT-1 through $\pi_{0.5}$, formalizes the mathematical trade-offs at each model's critical interfaces, and identifies the limitations of each strategy.
 
-Robotic manipulation is the ability to purposefully change the state of the physical world through contact. This is arguably the most consequential unsolved problem in robotics. While locomotion allows a robot to move through its environment and perception allows it to observe, manipulation is the capability that enables a robot to *act on* its environment: to pick up a cup, load dishwashers, folding clothes, or prepare a meal.
+**Index terms:** Robotic manipulation, Foundational models, Vision-Language-Action (VLA) Model
 
-Manipulation is not a single problem but a spectrum of tasks with dramatically different physical requirements. It is useful to organize this spectrum along several axes:
+## 1. Introduction
+Robotic manipulation is the ability to purposefully change the state of the physical world through contact. While locomotion allows a robot to move through its environment and perception allows it to observe, manipulation enables a robot to act on its environment (e.g., picking up a cup, loading dishwashers, folding clothes, or preparing a meal).
 
-**By contact complexity:**
+Manipulation encompasses a spectrum of tasks with different physical requirements:
 
-- **Non-prehensile manipulation** involves moving objects without grasping them. Such as: pushing, sliding, tilting, or toppling. The physics are dominated by friction and inertia, and control is typically open-loop or quasi-static. This is the simplest form of manipulation and the one where current VLAs are most reliable.
-- **Prehensile manipulation** involves grasping and transporting objects. This is the bread-and-butter of current VLA research: pick-and-place, bin picking, tabletop rearrangement. The key challenge is grasp planning: selecting a grasp pose that is kinematically reachable, stable under the object's mass distribution, and achievable with the robot's gripper geometry.
-- **Dexterous manipulation** involves in-hand repositioning of objects using multi-fingered hands. This requires coordinated control of many degrees of freedom (20+ for an anthropomorphic hand) with continuous contact state estimation. Dexterous manipulation is where π₀ and π₀.5 have made the most impressive recent progress, but the task remains far from solved in general.
-- **Contact-rich manipulation** involves tasks where the robot must make and maintain complex contact with the environment, insertion, assembly, screwing, polishing, wiping. These tasks require force modulation and compliance control, which are absent from the action spaces of all current VLAs.
+* **Prehensile manipulation** involves grasping and transporting objects. This is the primary focus of current VLA research (e.g., pick-and-place, bin picking, tabletop rearrangement). The key challenge is grasp planning: selecting a grasp pose that is kinematically reachable, stable under the object's mass distribution, and achievable with the robot's gripper geometry.
+* **Non-prehensile manipulation** involves moving objects without grasping them (e.g., pushing, sliding, tilting, or toppling). The physics are dominated by friction and inertia, and control is typically open-loop or quasi-static.
+* **Dexterous manipulation** involves in-hand repositioning of objects using multi-fingered hands. This requires coordinated control of many degrees of freedom with continuous contact state estimation. $\pi_0$ and $\pi_{0.5}$ have demonstrated progress in this area, though the task remains unsolved in general.
+* **Contact-rich manipulation** involves tasks where the robot must make and maintain complex contact with the environment (e.g., insertion, assembly, screwing, polishing, wiping). These tasks require force modulation and compliance control, which are currently absent from the action spaces of standard VLAs.
 
+While computer vision and natural language processing have scaled to billions of parameters, manipulation remains bottlenecked. This discrepancy illustrates Moravec’s Paradox. Foundational vision models achieve zero-shot semantic understanding, and VLMs exhibit advanced logical reasoning. However, translating this reasoning into physical action is difficult because manipulation requires sub-millimeter geometric perception, multi-step causal reasoning, and the management of continuous contact dynamics (forces, compliance, constraints).
 
-# Technical Paper Audit: Octo
-**Title**: Octo: An Open-Source Generalist Robot Policy
-**Authors**: Dibya Ghosh et al.
-**Audit Author**: Yi-Shiuan Tung
+## 2. Embodiment Gap and Data Scaling
+The primary barrier to generalized manipulation is the Embodiment Gap. LLMs are trained on passive, internet-scale datasets exceeding $15 \times 10^{12}$ tokens, and vision models on pixel datasets exceeding $10 \times 10^9$ image-text pairs. Conversely, robot action data must be physically generated through methods like kinesthetic teaching or teleoperation, yielding dataset sizes closer to $2 \times 10^6$ trajectories.
 
-## Summary
+To overcome this, research has shifted toward scalable data aggregation. The Open X-Embodiment (OXE) initiative aggregated 1 million episodes across 22 different robot embodiments to train cross-embodiment policies.
 
-Trained on 800k trajectories from the Open X-Embodiment dataset. Octo can be effectively finetuned to new observations and action spaces. Released model checkpoints with 27M and 93M parameters, out of the box, support multiple RGB camera inputs as well as both language and goal image task specificiation.
+### 2.1 Open X-Embodiment and RT-X: Cross-Embodiment Pooling
+The Open X-Embodiment project (Open X-Embodiment Collaboration, 2024) addresses the data limitation through aggregation. The resulting dataset comprises approximately 2 million episodes from 22 distinct robot embodiments, collected across 21 institutions. The embodiments span tabletop arms (Franka, UR5, xArm, Google Robot), mobile manipulators (Stretch, TIAGo), and bimanual systems. Tasks range from simple pick-and-place to multi-step kitchen manipulation.
 
-## Architecture
-Octo is a transformer-based policy consisting of three parts: input tokenizers that transform language instructions $l$, goals $g$, and observation sequences into tokens; a transformer backbone that processes these tokens and produces embeddings; and readout heads that produce the actions a.
+Two models were trained on this aggregated data: RT-1-X (the RT-1 architecture trained on the pooled dataset) and RT-2-X (RT-2 fine-tuned on the pooled dataset). Positive transfer exists across embodiments; both models outperformed their single-embodiment counterparts, with RT-2-X showing a 3x improvement on emergent skill evaluations compared to RT-2 trained on Google Robot data alone.
 
-Use pretrained language transformer t5-base (111M) model to process language inputs. Image observations and goals are passed through a shallow convolution stack, then split into a sequence of flattened patches.
+The pooled training does not explicitly model embodiment differences; there is no embodiment embedding or dynamics adapter. The model must implicitly learn to factor its representations into embodiment-invariant (task semantics, object properties) and embodiment-specific (workspace geometry, joint limits, gripper type) components.
 
-We use a conditional diffusion decoding head to predict continuous, multi-modal action distributions. Importantly, only one forward pass of the transformer backbone is performed per action prediction, after which the multi-step denoising process is carried out entirely within the small diffusion head. We found this policy parameterization to outperform policies trained with MSE action heads or discretized action distributions [10] in both zero-shot and finetuning evaluations.
+## 3. Technical Paper Audit: Octo
+**Title:** Octo: An Open-Source Generalist Robot Policy  
+**Authors:** Dibya Ghosh et al.  
 
-# Technical Paper Audit: OpenVLA
+### 3.1 Summary
+Octo is an open-source generalist robot policy: a transformer-based diffusion policy pretrained on 800k robot trajectories from 25 Open X-Embodiment (OXE) datasets. It targets a key friction point for real deployments: downstream robotics setups rarely match a single standard interface, as sensor suites, camera layouts, and action spaces differ. The model is designed to swap in and out observation channels and action heads while retaining pretrained weights.
 
-**Title**: OpenVLA: An Open-Source Vision-Language-Action Model
-**Authors**: Moo Jin Kim et al.
-**Audit Author**: Yi-Shiuan Tung
+#### 3.1.1 Key Results
+* **Zero-shot:** On environments from its pretraining distribution, Octo achieves ~33% higher average success than RT-1-X and performs similarly to RT-2-X on tested WidowX tasks.
+* **Finetuning:** With ~100 demos per domain, Octo finetunes across real-robot domains, including new observation inputs (force-torque) and new action spaces (joint position control), reaching 72% average success compared to 20% for ResNet+Transformers and 15% for VC-1.
+* **Accessibility:** Pretraining (Octo-Base / ViT-B-sized backbone) takes 300k steps at batch size 2048 on a TPU v4-128 pod (~14 hours); finetuning on a single 24GB NVIDIA A5000 takes ~5 hours.
+* **Tokenization:** Language instructions are embedded via a pre-trained T5-base model (111M parameters), and images (wrist and 3rd-person cameras) are processed through a shallow CNN into patches.
+* **Action Generation:** Octo predicts continuous actions using a multi-step denoising process. The action sampling is defined as:
 
-# 1. Summary
+$$
+x_{k-1} = \alpha(x_k - \gamma\epsilon_\theta(x_k, e, k) + \mathcal{N}(0, \sigma^2I))
+$$
 
-**OpenVLA** is a **7B-parameter open-source Vision-Language-Action (VLA) model** trained on **970k robot episodes** from the Open X-Embodiment dataset. It addresses two core barriers to widespread VLA adoption:
+where $x_k$ is the noisy action at step $k$, $e$ is the transformer readout embedding, $\epsilon_\theta$ is the predicted noise, and $\alpha, \gamma, \sigma$ follow a cosine noise schedule.
 
-1. Most high-performing VLAs (e.g., RT-2-X) are closed-source.
-2. Prior work does not sufficiently explore **efficient fine-tuning** for new tasks or embodiments.
+### 3.2 Problem Domain & Taxonomy
+Octo operates in generalist robotic manipulation across multiple robot embodiments, multiple camera configurations, language or goal-image conditioning, and varying action spaces, with support for observation histories and multimodal action distributions.
 
-OpenVLA builds on the **Prismatic-7B VLM**, which combines:
+**Taxonomy Positioning:**
+* **Policy type:** Generalist robot policy (vision + optional language/goal)
+* **Training paradigm:** Large-scale imitation learning (OXE mixture)
+* **Action representation:** Continuous actions via diffusion decoding
+* **Adaptation strategy:** Composable token interface + lightweight adapters/heads; finetune with small in-domain data
+* **Scaling approach:** Dataset mixture + transformer scaling + modular IO
 
-* A **600M-parameter dual visual encoder** (SigLIP + DINOv2),
-* A 2-layer MLP projector,
-* A **7B LLaMA 2 backbone**.
+Unlike RT-X or OpenVLA’s action token prediction, Octo uses a diffusion action head to model continuous, multi-modal action distributions.
 
-### Key Results
-
-* **+16.5% absolute task success** over RT-2-X (55B) across 29 tasks
-* **+20.4%** over Diffusion Policy in multi-task multi-object settings
-* Fine-tunable on consumer GPUs via **LoRA**
-* Quantizable without performance loss
-* Runs at ~6 Hz on RTX 4090 (15GB bfloat16)
-
-This establishes OpenVLA as a **scalable, reproducible baseline for open robotics foundation models**.
-
-
-# 2. Problem Domain & Taxonomy
-
-## Problem Domain
-
-OpenVLA operates in **generalist robotic manipulation** across multiple embodiments, diverse scenes, multi-task environments, and end-effector control.
-
-The OpenX-Embodiment dataset is filtered to single-arm setups with at least one third-person camera and contains high embodiment diversity. They adopt Octo’s mixture weighting to emphasize datasets with high task diversity.
+### 3.3 Architecture Overview
 
 
-## Taxonomy Positioning
 
-OpenVLA belongs to:
+#### 3.3.1 Backbone: Tokenizers, Transformer, Readouts, and Heads
+Octo is a transformer-based diffusion policy ($\pi$) with three parts:
+1. **Task & observation tokenizers** that map language instruction ($\ell$), goal image ($g$), and observation history ($o_{1:H}$) into token sequences ($(T_\ell, T_g, T_o)$).
+2. A **transformer backbone** ($T(\cdot)$) that processes the tokens into embeddings: $(e_\ell, e_g, e_o) = T(T_\ell, T_g, T_o)$.
+3. **Readout heads** ($R(e)$) that produce outputs (actions) from readout token embeddings.
 
-| Axis                  | Position                                    |
-| --------------------- | ------------------------------------------- |
-| Policy type           | Vision-Language-Action                      |
-| Training paradigm     | Large-scale imitation learning              |
-| Action representation | Discrete token prediction                   |
-| Adaptation strategy   | Parameter-efficient fine-tuning             |
-| Scaling approach      | Dataset + model size + efficient adaptation |
+**Tokenization details:**
+* **Language:** Tokenized then embedded using pretrained T5-base (111M) into 16 language tokens.
+* **Images (obs + goals):** Shallow CNN split into 16x16 patches resulting in 256 tokens for a 3rd-person camera, and 64 tokens for a wrist camera. Tokens receive learned positional embeddings and are arranged sequentially in the transformer input.
 
-It follows the **RT-2 lineage** (language modeling over action tokens) rather than diffusion-based policies.
+#### 3.3.2 Block-wise Masked Attention + Readout Tokens
+The transformer uses block-wise causal masking:
+* Observation tokens at time $t$ attend only to task tokens and observation tokens up to $t$ ($T_{o, 0:t}$) plus language instructions ($T_{\ell}$).
+* Missing modalities are fully masked.
 
-# 3. Architecture Overview
+Octo inserts learned readout tokens ($T_{R,t}$) that attend to preceding task and observation tokens, but are not attended to by task and observation tokens (forming a read-only pathway). This enables adding or removing observation channels or action heads without reinitializing the transformer.
 
-![openvla_model](https://hackmd.io/_uploads/BJtX0TjPbx.jpg)
+#### 3.3.3 Diffusion Action Head
+Octo predicts actions using a conditional diffusion decoder. It performs one transformer forward pass per action, then runs multi-step denoising inside the diffusion head. They train with the standard DDPM objective (adding Gaussian noise to dataset actions and training $\epsilon_\theta$ to reconstruct the original action).
+
+### 3.4 Scaling
+
+#### 3.4.1 Data Scaling
+Trained on 800k trajectories from 25 OXE datasets curated to have image observations and end-effector actions; mixture weights balance size and diversity.
+
+#### 3.4.2 Model Scaling
+Two released sizes:
+* **Octo-Small:** 12 layers, Hidden Size (D=384), 6 heads, 27M params.
+* **Octo-Base:** 12 layers, Hidden Size (D=768), 12 heads, 93M params.
+
+The diffusion head is a 3-layer MLP with a hidden dimension of 256; they use 20 diffusion steps in training and inference.
+
+#### 3.4.3 Compute Scaling & Practicality
+* **Pretraining:** 300k steps, batch 2048 on a TPU v4-128 in ~14 hours.
+* **Finetuning:** ~100 trajectories, 50k steps (cosine LR decay + warmup) takes ~5 hours on a single 24GB A5000.
+
+### 3.5 Experiments
+* **Zero-shot generalization:** Compared against RT-1-X; Octo achieves ~33% higher average success across evaluated setups. On WidowX tasks, Octo performs similarly to RT-2-X. Goal-image conditioning outperforms language conditioning on WidowX by ~25%.
+* **Data-efficient finetuning:** Finetuning results report a 72% average success for Octo, compared to 20% for Scratch (ResNet+Transformer) and 15% for VC-1.
+* **Interface generalization:** Octo maintains finetuning performance when introducing new observation inputs (force-torque proprioception) and new action spaces (joint position control).
+
+## 4. Technical Paper Audit: OpenVLA
+**Title:** OpenVLA: An Open-Source Vision-Language-Action Model  
+**Authors:** Moo Jin Kim et al.  
+
+### 4.1 Summary
+OpenVLA is a 7B-parameter open-source Vision-Language-Action (VLA) model trained on 970k robot episodes from the Open X-Embodiment dataset. It addresses closed-source weights (e.g., RT-2-X) and efficient fine-tuning for new tasks or embodiments. OpenVLA builds on the Prismatic-7B VLM, which combines a 600M-parameter dual visual encoder (SigLIP + DINOv2), a 2-layer MLP projector, and a 7B LLaMA 2 backbone.
+
+#### 4.1.1 Key Results
+* +16.5% absolute task success over RT-2-X (55B) across 29 tasks.
+* +20.4% over Diffusion Policy in multi-task multi-object settings.
+* Fine-tunable on consumer GPUs via LoRA and quantizable.
+* Runs at ~6 Hz on RTX 4090 (15GB bfloat16).
+
+### 4.2 Problem Domain & Taxonomy
+OpenVLA operates in generalist robotic manipulation across multiple embodiments, diverse scenes, multi-task environments, and end-effector control. The OpenX-Embodiment dataset is filtered to single-arm setups with at least one third-person camera.
+
+**Taxonomy Positioning:**
+* **Policy type:** Vision-Language-Action
+* **Training paradigm:** Large-scale imitation learning
+* **Action representation:** Discrete token prediction
+* **Adaptation strategy:** Parameter-efficient fine-tuning (LoRA)
+* **Scaling approach:** Dataset + model size + efficient adaptation
+
+### 4.3 Architecture Overview
 
 
-## 3.1 Backbone: Prismatic-7B
 
+#### 4.3.1 Backbone: Prismatic-7B
 OpenVLA fine-tunes a pretrained VLM composed of:
+* **Visual encoder (600M params):** DINOv2 for geometric and spatial features and SigLIP for semantic alignment features. Given image patches $x$:
 
-* **Visual encoder (600M params):** DINOv2 for geometric and spatial features and SigLIP for semantic alignment features
-* 2-layer MLP projector
-* LLaMA 2 7B transformer
+$$
+f_{\text{vision}}(x) = \text{Concat}\left( f_{\text{DINOv2}}(x), f_{\text{SigLIP}}(x) \right)
+$$
 
-### Dual Visual Encoding
+* 2-layer MLP projector.
+* LLaMA 2 7B transformer.
 
-Given image patches ( x ):
+#### 4.3.2 Action Tokenization
+Each action dimension $d$ is discretized independently into 256 bins. OpenVLA uses quantiles to maintain granularity:
+1. Compute quantiles: lower $q_{0.01}$, upper $q_{0.99}$.
+2. Uniformly divide to find bin width:
 
-$$f_{\text{vision}}(x) = \text{Concat}\left( f_{\text{DINOv2}}(x), f_{\text{SigLIP}}(x) \right)$$
+$$
+\Delta_d = \frac{q_{0.99} - q_{0.01}}{256}
+$$
 
-This concatenated feature is projected into the language embedding space.
+3. Map continuous action to bin:
 
-## 3.2 Action Tokenization
+$$
+\hat{a}_d = \left\lfloor \frac{a_d - \text{lower}}{\Delta_d} \right\rfloor
+$$
 
-Following RT-2, each action dimension is discretized independently into 256 bins.
+They overwrite the 256 least-used tokens in the LLaMA vocabulary with action tokens.
 
-For each dimension ( $a_d$ ):
+#### 4.3.3 Training Objective
+OpenVLA is trained as an autoregressive model using standard next-token cross-entropy over action tokens:
 
-1. Compute quantiles: $q_{0.01}, q_{0.99}$
-2. Uniformly divide: $\Delta_d = \frac{q_{0.99} - q_{0.01}}{256}$
-3. Map continuous action to bin: $\hat{a}_d = \left\lfloor \frac{a_d - q*{0.01}}{\Delta_d} \right\rfloor$
+$$
+\mathcal{L} = - \sum_{t} \log p(a_t \mid x, \text{instruction}, a_{<t})
+$$
 
-Quantile-based binning prevents outliers from degrading effective resolution. Since LLaMA reserves only 100 special tokens, they **overwrite the 256 least-used tokens** with action tokens.
+The authors finetuned the vision encoder during VLA training to capture spatial details for precise robotic control.
 
-## 3.3 Training Objective
+### 4.4 Scaling and Efficiency
+* **Data and Compute Scaling:** The final OpenVLA model is trained on 970k episodes using 64 A100 GPUs for 14 days (21,500 A100-hours) with a batch size of 2048.
+* **Parameter-Efficient Fine-Tuning:** OpenVLA can be finetuned for specific tasks using LoRA, requiring a single A100 GPU for 10-15 hours.
+* **Quantization:** 8-bit quantization increases inference latency, dropping control frequency to 1.2 Hz on an A5000. 4-bit quantization reduces memory usage and yields higher throughput, achieving ~3 Hz control frequency on an A5000 GPU with rollout performance comparable to bfloat16.
 
-OpenVLA is trained as an autoregressive model:
+### 4.5 Experiments
+OpenVLA (7B) outperforms RT-2-X (55B parameters) and Diffusion Policy baselines across 29 tasks on BridgeData V2. LoRA-based parameter-efficient fine-tuning achieves performance close to full fine-tuning with lower memory and compute costs.
 
-$$\mathcal{L} = - \sum_{t} \log p(a_t \mid x, \text{instruction}, a_{<t})$$
+## 5. Technical Paper Audit: $\pi_{0.5}$
+**Title:** $\pi_{0.5}$: a Vision-Language-Action Model with Open-World Generalization  
+**Authors:** Kevin Black et al.  
 
-This is standard next-token cross-entropy over action tokens.
+### 5.1 Summary
+$\pi_{0.5}$ is a VLA system aimed at open-world generalization for mobile manipulation in real homes. The paper posits that in-the-wild generalization requires knowledge transfer from heterogeneous sources, not just scaling in-domain robot data.
 
-Importantly:
+#### 5.1.1 Key Results
+* ~400 hours of mobile manipulator household data collected in ~100 homes.
+* During the first training phase, 97.6% of examples are not mobile household manipulation.
+* Demonstrates 10-15 minute long-horizon behaviors (e.g., cleaning a kitchen) in new homes from a high-level prompt.
 
-* No new transformer layers are added
-* The language model directly predicts actions
+### 5.2 Problem Domain & Taxonomy
+$\pi_{0.5}$ targets real-world household mobile manipulation where the robot must operate in unseen homes, perform multi-stage tasks, and leverage semantics beyond pure motor skill generalization.
 
-# 4. Scaling
+**Taxonomy Positioning:**
+* **Policy type:** Hierarchical VLA (high-level semantic subtask + low-level control)
+* **Training paradigm:** Large-scale co-training on heterogeneous robot + web + semantic data
+* **Action representation:** Hybrid: discrete FAST tokens (pretraining) + flow matching (inference)
+* **Adaptation strategy:** Two-stage training (pretrain broad; post-train specialize + add action expert)
+* **Scaling approach:** Knowledge scaling via heterogeneous supervision sources
 
-## 4.1 Data Scaling
+### 5.3 Architecture Overview
 
-* 970k episodes
-* Multi-embodiment
-* Multi-task
-* Octo-inspired mixture reweighting
 
-Scaling hypothesis:
 
-$$\text{Performance} \propto f(\text{data diversity} \times \text{model capacity})$$
+#### 5.3.1 High-level to Low-level Hierarchical Inference
+At runtime, $\pi_{0.5}$ performs two-step inference:
+1. Predict a high-level semantic subtask (e.g., “pick up the plate”).
+2. Conditioned on that subtask, predict a low-level action chunk.
 
-They demonstrate strong cross-robot transfer without embodiment-specific architecture changes.
+#### 5.3.2 Two-Stage Training: Discrete-Token Pretraining and Flow-Matching Post-Training
+**Stage 1: Pre-training with discrete tokens (FAST)**
+During pretraining, all tasks (including robot actions) are represented as discrete tokens, enabling next-token prediction via FAST. The pretraining data mixture includes:
+* **Mobile Manipulation (MM):** Provides task-specific grounding for behaviors (2.4% of phase-1 data).
+* **Manipulation (Other) (ME):** Transfers low-level manipulation priors.
+* **Cross-Embodiment (CE):** Enables embodiment generalization.
+* **High-Level Subtasks (HL):** Trains the semantic planner.
+* **Web Data (WD):** Improves semantic reasoning and object grounding, extended with bounding box annotations.
 
+**Stage 2: Post-training with an action expert for flow matching**
+Post-training adds a separate 300M parameter action expert (on top of the 2B PaliGemma backbone) that predicts continuous action chunks via flow matching.
 
-## 4.2 Compute Scaling
+#### 5.3.3 Objective: Joint Next-Token + Flow-Matching Loss
+$\pi_{0.5}$ jointly optimizes a cross-entropy next-token loss ($\mathcal{L}_{\text{CE}}$) over text and FAST action tokens, alongside a flow-matching loss ($\mathcal{L}_{\text{FM}}$) for the action expert:
 
-Training:
+$$
+\mathcal{L} = \mathcal{L}_{\text{CE}} + \lambda \mathcal{L}_{\text{FM}}
+$$
 
-* 64 × A100 GPUs
-* 14 days
-* 21,500 A100-hours
-* Batch size: 2048
+Given $(x_t, t)$, the model is trained to predict the flow field $v_t$, which is used for integrating from noise to actions at inference.
 
-Inference:
+### 5.4 Scaling and Experiments
+* **Data scaling:** Mobile manipulation consists of ~400 hours in ~100 homes, yet 97.6% of Phase 1 examples are from other domains, including web-scale captioning and VQA.
+* **Training scaling:** 280k gradient steps in pre-training, followed by 80k post-training steps for flow-matching.
+* **Generalization:** Demonstrated behaviors include 10-15 minute continuous sequences. Performance declines when web data or cross-embodiment data is ablated for tasks requiring broad semantic reasoning.
 
-* 15GB GPU memory (bfloat16)
-* ~6 Hz on RTX 4090
-
----
-
-## 4.3 Parameter-Efficient Fine-Tuning
-
-They use **LoRA**:
-
-Low-rank update:
-
-$W' = W + BA$
-
-where:
-
-* $A \in \mathbb{R}^{r \times d}$
-* $B \in \mathbb{R}^{d \times r}$
-* $r \ll d$
-
-This enables:
-
-* Fine-tuning on consumer GPUs
-* Strong performance recovery
-* No need for full model retraining
-
----
-
-## 4.4 Quantization
-
-They apply post-training quantization (e.g., 4-bit), enabling:
-
-* Reduced memory footprint
-* No significant degradation in success rate
-
-This is critical for real-world robotics deployment.
-
----
-
-# 5. Experimental Framing
-
-The paper answers three major questions:
-
----
-
-### Q1: Generalization vs Prior VLAs
-
-OpenVLA outperforms:
-
-* RT-2-X (55B)
-* Diffusion Policy
-* From-scratch imitation baselines
-
-Across:
-
-* 29 tasks
-* Multiple embodiments
-* Multi-object setups
-
-Key insight: **Scaling open imitation learning can match or exceed proprietary models.**
-
----
-
-### Q2: Fine-Tuning Efficiency
-
-They demonstrate:
-
-* Few-shot adaptation
-* LoRA-based fine-tuning
-* Competitive results vs data-efficient IL methods
-
----
-
-### Q3: Compute–Performance Trade-offs
-
-They evaluate:
-
-* Full fine-tuning vs LoRA
-* Quantized vs full precision
-
-Finding:
-
-* Minimal degradation
-* Substantial reduction in cost
-* Democratized deployment
-
-
-
-### 4.1 RoboAgent: Semantic Augmentation as a Scaling Axis (Insider Perspective)
-
-RoboAgent (Bharadhwaj et al., 2024) — a project the author contributed to during his time at Meta FAIR — represents the most explicit test of the hypothesis that smart data augmentation can substitute for data collection at scale. The core claim is bold: rather than spending months collecting demonstrations for each new environment, augment a modest dataset of real demonstrations along semantically meaningful axes to achieve generalization that would otherwise require orders of magnitude more data.
-
-The base policy is MT-ACT (Multi-Task Action Chunking Transformer), which predicts chunks of future actions conditioned on visual observations and language instructions. The architecture uses a CVAE (Conditional Variational Autoencoder) formulation where the encoder maps observation-action pairs to a latent style variable $z$, and the decoder reconstructs action chunks conditioned on observations and $z$:
-
-$$\mathcal{L}_{\text{MT-ACT}} = \mathbb{E}_{q(z|o,a)}[\|a - \hat{a}_\theta(o, z, l)\|^2] + \beta \cdot D_{KL}(q(z|o,a) \| p(z))$$
-
-The first term is the action reconstruction loss; the second is the KL divergence regularizing the latent space. The action chunking — predicting $H$ future actions simultaneously rather than one at a time — reduces compounding error and enables temporally coherent behavior.
-
-**The augmentation pipeline** operates on three axes:
-
-1. **Visual randomization:** Texture, lighting, and background perturbations applied to the image observations. This is standard domain randomization adapted for real-world data.
-2. **Semantic augmentation:** Object substitution, distractor insertion, and spatial layout variation applied at a semantic level. Unlike pixel-level noise, these augmentations preserve the physical plausibility of the scene while varying the visual distribution.
-3. **Viewpoint and scale perturbations:** Camera angle and zoom variations that simulate different observation conditions.
-
-Starting from approximately 7,500 real-world trajectories across 12 manipulation skills, the augmentation pipeline expanded the effective dataset by a significant multiplicative factor. The results showed substantial generalization improvement — the augmented policy succeeded on novel visual configurations (new object textures, backgrounds, distractor arrangements) that the unaugmented policy failed on.
-
-**What we learned building RoboAgent — the insider critique:**
-
-The augmentation strategy rests on an assumption that the visual domain is the primary generalization axis for manipulation. In many tabletop scenarios, this is true — a policy trained on wooden blocks should generalize to plastic blocks of the same shape, and augmentation makes this possible. But the assumption breaks when the generalization required is **physical** rather than visual. A new object with different mass, friction coefficient, or deformability will defeat the policy even if it visually resembles training objects. Semantic augmentation cannot synthesize novel dynamics.
-
-Furthermore, augmentation exhibits diminishing returns. There is a ceiling — empirically observed during our experiments — beyond which additional augmentation does not improve generalization and can even degrade performance by introducing unrealistic visual configurations that confuse the policy. The sweet spot between augmentation diversity and augmentation plausibility is task-dependent and not easily predicted a priori.
-
-Finally, data quality dominates data quantity even in the augmented regime. We found that a smaller number of clean, precisely executed demonstrations with heavy augmentation outperformed a larger number of noisy demonstrations with lighter augmentation. This suggests that the information content per trajectory — not just the number of trajectories — is the binding constraint. Augmentation amplifies signal; it cannot create signal that is not present in the base data.
-
-### 4.2 Open X-Embodiment and RT-X: Cross-Embodiment Pooling
-
-The Open X-Embodiment project (Open X-Embodiment Collaboration, 2024) is another effort that represents the field's largest coordinated attempt to address the data wall through aggregation rather than augmentation. The idea is straightforward in principle: if no single lab can collect enough manipulation data, perhaps the global robotics community collectively can.
-
-The resulting dataset comprises approximately 2 million episodes from 22 distinct robot embodiments, collected across 21 institutions. The embodiments span tabletop arms (Franka, UR5, xArm, Google Robot), mobile manipulators (Stretch, TIAGo), and bimanual systems. Tasks range from simple pick-and-place to multi-step kitchen manipulation.
-
-Two models were trained on this aggregated data: RT-1-X (the RT-1 architecture trained on the pooled dataset) and RT-2-X (RT-2 fine-tuned on the pooled dataset). The key finding was that **positive transfer exists across embodiments** — both models outperformed their single-embodiment counterparts, with RT-2-X showing a 3× improvement on emergent skill evaluations compared to RT-2 trained on Google Robot data alone.
-
-**The mechanism of cross-embodiment transfer** is worth examining. The pooled training does not explicitly model embodiment differences — there is no embodiment embedding or dynamics adapter. Instead, the model must implicitly learn to factor its representations into embodiment-invariant (task semantics, object properties) and embodiment-specific (workspace geometry, joint limits, gripper type) components. The fact that this implicit factoring works at all is remarkable; the fact that it works imperfectly is expected.
-
-**What we learned from the inside — structural challenges:**
-
-The most significant challenge was **data heterogeneity**. Contributing labs used different collection protocols, success criteria, calibration standards, and labeling conventions. Some datasets had precise 6-DoF end-effector annotations; others had only joint positions. Some defined "success" as touching the target object; others required full task completion. Harmonizing this heterogeneity required extensive pre-processing, and residual inconsistencies inevitably leaked into training.
-
-The **embodiment gap** proved more nuanced than anticipated. A Franka Panda operating in a Stanford lab and a Google Robot in Mountain View have fundamentally different dynamics — different joint configurations, different gripper mechanisms, different workspace geometries. The model cannot distinguish between "this trajectory looks different because the robot is different" and "this trajectory looks different because the task is different." In practice, the model learns to ignore dynamics-specific features and focus on coarse spatial-semantic features that transfer across embodiments. This works for pick-and-place but breaks for tasks where dynamics matter — insertion, tool use, deformable object manipulation.
-
-The **long-tail distribution** is perhaps the most limiting structural property of the pooled dataset. The vast majority of episodes involve tabletop pick-and-place of rigid objects. Tasks like articulated manipulation, tool use, bimanual coordination, and deformable object handling are represented by tiny fractions of the total dataset. Pooling does not solve the long tail — it merely makes the long tail visible at a larger scale. A model trained on 2 million mostly pick-and-place episodes does not suddenly generalize to cloth folding.
+## 6. Limitations and Future Outlook
+The trajectory from behavior cloning to flow-matching VLAs demonstrates progress in closing the embodiment gap. However, physical robotics cannot strictly replicate the internet-scale passive scraping of LLMs. The field is approaching an asymptote on raw physical data collection. Future methods will likely depend on sample-efficient architectures capable of implicit physics understanding.
