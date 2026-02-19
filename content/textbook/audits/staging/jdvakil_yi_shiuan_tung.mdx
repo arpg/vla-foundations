@@ -171,7 +171,7 @@ They overwrite the 256 least-used tokens in the LLaMA vocabulary with action tok
 OpenVLA is trained as an autoregressive model using standard next-token cross-entropy over action tokens:
 
 $$
-\mathcal{L} = - \sum_{t} \log p(a_t \mid x, \text{instruction}, a_{<t})
+\mathcal{L} = - \sum_{t} \log p(a_t \mid x, \mathrm{instruction}, a_{<t})
 $$
 
 The authors finetuned the vision encoder during VLA training to capture spatial details for precise robotic control.
@@ -228,7 +228,7 @@ During pretraining, all tasks (including robot actions) are represented as discr
 Post-training adds a separate 300M parameter action expert (on top of the 2B PaliGemma backbone) that predicts continuous action chunks via flow matching.
 
 ### 5.3.3 Objective: Joint Next-Token + Flow-Matching Loss
-$\pi_{0.5}$ jointly optimizes a cross-entropy next-token loss ($\mathcal{L}_{\mathrm{CE}}$) over text and FAST action tokens, alongside a flow-matching loss ($\mathcal{L}_{\mathrm{FM}}$) for the action expert:
+$\pi_{0.5}$ jointly optimizes a cross-entropy next-token loss (L-CE) over text and FAST action tokens, alongside a flow-matching loss (L-FM) for the action expert:
 
 $$
 \mathcal{L} = \mathcal{L}_{\mathrm{CE}} + \lambda \mathcal{L}_{\mathrm{FM}}
