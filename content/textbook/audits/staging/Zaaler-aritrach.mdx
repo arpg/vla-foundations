@@ -8,7 +8,8 @@ topic: "Autonomous Driving"
 # Driving Reasoning Models at a Glance (AlphaDrive vs EMMA vs Alpamayo-R1)
 
 ## Problem Statement
-Modern autonomy systems increasingly explore **VLM/MLLM-based planners** that map perception (images/video) plus context (routing/intent/ego state) into **driving decisions**. Across real-world driving, (i) **multiple actions can be valid** for the same scene, (ii) decisions must satisfy **real-time constraints**, and (iii) developers often want **human-interpretable rationales**—ideally with some form of **consistency** between the rationale and the executed plan.  
+Modern autonomy systems increasingly explore **VLM/MLLM-based planners** that map perception (images/video) plus context (routing/intent/ego state) into **driving decisions**.
+Across real-world driving, (i) **multiple actions can be valid** for the same scene, (ii) decisions must satisfy **real-time constraints**, and (iii) developers often want **human-interpretable rationales**—ideally with some form of **consistency** between the rationale and the executed plan.  
 These three papers share that motivation, but differ in **action representation**, **reasoning representation**, and **how training enforces correctness vs diversity vs causal consistency**.
 
 ---
@@ -76,9 +77,9 @@ They differ mainly in:
 
 | Model | Excels at | Shortfalls / Risks | Why (mechanism-level) |
 |---|---|---|---|
-| **AlphaDrive** | **High-level planning robustness** under inherently multimodal supervision; explicitly promotes **diverse feasible plans** and **safety-sensitive decisions** via reward shaping. | **Limited behavioral expressivity** if the action taxonomy/labels are coarse (harder to represent nuanced maneuvers if they are not in the meta-action set). | Predicts **discrete meta-actions**, then uses **GRPO** with rewards for accuracy, action-weighting, diversity, and format. This supports multimodality and safety emphasis, but constrains representable behavior to the chosen action set. |
-| **EMMA** | **Unified multitask autonomy** (planning + detection + road graph) with a single promptable model; shows **co-training synergies** across tasks. | Emitting **numeric geometry as text** can be brittle (format/token issues, numeric precision sensitivity); large MLLMs face **latency constraints**, motivating simplified variants. | The design choice to express outputs (including coordinates) as **language** enables a unified interface and shared representations, but makes performance sensitive to **sequence formatting and length**; runtime constraints are acknowledged with a faster configuration. |
-| **Alpamayo-R1** | **Structured, decision-grounded reasoning** (CoC) paired with **high-quality multimodal continuous planning** and a strong **real-time** narrative via flow-matching decoding. | **Higher system complexity**: structured-labeling pipeline + multi-stage training + specialized decoder; performance depends on CoC label quality/coverage; structured reasoning still inherits upstream perception/context failures. | Adds (i) explicit **structured causal supervision** and (ii) a **continuous trajectory decoder** (flow matching) to combine controllability/consistency with efficient inference. Gains come with more components and stronger assumptions about labeling schema and conditioning.  |
+| **AlphaDrive** | **High-level planning robustness** under inherently multimodal supervision; explicitly promotes **diverse feasible plans** and **safety-sensitive decisions** via reward shaping | **Limited behavioral expressivity** if the action taxonomy/labels are coarse (harder to represent nuanced maneuvers if they are not in the meta-action set) | Predicts **discrete meta-actions**, then uses **GRPO** with rewards for accuracy, action-weighting, diversity, and format (this supports multimodality and safety emphasis, but constrains representable behavior to the chosen action set) |
+| **EMMA** | **Unified multitask autonomy** (planning + detection + road graph) with a single promptable model; shows **co-training synergies** across tasks | Emitting **numeric geometry as text** can be brittle (format/token issues, numeric precision sensitivity); large MLLMs face **latency constraints**, motivating simplified variants | The design choice to express outputs (including coordinates) as **language** enables a unified interface and shared representations, but makes performance sensitive to **sequence formatting and length**; runtime constraints are acknowledged with a faster configuration |
+| **Alpamayo-R1** | **Structured, decision-grounded reasoning** (CoC) paired with **high-quality multimodal continuous planning** and a strong **real-time** narrative via flow-matching decoding | **Higher system complexity**: structured-labeling pipeline + multi-stage training + specialized decoder; performance depends on CoC label quality/coverage; structured reasoning still inherits upstream perception/context failures | Adds (i) explicit **structured causal supervision** and (ii) a **continuous trajectory decoder** (flow matching) to combine controllability/consistency with efficient inference (gains come with more components and stronger assumptions about labeling schema and conditioning)  |
 
 ---
 
@@ -105,7 +106,8 @@ They differ mainly in:
 
 AlphaDrive is a **2B-parameter vision-language planner** for autonomous driving that outputs **high-level “meta-actions”** (speed + direction) along with an optional reasoning trace formatted in `<think>...</think>` and a final decision in `<answer>...</answer>`.
 
-The core thesis is that **SFT-only VLM driving planners leave performance and data-efficiency on the table**, and that the RL + reasoning playbook that improved general LLMs can be adapted to driving *if* you redesign rewards for planning. Specifically, AlphaDrive adapts **Group Relative Policy Optimization (GRPO)** and introduces a planning-specific reward suite: **planning accuracy (F1), action-weighting, diversity, and format regularization**, arguing this better reflects (i) unequal safety criticality across actions and (ii) multimodal “multiple-valid-solution” planning.
+The core thesis is that **SFT-only VLM driving planners leave performance and data-efficiency on the table**, and that the RL + reasoning playbook that improved general LLMs can be adapted to driving *if* you redesign rewards for planning.
+Specifically, AlphaDrive adapts **Group Relative Policy Optimization (GRPO)** and introduces a planning-specific reward suite: **planning accuracy (F1), action-weighting, diversity, and format regularization**, arguing this better reflects (i) unequal safety criticality across actions and (ii) multimodal “multiple-valid-solution” planning.
 
 Because high-quality driving “chain-of-thought” data is scarce, they use a multi-stage reasoning strategy: generate a small batch of reasoning traces using a stronger cloud model (e.g., GPT-4o), manually filter it, SFT warm-up on that reasoning data for stability, then run **RL on the full dataset**.
 
@@ -189,7 +191,8 @@ They justify GRPO with two reasons:
 AlphaDrive introduces **four rewards**, then combines them into the final RL signal, which is their key contribution.
 
 #### Reward 1 — Planning Accuracy Reward
-They found exact-match reward unstable early (format noise like case sensitivity/extraneous tokens), and “GT included among words” encourages a shortcut (eg. output all possible actions), causing collapse. They adopt **F1-score** for lateral and longitudinal decisions separately for stability and shortcut resistance.
+They found exact-match reward unstable early (format noise like case sensitivity/extraneous tokens), and “GT included among words” encourages a shortcut (eg. output all possible actions), causing collapse.
+They adopt **F1-score** for lateral and longitudinal decisions separately for stability and shortcut resistance.
 
 #### Reward 2 — Action-Weighted Reward
 They argue different behaviors have different safety importance (e.g., decelerate/stop more critical than keep speed) and incorporate action weights into the reward.
@@ -286,7 +289,8 @@ AlphaDrive plans in a **low-frequency, discrete meta-action space** (speed + dir
 ### 6.2 Benchmark Critique
 
 - The benchmark is 3-second clips (short horizon).
-- The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation. Although a question of what exactly is "long-horizon" is important, as in driving scenarions, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
+- The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation.
+Although a question of what exactly is "long-horizon" is important, as in driving scenarions, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
 
 ### 6.3 “Emergent multimodal planning” claim
 
@@ -306,7 +310,8 @@ This is consistent with the diversity reward motivation, but it creates a deploy
    GRPO’s group-relative ranking is assumed to be a good match for planning where multiple valid solutions exist.
 
 3. **Reasoning usefulness assumption**
-   Distilled reasoning is assumed to improve decisions, not merely produce nicer explanations; they explicitly found RL-only reasoning to be messy. But, how do we know that decisions are actually improving because of better reasoning, rather than just better reward optimization?
+   Distilled reasoning is assumed to improve decisions, not merely produce nicer explanations; they explicitly found RL-only reasoning to be messy.
+   But, how do we know that decisions are actually improving because of better reasoning, rather than just better reward optimization?
 
 ### 7.2 Reproducibility Assessment
 
@@ -339,7 +344,8 @@ This is consistent with the diversity reward motivation, but it creates a deploy
 
 **Experiment A — “Causal reasoning validity” instead of BLEU/CIDEr**
 - Problem: reasoning evaluation uses BLEU/CIDEr/METEOR similarity.
-- Proposal: build a labeled eval slice with causal factor tags (red light present, pedestrian crossing, stopped lead vehicle, occlusion). Score:
+- Proposal: build a labeled eval slice with causal factor tags (red light present, pedestrian crossing, stopped lead vehicle, occlusion).
+Score:
   - whether reasoning cites the correct causal factors
   - whether counterfactual masking flips the plan appropriately
 - Success: improvement in causal correctness *and* planning F1.
