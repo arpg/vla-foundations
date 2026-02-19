@@ -19,7 +19,8 @@ topic: "Vision Foundations"
 
 AlphaDrive is a **2B-parameter vision-language planner** for autonomous driving that outputs **high-level “meta-actions”** (speed + direction) along with an optional reasoning trace formatted in `<think>...</think>` and a final decision in `<answer>...</answer>`.
 
-The core thesis is that **SFT-only VLM driving planners leave performance and data-efficiency on the table**, and that the RL + reasoning playbook that improved general LLMs can be adapted to driving *if* you redesign rewards for planning. Specifically, AlphaDrive adapts **Group Relative Policy Optimization (GRPO)** and introduces a planning-specific reward suite: **planning accuracy (F1), action-weighting, diversity, and format regularization**, arguing this better reflects (i) unequal safety criticality across actions and (ii) multimodal “multiple-valid-solution” planning.
+The core thesis is that **SFT-only VLM driving planners leave performance and data-efficiency on the table**, and that the RL + reasoning playbook that improved general LLMs can be adapted to driving *if* you redesign rewards for planning.
+Specifically, AlphaDrive adapts **Group Relative Policy Optimization (GRPO)** and introduces a planning-specific reward suite: **planning accuracy (F1), action-weighting, diversity, and format regularization**, arguing this better reflects (i) unequal safety criticality across actions and (ii) multimodal “multiple-valid-solution” planning.
 
 Because high-quality driving “chain-of-thought” data is scarce, they use a multi-stage reasoning strategy: generate a small batch of reasoning traces using a stronger cloud model (e.g., GPT-4o), manually filter it, SFT warm-up on that reasoning data for stability, then run **RL on the full dataset**.
 
@@ -103,7 +104,8 @@ They justify GRPO with two reasons:
 AlphaDrive introduces **four rewards**, then combines them into the final RL signal, which is their key contribution.
 
 #### Reward 1 — Planning Accuracy Reward
-They found exact-match reward unstable early (format noise like case sensitivity/extraneous tokens), and “GT included among words” encourages a shortcut (eg. output all possible actions), causing collapse. They adopt **F1-score** for lateral and longitudinal decisions separately for stability and shortcut resistance.
+They found exact-match reward unstable early (format noise like case sensitivity/extraneous tokens), and “GT included among words” encourages a shortcut (eg. output all possible actions), causing collapse.
+They adopt **F1-score** for lateral and longitudinal decisions separately for stability and shortcut resistance.
 
 #### Reward 2 — Action-Weighted Reward
 They argue different behaviors have different safety importance (e.g., decelerate/stop more critical than keep speed) and incorporate action weights into the reward.
@@ -195,12 +197,14 @@ AlphaDrive plans in a **low-frequency, discrete meta-action space** (speed + dir
 **Engineering trade-off:**
 
 - **Pro:** avoids asking a VLM to output precise trajectories at high Hz.
-- **Con:** shifts risk to the interface between **symbolic plan → downstream controller**. Need to prove that the downstream stack can **robustly** interpret “decelerate, left” in dense traffic.
+- **Con:** shifts risk to the interface between **symbolic plan → downstream controller**.
+Need to prove that the downstream stack can **robustly** interpret “decelerate, left” in dense traffic.
 
 ### 6.2 Benchmark Critique
 
 - The benchmark is 3-second clips (short horizon).
-- The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation. Although a question of what exactly is "long-horizon" is important, as in driving scenarions, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
+- The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation.
+Although a question of what exactly is "long-horizon" is important, as in driving scenarions, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
 
 ### 6.3 “Emergent multimodal planning” claim
 
@@ -220,7 +224,8 @@ This is consistent with the diversity reward motivation, but it creates a deploy
    GRPO’s group-relative ranking is assumed to be a good match for planning where multiple valid solutions exist.
 
 3. **Reasoning usefulness assumption**
-   Distilled reasoning is assumed to improve decisions, not merely produce nicer explanations; they explicitly found RL-only reasoning to be messy. But, how do we know that decisions are actually improving because of better reasoning, rather than just better reward optimization?
+   Distilled reasoning is assumed to improve decisions, not merely produce nicer explanations; they explicitly found RL-only reasoning to be messy.
+   But, how do we know that decisions are actually improving because of better reasoning, rather than just better reward optimization?
 
 ### 7.2 Reproducibility Assessment
 
