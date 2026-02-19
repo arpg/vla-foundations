@@ -1,0 +1,184 @@
+---
+title: "Mel Krusniak (krusnim): Adversarial Strategic Reasoning in VLAs — Capstone Running Log"
+github: "krusnim"
+group: "B"
+lab: "Action & Policy Benchmark"
+status: "in-progress"
+---
+
+# Mel Krusniak: Adversarial Strategic Reasoning in VLAs — Capstone Running Log
+
+**GitHub:** [@krusnim](https://github.com/krusnim)
+**Group:** B — Action & Policy Benchmark
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Emergent strategic reasoning in multiagent settings.
+In adversarial environments, the correct, least-exploitable action outputs are stochastic — the optimal policy is a mixed strategy.
+Current VLAs do not produce token probability distributions that align with these strategically correct mixed-action trajectories.
+
+### Base Model
+
+MiniVLA if possible; otherwise VQ-BeT.
+
+### The Delta
+
+Adapting MiniVLA to act similarly to the reference generator in [arxiv.org/abs/2205.00291](https://arxiv.org/abs/2205.00291).
+Analytically correct mixed-action trajectories can be generated automatically in limited cases.
+Fine-tuning on those examples is expected to improve the VLA's reasoning about adversarial behavior.
+
+More formally: token *probabilities* (not just realized tokens) should align with the strategically correct mixed-action trajectories.
+This implies a corresponding loss function that can be used to tune the model.
+
+The adversary in the generated data will be analytically controlled — no full adversarial training or MARL.
+
+A secondary potential contribution: adjusting VQ-BeT's VQ action tokenizer for higher fidelity specifically in the *strategically useful* part of the action space.
+
+### Data Mix Strategy
+
+Approximately 50% language prior / 50% synthetic robot data.
+Synthetic data generation is a major part of this project.
+One major engineering problem is that the lifted-trajectories work from the reference paper is not deployed even in meaningful simulation.
+
+### Compute Requirements
+
+Approximately 12 hours on a single A100 (rough estimate; fine-tuning data are limited and MiniVLA is smaller than OpenVLA).
+
+### Success Metric
+
+Competitive advantage / exploitability against baseline opponent.
+
+### Evaluation Scale
+
+All evaluation in simulation; the analytically correct opponent from the data generation pipeline can be replaced modularly with the trained model for head-to-head comparison.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#52](https://github.com/arpg/vla-foundations/pull/52) (krusnim). Scribed by Mel; presented by Lorin. No generative tools used to produce this document.*
+
+### Lorin: Utilizing Risk Profiles in VLAs
+
+**Goal:** Change action outputs based on a risk profile.
+This profile should be encoded in an RL policy so the stack is risk-aware.
+Example: get X close to a person without entering a "risk zone."
+
+**Data:** An "OpenVLA or Octo type dataset," possibly Open X-Embodiment (OXE).
+A small collection of simulation data on a robot arm is required for fine-tuning, collected via IsaacSim/IsaacLab.
+
+**Training:** Scaling is a major concern.
+Training an RL policy and then evaluating will take a while.
+It is not necessarily compute-heavy to collect a small dataset and demonstrate one safe and one unsafe trajectory that are meaningfully different.
+
+**Discussion:**
+Thanush asked about dataset details.
+Ideally a mix of internet-scale and fine-tuning data; an exact mix has not been determined yet.
+If computational issues arise, scaling down to minimum is necessary.
+The project starts with a very simple task: designating a risk zone and a safe zone.
+
+Soorej asked how the safe/unsafe zone will be validated.
+There is a binary classification component, but quantifying how far inside the safe zone the robot is would also be valuable.
+
+Mel asked about the base VLA.
+Probably OpenVLA, Octo, or SmolVLA.
+
+Mel asked whether there is a particular safe RL work this draws from.
+Risk-aware PPO implementations, value iteration/Bellman adjustments.
+
+Thanush asked whether a sensor on the arm would help.
+Additional sensors with rule-based emergency stop are valid; redundant systems are important for real deployment.
+
+### Thanush: MoE Policy Head for MetaWorld Generalization
+
+**Goal:** Based on TinyVLA, build a VLA stack with a new policy head to learn multiple expert action modules for different manipulation behaviors.
+Train on a fragment of MetaWorld tasks; evaluate on related but unseen tasks.
+
+**Discussion:**
+Soorej asked how "difficulty" of tasks is defined.
+MetaWorld has ten tasks total; if a model trained to open a drawer cannot open a fridge, that is a generalization failure.
+
+Lorin asked about the compute setup.
+TinyVLA has parameters on the order of millions; a consumer GPU should suffice.
+
+Lorin asked whether the plan is to pick an existing architecture.
+The goal is to build something from scratch; comparison made after adding the new policy head.
+
+### Soorej: Apples-to-Apples Policy Comparison
+
+**Goal:** Compare a diffusion policy, an autoregressive approach, and an RL approach to visuomotor control with identical datasets and architectures — essentially an ablation.
+
+**Discussion:**
+Lorin asked about the RL method.
+PPO or GRPO.
+
+Lorin asked whether flow matching was considered.
+Not yet, but it is an interesting possibility.
+
+Mel asked about compute requirements and backbone.
+5–10 GPU hours per model.
+
+Thanush asked whether training setups will differ across methods.
+Ideally no.
+
+Lorin asked about major concerns and plan B.
+Moving to smaller models or a smaller dataset and comparing only RL and autoregression is the fallback.
+
+### Mel: Adversarial Strategic Reasoning in VLAs
+
+*(Scribed by Soorej)*
+
+**Goal:** In adversarial multiagent settings, the correct, least-exploitable action outputs are stochastic.
+The goal is to generate analytically correct trajectories and fine-tune the VLA so that token probabilities align with strategically optimal mixed-action trajectories.
+
+**Root model:** MiniVLA (or TinyVLA, VQ-BeT).
+**Data:** Partially world model data, partially single-agent robot data, partially generated adversarial data.
+
+**Discussion:**
+Lorin asked whether training is required.
+Yes — fine-tuning with the adversarial data.
+The opponent in all cases will be a fixed policy (not a second VLA).
+The goal is to avoid being exploited by that fixed opponent.
+
+Lorin asked about expected computational cost.
+OpenVLA can be fine-tuned in about a dozen hours; the narrower robot data may reduce training hours.
+
+Lorin asked for the simplest possible demonstration.
+Tag is a good starting point because analytically correct mixed probabilistic trajectories are easy to generate.
+
+Lorin asked about a simpler backup plan.
+One option: focus only on action tokenization — a modification of VQ-BeT where the latent action space encodes the most strategically relevant actions first.
+
+### Overarching Commentary
+
+**Load-bearing walls:**
+Data is the primary load-bearing wall.
+For Lorin and Mel, data generation will be required and difficult to get right.
+Information decay: all projects simplify more complex problems and will naturally lose action information.
+
+**Unresolved engineering question:**
+Generating data in simulation is the central problem for action-centric projects (Lorin and Mel).
+Defining standards for apples-to-apples comparisons is the focus for benchmarking-centric projects (Thanush and Soorej).
+
+**Most robust initial dissolve:**
+No single most-robust initial dissolve was named.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Mel Krusniak | @krusnim | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

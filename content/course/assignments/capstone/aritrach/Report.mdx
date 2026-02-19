@@ -1,0 +1,205 @@
+---
+title: "Aritra Chakrabarty (aritrach): Uncertainty as a Near-Failure Signal — Capstone Running Log"
+github: "aritrach"
+group: "D"
+lab: "Planning & Safety Lab"
+status: "in-progress"
+---
+
+# Aritra Chakrabarty: Uncertainty as a Near-Failure Signal — Capstone Running Log
+
+**GitHub:** [@aritrach](https://github.com/aritrach)
+**Group:** D — Planning & Safety Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Detecting proximity to irreversible failures from a VLA's internal uncertainty.
+The question: are token-level uncertainty / perplexity signals from the action output distribution *sufficient* indicators that the agent is near an irreversible/critical state?
+Or are these signals dominated by prompt artifacts or environmental ambiguity?
+
+### Base Model
+
+OpenVLA ([openvla.github.io](https://openvla.github.io/)).
+
+### The Delta
+
+An inference-time lightweight risk check: compute action-token perplexity/entropy at each state (or repeat the query a few times and measure disagreement).
+Test whether this risk score increases near irreversible failure states.
+Test whether a simple threshold rule can reduce failures.
+No large-scale retraining; primarily inference-time analysis.
+
+**Test environments:**
+1. Primary: visual MDP (gridworld / simple visual control) with explicitly defined irreversible states.
+2. Stretch: robotic arm simulator with safety/irreversibility conditions (collisions, constraint violations, unrecoverable configurations).
+
+**Approach:**
+Generate action distributions from the VLA and test whether uncertainty predicts future failure:
+- Next-action only: entropy/perplexity at state $s_t$.
+- Limited lookahead tree (depth $d$): sample actions, simulate transitions, aggregate uncertainty.
+- Monte Carlo rollouts: sample trajectories to termination; label whether they end in irreversible states; test early-warning value.
+
+If signals are weak, learn an explicit safe/unsafe boundary from rollouts (e.g., a constraint model or CBF-style classifier) using VLA-generated trajectories.
+
+### Data Mix Strategy
+
+Mostly internet priors; no OXE/DROID.
+Synthetic rollouts generated in simulation for labeled irreversible-risk evaluation.
+
+### Compute Requirements
+
+Mostly inference work; approximately 12–24 hours on a lab RTX 4090.
+
+### Success Metric
+
+AUROC/AUPRC for how well action-token perplexity/entropy flags "near-irreversible" states (plus basic calibration).
+Apply an uncertainty threshold to trigger a conservative fallback; report the change in irreversible failure rate and overall task success.
+
+### Evaluation Scale
+
+Approximately 500–1,000 simulation episodes in a toy environment with hazards.
+Labels (safe vs. near-irreversible vs. failure) come directly from the simulator (hazard proximity / inevitable collision within a short horizon); no manual annotation needed.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#54](https://github.com/arpg/vla-foundations/pull/54) (Zaaler). Group D — Planning & Safety Lab session.*
+
+### Aritra: Uncertainty as a Near-Failure Indicator
+
+**Pitch / Initial Dissolve:**
+Are token-level uncertainty signals (entropy, perplexity) from a VLA's action distribution *sufficient* indicators that the agent is near an irreversible/critical state?
+The technical delta: provide an inference-time "near-failure" indicator for VLAs without retraining the model.
+
+**Constraints / Scope:**
+No large-scale training; primarily inference-time analysis.
+Target: irreversibility in state space (unsafe/absorbing states), not just "bad actions."
+
+**Approach:**
+Generate action distributions from the VLA and test whether uncertainty predicts future failure via next-action entropy, limited lookahead tree search (depth $d$), and Monte Carlo rollouts.
+
+**Signals / Metrics:**
+Action distribution entropy.
+Action/token perplexity (or NLL of selected action).
+Optional: disagreement/variance across sampled action sequences.
+
+**Extension:**
+Learn an explicit safe/unsafe boundary from rollouts (e.g., constraint model / CBF-style classifier) if signals are weak.
+
+**Load-Bearing Walls / Risks:**
+Inference cost (many samples/rollouts per state).
+Weak signal: entropy/perplexity may not correlate with proximity to irreversible states (confidently wrong / noisy).
+
+### Zakariya: VLA-as-Reference POMDP Planner
+
+**Pitch / Initial Dissolve:**
+The core robotic bottleneck is autoregressive error accumulation.
+VLA models typically operate in an open-loop, token-by-token manner; a single quantization error in an action token leads to compounding trajectory drift that the model cannot recover from without explicit long-horizon reasoning.
+The proposed delta transitions the VLA from a deterministic controller to a Stochastic Reference Policy ($\overline{\pi}$) within a formal planning framework.
+
+**Technical Delta:**
+VLA-as-Reference ($\overline{\pi}$): the VLA provides the prior distribution for action sampling, allowing the solver to maximize rewards while minimizing KL-divergence from the VLA's policy.
+VOI-Guided Branching: using a meta-level decision space (the VOI-POMDP), the planner selectively disregards observations when the Value of Information (VOI) — the expected performance gain from reasoning about observations — is low.
+
+**Information Decay:**
+Reference Adherence (KL Bottleneck): if the KL-divergence penalty is too high, the solver remains overly coupled to $\overline{\pi}$, suppressing corrective deviations even when the belief state indicates compounding error.
+If set too low, the planner discards useful inductive bias and wastes queries exploring implausible sequences.
+Observation Gating (VOI Bottleneck): the criterion parameter $\kappa$ governs when the planner branches on observations.
+If $\kappa$ is too aggressive, the planner may ignore critical observations (obstacle proximity, contact events, slip).
+If $\kappa$ is too conservative, the search reverts toward exhaustive branching, reintroducing computational intractability.
+
+**Physicality Gap:**
+Still subject to dynamics mismatch from learning on noisy data, action tokenization resolution, and world model assumptions clashing with real-world transitions.
+
+### Jimmy: Safety-Aware VLA for High-Latency Sensing
+
+**Pitch / Initial Dissolve:**
+Safety alignment of VLAs and VLMs — training generalist VLA policies that can output trajectories given input image while applying semantic reasoning about potential hazards not yet realized in scene.
+Simple case: dynamic obstacles in high-latency systems.
+Instead of capturing new images at high frequency and replanning, if sensing occurs only every few seconds, the model should infer dynamic trajectories of objects in the scene.
+Approach: take a snapshot, query a VLM to create a high-level topological map of features in the scene (object detection), then use a diffusion model to roll out future trajectories for objects or features via an estimator/controller framework, or purely via safety bounding based on semantic cues.
+
+**Training:**
+Internet priors needed to understand what constitutes a hazard in the specific environment.
+A labeled dataset for trajectory estimation of features or scene development would be required; this is likely not widely solved yet.
+
+**Technical Delta:**
+Safety alignment of VLAs with understanding of hazards in scene, plus a diffusion-based rollout of scene development (trajectories) to add safety bounding overhead for robot navigation.
+Aimed at resource-constrained platforms with high latency that cannot continually re-sense.
+
+**Load-Bearing Walls:**
+Where to find training data for this type of training.
+Scene understanding generalization can only be as good as the understanding of hazard types in the environment.
+Inputs and outputs are abstractions and not very discrete; ensuring safety or generalization to safety is difficult.
+
+### Himanshu: VLA with Particle Filter Belief Encoding
+
+**Pitch / Initial Dissolve:**
+If a VLA is given explicit structured access to a belief state represented as a particle set, can it learn a belief-aware policy that chooses actions for both task progress and information gathering, without explicit online tree search?
+
+**Technical Delta:**
+Build a VLA-style policy whose "state" is:
+- a visual embedding $z_t^{\text{vision}}$, and
+- a learned, permutation-invariant encoding of the particle filter set $z_t^{\text{belief}} = \text{SetTransformer}(\{(x_t^i, w_t^i)\})$,
+
+trained end-to-end with the action decoder.
+
+**Core Hypothesis:**
+If a VLA is given structured access to belief uncertainty (via a particle set encoding), it can learn policies that move toward the goal when belief is confident and move toward informative observations when belief is uncertain, without explicit search or reward shaping at inference time.
+
+**Approach:**
+At each timestep $t$:
+1. Belief Update (Particle Filter): maintain a belief over the latent state using a particle filter.
+2. Vision Encoding: encode the current observation $o_t$ using a vision encoder.
+3. Belief Encoding (SetTransformer): encode the particle set using a permutation-invariant SetTransformer.
+4. Fusion and Action Decoding: fuse vision and belief embeddings and decode an action distribution $a_t \sim \pi_\theta(a | z_t^{\text{vision}}, z_t^{\text{belief}})$.
+
+**Load-Bearing Walls / Risks:**
+Oracle problem: if the supervisor is a planner, the model may simply distill tree-search behavior, making the contribution amortized planning rather than planning removal.
+Belief encoder leakage: if particles are too close to ground truth, the task becomes trivial; if too noisy, the policy may fail to learn.
+Generalization: the learned mapping may overfit to specific PF statistics (number of particles, resampling scheme, noise model).
+Long-horizon planning: direct belief-to-action mapping may fail on problems requiring explicit multi-step contingency reasoning.
+
+### Zack: Failure-Triggered VLA Recovery Overviewer
+
+**Pitch / Initial Dissolve:**
+Behavior Tree–based autonomy collapses rich execution outcomes into a binary success/failure signal, discarding the cause of failure (occlusion, degraded sensing, millimeter-scale pose error, contact/torque anomalies).
+This information decay occurs precisely where structured autonomy meets the physical world, making minor, recoverable failures indistinguishable from logical task failure and resulting in brittle retries or aborts under partial observability.
+
+**Technical Delta:**
+A failure-triggered Vision-Language-Action overviewer that activates only when a BT action fails.
+The overviewer consumes raw visual observations and physics-preserving execution context to semantically interpret the failure and propose a constrained recovery action, compiled into a temporary parameterized BT subtree.
+This restores semantic information at the failure boundary while preserving the safety, interpretability, and certifiability of Behavior Trees.
+
+**Information Decay:**
+Information is lost when continuous physical signals (contact state, torque trends, expected vs. observed motion) are projected into coarse symbolic failure tokens.
+
+**Physicality Gap:**
+The first failure mode is internet priors overpowering physical reality under degraded sensing (occlusion, dust, blur).
+This is mitigated by freezing or low-rank tuning the vision backbone, enforcing BT safety guards, and grounding recovery decisions in embodied failure outcomes.
+
+**Load-Bearing Walls:**
+Failure modes must map to distinct, actionable recoveries.
+Recovery primitives must be expressive yet safety-constrained.
+Execution context must preserve physical and temporal information.
+Physics must dominate semantics when priors and reality disagree.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Aritra Chakrabarty | @aritrach | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

@@ -1,0 +1,98 @@
+---
+title: "Antony Zhao (antony-zhao): Cross-Modal Latent Alignment — Capstone Running Log"
+github: "antony-zhao"
+group: "A"
+lab: "Multi-Modal Sensing Lab"
+status: "in-progress"
+---
+
+# Antony Zhao: Cross-Modal Latent Alignment — Capstone Running Log
+
+**GitHub:** [@antony-zhao](https://github.com/antony-zhao)
+**Group:** A — Multi-Modal Sensing Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Latent space alignment between text, image, and robot state goals.
+VLA models that operate on heterogeneous modalities (language, vision, proprioception) encode each in separate representation spaces, leading to misaligned goal representations and poor transfer across modality combinations.
+
+### Base Model
+
+PaLM-E or a comparable small pre-trained VLM as the starting backbone.
+Open to pivoting to an engineering implementation-style project if the latent alignment framing proves too underspecified.
+
+### The Delta
+
+Contrastive learning to align the latent representations of different modalities.
+Either using an existing dataset or sampled data from Gymnasium-Robotics.
+This is an initial direction; further refinement pending a literature review.
+
+### Data Mix Strategy
+
+Mix of Open X-Embodiment data and generated data from Gymnasium-Robotics (which provides goal-conditioned environments).
+Pre-existing LLM/VLM/VLA weights incorporated to leverage internet-scale pretraining and reduce required training compute.
+
+### Compute Requirements
+
+Training on a local RTX 3090 for several days; final training estimated at 10–20 hours on a cloud GPU.
+
+### Success Metric
+
+Semantic alignment or cosine similarity on goal latents between different modalities.
+
+### Evaluation Scale
+
+Approximately 1K–10K samples, source and collection method to be finalized.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#56](https://github.com/arpg/vla-foundations/pull/56) (jdvakil). Scribed during the Multi-Modal Sensing Lab session.*
+
+### Gyanig — Rough Notes
+
+Lots of datasets available; the challenge is finding ways to organize and structure the gaze data.
+Cut off at the chain of thought to verify whether gaze information is meaningful as a supervisory signal.
+
+### Kali — Radar-VLA Notes
+
+Radar data from Korean group K-Radar (high frequency) and View-of-Delft to implement and fine-tune VLA models.
+Radical ResNet encoder trained on driving scenes provides vision features.
+Millimeter-wave and radar sensors bridge to action prediction.
+Possible extension: learning capabilities analogous to a driver's situational awareness.
+Synthetic data generated with CARLA.
+Core issue: not much millimeter-level labeled data available; the system relies on millimeter wave when camera data fails.
+Bridge from radar observations to the action head is the key interface.
+Recommendation: stick to multi-modality — do not work on standalone radar vs camera systems.
+Target inference hardware: NVIDIA Orin.
+TX cascaded radar with 4 receivers and 48 small elements generating data cubes; after processing, produces a point cloud dependent on area of coverage (sparse; large data volume).
+
+### Jay/Carson — Proximity Sensor Notes
+
+Proximity sensors to train a VLA policy.
+Edge computing constraints with synthetic datasets for data generation.
+Edge compute target: 8×8 image resolution may be feasible; encoder must be significantly downsized.
+Open question: how to upscale from 8×8 representations to higher-resolution features, and how to tokenize proximity readings.
+Reconstruct features from sparse proximity inputs.
+Open question: point cloud tokenization and point-cloud-based reasoning for feature extraction.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Antony Zhao | @antony-zhao | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*
