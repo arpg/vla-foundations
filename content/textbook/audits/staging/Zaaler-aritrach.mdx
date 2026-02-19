@@ -38,7 +38,7 @@ They differ mainly in:
 | Model | Primary Inputs | Primary Outputs | What “Action” is |
 |---|---|---|---|
 | **AlphaDrive** | Front-view image + prompt including speed + navigation instruction text | **Meta-actions** (lateral + longitudinal categories) and optionally structured reasoning | **Discrete high-level driving decision** (category-level) |
-| **EMMA** | Camera video/images, intent, ego history (represented as text), plus task prompt | **Waypoints/trajectories as text**, plus detection + road-graph outputs depending on prompt | **Trajectory as language** (coordinates emitted as plain text) |
+| **EMMA** | Camera video/images, routing/context, ego history (represented as text), plus task prompt | **Waypoints/trajectories as text**, plus detection + road-graph outputs depending on prompt | **Trajectory as language** (coordinates emitted as plain text) |
 | **Alpamayo-R1** | Multi-camera images + egomotion; text context | **Structured reasoning + discrete trajectory tokens**, then **continuous trajectories via flow-matching decoder** | **Multimodal continuous trajectory**, efficiently decoded from tokens |
 
 ---
@@ -94,10 +94,10 @@ They differ mainly in:
 
 # Technical Paper Audit: AlphaDrive
 
-**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning
-**Authors**: (as listed in the paper)
-**Audit Author**: Aritra
-**Paper**: AlphaDrive (arXiv 2025)
+**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning <br />
+**Authors**: (as listed in the paper) <br />
+**Audit Author**: Aritra <br />
+**Paper**: AlphaDrive (arXiv 2025) <br />
 **Topic**: Vision Foundations
 
 ---
@@ -125,7 +125,7 @@ They further claim **+25.52%** planning accuracy vs an SFT-trained model, and th
 - different decisions have **different safety weights** (stop/brake ≫ keep speed), and
 - many scenarios admit **multiple valid plans** rather than a single correct token.
 
-The paper argues that naive “correctness reward” used in math/programming applications does not transfer cleanly to planning; you need a reward that is robust early in training and resistant to shortcut solutions.
+The paper argues that naive “correctness reward” used in math/programming applications does not transfer cleanly to planning because there often isn't a single verifiable solution in driving; you need a reward that is robust early in training and resistant to shortcut solutions.
 
 ### 2.2 Context
 - **End-to-end driving models** can output trajectories/controls directly from sensors, but they are “black-box” systems that struggle with the long-tail of driving cases because they lack explicit reasoning.
@@ -290,7 +290,7 @@ AlphaDrive plans in a **low-frequency, discrete meta-action space** (speed + dir
 
 - The benchmark is 3-second clips (short horizon).
 - The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation.
-Although a question of what exactly is "long-horizon" is important, as in driving scenarions, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
+Although a question of what exactly is "long-horizon" is important, as in driving scenarios, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
 
 ### 6.3 “Emergent multimodal planning” claim
 
@@ -383,17 +383,17 @@ Score:
 
 # Technical Paper Audit: EMMA
 
-**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning
-**Authors**: (as listed in the paper)
-**Audit Author**: Aritra
-**Paper**: EMMA: End-to-End Multimodal Model for  Autonomous Driving (2025 arXiv)
-**Topic**: MLLM 
+**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning <br />
+**Authors**: (as listed in the paper) <br />
+**Audit Author**: Zack Allen <br />
+**Paper**: EMMA: End-to-End Multimodal Model for  Autonomous Driving (2025 arXiv) <br />
+**Topic**: MLLM <br />
 
 ---
 
 # 1. Executive Summary
 
-EMMA is a multimodal transformer that unifies perception, mapping, scene understanding, and planning into a single foundation model trained primarily using trajectory supervision. It consumes camera images, ego vehicle motion history, and navigation commands, and directly outputs future ego trajectories along with optional intermediate reasoning, object detections, and road graph representations.
+EMMA is a multimodal transformer that unifies perception, mapping, scene understanding, and planning into a single foundation model trained primarily using trajectory self-supervision. It consumes camera images, ego vehicle motion history, and navigation commands, and directly outputs future ego trajectories along with optional intermediate reasoning, object detections, and road graph representations.
 
 Unlike modular autonomy stacks, which explicitly decompose perception, prediction, and planning, EMMA performs these functions implicitly within a single learned latent representation. The model is trained using large-scale multimodal driving data, including over 24 million driving sequences, and instruction tuning across multiple structured driving tasks.
 
@@ -625,10 +625,10 @@ To predict trajectory accurately, EMMA must internally estimate full scene state
 
 This includes:
 
-Object positions
-Object velocities
-Object interaction dynamics
-Ego dynamics
+- Object positions
+- Object velocities
+- Object interaction dynamics
+- Ego dynamics
 
 Transformer latent state therefore functions as implicit world model.
 
