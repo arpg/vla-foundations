@@ -1,0 +1,1185 @@
+---
+title: "Autonomous Driving"
+author: "Zack Allen and Aritra Chakrabarty"
+paper: "EMMA, AlphaDrive, and Alpamayo-R1"
+topic: "Autonomous Driving"
+---
+
+# Driving Reasoning Models at a Glance (AlphaDrive vs EMMA vs Alpamayo-R1)
+
+## Problem Statement
+Modern autonomy systems increasingly explore **VLM/MLLM-based planners** that map perception (images/video) plus context (routing/intent/ego state) into **driving decisions**.
+Across real-world driving, (i) **multiple actions can be valid** for the same scene, (ii) decisions must satisfy **real-time constraints**, and (iii) developers often want **human-interpretable rationales**—ideally with some form of **consistency** between the rationale and the executed plan.  
+These three papers share that motivation, but differ in **action representation**, **reasoning representation**, and **how training enforces correctness vs diversity vs causal consistency**.
+
+---
+
+## Model Highlights
+- **AlphaDrive**: Fine-tunes a small VLM for **high-level planning** using **GRPO** reward design to support **multiple valid plans** and emphasize **safety-critical actions**.
+- **EMMA**: Frames autonomy as a **multitask language interface** over an MLLM—planning, 3D detection, and road graph outputs are generated via prompts, with **coordinates/waypoints emitted as text**.
+- **Alpamayo-R1**: Argues free-form CoT is often unreliable; introduces **Chain-of-Causation (CoC)** supervision and a **flow-matching trajectory decoder** for **real-time multimodal continuous planning** tied to structured reasoning.
+
+---
+
+## Core Pipeline Pattern (Unifying View)
+All three can be summarized as:
+
+**Perception → latent representation → reasoning/decision tokens → action output**
+
+They differ mainly in:
+- the *granularity* of the action output (meta-actions vs textual waypoints vs decoded continuous trajectories),
+- whether reasoning is treated primarily as an **auxiliary explanation** or as a **structured decision-grounding signal**, and
+- whether action generation is done **directly in text/discrete space** or via an additional **continuous decoder**.
+
+---
+
+# Features (Inputs / Outputs / What “Action” Means)
+
+| Model | Primary Inputs | Primary Outputs | What “Action” is |
+|---|---|---|---|
+| **AlphaDrive** | Front-view image + prompt including speed + navigation instruction text | **Meta-actions** (lateral + longitudinal categories) and optionally structured reasoning | **Discrete high-level driving decision** (category-level) |
+| **EMMA** | Camera video/images, routing/context, ego history (represented as text), plus task prompt | **Waypoints/trajectories as text**, plus detection + road-graph outputs depending on prompt | **Trajectory as language** (coordinates emitted as plain text) |
+| **Alpamayo-R1** | Multi-camera images + egomotion; text context | **Structured reasoning + discrete trajectory tokens**, then **continuous trajectories via flow-matching decoder** | **Multimodal continuous trajectory**, efficiently decoded from tokens |
+
+---
+
+# Training & Supervision
+
+| Model | Training Stages | Key Supervision Signal | What the objective emphasizes |
+|---|---|---|---|
+| **AlphaDrive** | (1) Distill reasoning from a larger teacher → **SFT** warm-start; (2) **GRPO RL** refinement | GT meta-actions + reward shaping | **Multimodal planning** (diversity), **safety-critical weighting**, and structured output constraints |
+| **EMMA** | Multitask training with a unified language formulation; adds **CoT** prompting/training | **Future ego locations** from logs for planning; plus task-specific labels (detection/road-graph) | **Shared interface across tasks**; co-training yields cross-task gains |
+| **Alpamayo-R1** | Multi-stage: add action modality → SFT for reasoning → **RL post-training**; plus **CoC dataset/pipeline** | Structured **Chain-of-Causation** + trajectory objectives | **Causal structure**, **reasoning/action consistency**, and high-quality multimodal trajectories under runtime constraints |
+
+---
+
+# Reasoning
+
+| Model | Reasoning Form | Role of Reasoning |
+|---|---|---|
+| **AlphaDrive** | Structured “planning reasoning” text (format explicitly rewarded) | Improves planning quality via distillation + RL; reasoning is trained as part of the output distribution |
+| **EMMA** | Chain-of-thought rationales (text) | Primarily an accompanying rationale paired with predicted outputs; leverages MLLM capabilities and unified prompting |
+| **Alpamayo-R1** | **Chain-of-Causation (CoC)** (decision-grounded causal links) | Intended to provide *structured* decision grounding and improved alignment between reasoning and action generation |
+
+---
+
+# Real-Time + Deployment Story
+
+| Model | Runtime Strategy | Notes |
+|---|---|---|
+| **AlphaDrive** | Uses a small backbone (Qwen2VL-2B) + discrete meta-action outputs | Latency-friendly partly because the output space is compact and discrete |
+| **EMMA** | Reports a latency-optimized configuration (~3 FPS) via simplifying sequences and removing explicit reasoning chains | Frames runtime as a core constraint for MLLM autonomy and provides a speed-focused variant |
+| **Alpamayo-R1** | Uses **flow-matching** with a small number of steps (e.g., 5) for fast continuous decoding | Claims real-time end-to-end (~99ms) and on-vehicle road tests |
+
+---
+
+# Trade-Offs (AlphaDrive vs EMMA vs Alpamayo-R1)
+
+| Model | Excels at | Shortfalls / Risks | Why (mechanism-level) |
+|---|---|---|---|
+| **AlphaDrive** | **High-level planning robustness** under inherently multimodal supervision; explicitly promotes **diverse feasible plans** and **safety-sensitive decisions** via reward shaping | **Limited behavioral expressivity** if the action taxonomy/labels are coarse (harder to represent nuanced maneuvers if they are not in the meta-action set) | Predicts **discrete meta-actions**, then uses **GRPO** with rewards for accuracy, action-weighting, diversity, and format (this supports multimodality and safety emphasis, but constrains representable behavior to the chosen action set) |
+| **EMMA** | **Unified multitask autonomy** (planning + detection + road graph) with a single promptable model; shows **co-training synergies** across tasks | Emitting **numeric geometry as text** can be brittle (format/token issues, numeric precision sensitivity); large MLLMs face **latency constraints**, motivating simplified variants | The design choice to express outputs (including coordinates) as **language** enables a unified interface and shared representations, but makes performance sensitive to **sequence formatting and length**; runtime constraints are acknowledged with a faster configuration |
+| **Alpamayo-R1** | **Structured, decision-grounded reasoning** (CoC) paired with **high-quality multimodal continuous planning** and a strong **real-time** narrative via flow-matching decoding | **Higher system complexity**: structured-labeling pipeline + multi-stage training + specialized decoder; performance depends on CoC label quality/coverage; structured reasoning still inherits upstream perception/context failures | Adds (i) explicit **structured causal supervision** and (ii) a **continuous trajectory decoder** (flow matching) to combine controllability/consistency with efficient inference (gains come with more components and stronger assumptions about labeling schema and conditioning)  |
+
+---
+
+# References
+\[1\] AlphaDrive: “AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning,” arXiv 2025.
+
+\[2\] EMMA: "End-to-End Multimodal Model for Autonomous Driving," arXiv 2024.
+
+\[3\] Alpamayo-R1: "Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail," arXiv 2026.
+
+---
+
+# Technical Paper Audit: AlphaDrive
+
+**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning <br />
+**Authors**: (as listed in the paper) <br />
+**Audit Author**: Aritra <br />
+**Paper**: AlphaDrive (arXiv 2025) <br />
+**Topic**: Vision Foundations
+
+---
+
+## 1. Summary
+
+AlphaDrive is a **2B-parameter vision-language planner** for autonomous driving that outputs **high-level “meta-actions”** (speed + direction) along with an optional reasoning trace formatted in `<think>...</think>` and a final decision in `<answer>...</answer>`.
+
+The core thesis is that **SFT-only VLM driving planners leave performance and data-efficiency on the table**, and that the RL + reasoning playbook that improved general LLMs can be adapted to driving *if* you redesign rewards for planning.
+Specifically, AlphaDrive adapts **Group Relative Policy Optimization (GRPO)** and introduces a planning-specific reward suite: **planning accuracy (F1), action-weighting, diversity, and format regularization**, arguing this better reflects (i) unequal safety criticality across actions and (ii) multimodal “multiple-valid-solution” planning.
+
+Because high-quality driving “chain-of-thought” data is scarce, they use a multi-stage reasoning strategy: generate a small batch of reasoning traces using a stronger cloud model (e.g., GPT-4o), manually filter it, SFT warm-up on that reasoning data for stability, then run **RL on the full dataset**.
+
+On MetaAD (120k 3-second clips; 110k train / 10k val), AlphaDrive reports **77.12 overall planning accuracy**, outperforming fine-tuned baselines including a larger Qwen2VL-7B result (61.44).
+
+They further claim **+25.52%** planning accuracy vs an SFT-trained model, and that with only 20% training data they outperform SFT by **35.31%**, emphasizing data-efficiency.
+
+---
+
+## 2. Problem Domain & Taxonomy
+
+### 2.1 The Technical Challenge
+**Core problem:** Train a VLM to produce a **safe, correct high-level plan** for the next short horizon (e.g., “next three seconds”), where:
+- there are **two coupled decision axes** (lateral + longitudinal),
+- different decisions have **different safety weights** (stop/brake ≫ keep speed), and
+- many scenarios admit **multiple valid plans** rather than a single correct token.
+
+The paper argues that naive “correctness reward” used in math/programming applications does not transfer cleanly to planning because there often isn't a single verifiable solution in driving; you need a reward that is robust early in training and resistant to shortcut solutions.
+
+### 2.2 Context
+- **End-to-end driving models** can output trajectories/controls directly from sensors, but they are “black-box” systems that struggle with the long-tail of driving cases because they lack explicit reasoning.
+- **VLM-based planners** shift some of that burden: use vision + language prompting to decide higher-level actions, which can incorporate “commonsense” reasoning. The paper provides an example prompt where the model is asked to plan for the next three seconds using a speed + navigation command.
+- The gap AlphaDrive tries to close is **training strategy**: applying RL and reasoning methods that have shown value in large LMs (DPO/GRPO, chain-of-thought, inference-time scaling), but tailored to the planning structure and evaluation realities in driving.
+
+### 2.3 Approaches
+A useful industry taxonomy for “VLMs in driving”:
+
+1. **End-to-end control/trajectory networks**
+   - Directly output controls/trajectories from sensors.
+   - Critique in paper: black-box and long-tail brittle.
+
+2. **VLM high-level planners (meta-actions)**
+   - Output symbolic/linguistic decisions; a downstream system handles continuous control.
+   - AlphaDrive sits here (meta-action F1 evaluation).
+
+3. **RL-augmented VLM planners (AlphaDrive’s focus)**
+   - Use RL to evaluate policies and improve planning performance.
+   - The key: RL must be adapted to planning rewards and multi-solution outputs.
+
+---
+
+## 3. Architectural Overview (Pipeline-Level)
+
+AlphaDrive’s “architecture” is best described as a **training + inference pipeline**.
+
+### 3.1 Input/Output Contract
+
+- **Input**: front-view image + planning prompt containing the vehicle’s current speed and navigation info.
+- **Navigation**: derived from sparse navigation points (Google Maps-like) and converted into text (e.g., “Go straight for 100m, then turn right”).
+- **Output format**: reasoning inside `<think>` and final answer (meta-action) inside `<answer>` tags; non-conforming outputs receive **format reward = 0** (hard penalty).
+
+### 3.2 Base Model Choice
+
+They use **Qwen2VL-2B** as the base model, motivated by:
+
+- better meets latency requirements than larger variants, and
+- better support for RL training (their claim).
+
+**Training hardware**: 16 NVIDIA A800 GPUs.
+
+---
+
+## 4. Training Method & Objective Deep-Dive
+
+### 4.1 GRPO as the RL Backbone
+
+AlphaDrive uses **Group Relative Policy Optimization (GRPO)**. The paper defines GRPO as:
+
+- sample a group of outputs $\{o_i\}_{i=1}^{G}$ from an old policy,
+- optimize a PPO-style clipped objective with KL regularization,
+- compute advantages using **normalized reward within the group**.
+
+They justify GRPO with two reasons:
+
+1. it showed strong stability/effectiveness in general domains (citing Deepseek R1 \[2\]), and
+2. group-relative optimization suits planning because planning admits **multiple valid solutions**.
+
+
+### 4.2 Planning Reward Modeling
+
+AlphaDrive introduces **four rewards**, then combines them into the final RL signal, which is their key contribution.
+
+#### Reward 1 — Planning Accuracy Reward
+They found exact-match reward unstable early (format noise like case sensitivity/extraneous tokens), and “GT included among words” encourages a shortcut (eg. output all possible actions), causing collapse.
+They adopt **F1-score** for lateral and longitudinal decisions separately for stability and shortcut resistance.
+
+#### Reward 2 — Action-Weighted Reward
+They argue different behaviors have different safety importance (e.g., decelerate/stop more critical than keep speed) and incorporate action weights into the reward.
+
+#### Reward 3 — Planning Diversity Reward
+They observe that during group-based RL, outputs converge to the same solution; since planning is multimodal, they want multiple feasible solutions.
+Algorithmically, they compute frequency of each plan among group outputs and apply **up to 20% reduction**:
+`plan_div_R = 1 - min(0.2, frequency)`
+
+#### Reward 4 — Planning Format Reward
+They enforce `<think>` and `<answer>` tags; if the output doesn’t conform, **format reward is 0**.
+
+#### Reward Composition
+
+They multiply accuracy × action-weight × diversity to compute a **planning quality reward**, separately for speed and direction planning, and combine with format reward for GRPO updates.
+
+
+### 4.3 Reasoning Training
+
+They tried incorporating reasoning steps directly into RL, but results were suboptimal due to:
+
+- insufficient perception of key elements (e.g., traffic lights),
+- disorganized reasoning with weak causal links,
+- overly long and ineffective reasoning.
+
+So they use a stronger cloud model (e.g., GPT-4o) to generate concise reasoning conditioned on real actions + state + nav, manually filter errors, and distill via SFT.
+
+Finally, they train with:
+
+- **SFT warm-up** on a small amount of data (dense supervision, stable), then
+- **RL training** with the full dataset (exploration + reward shaping).
+
+---
+
+## 5. Data & Scaling
+
+### 5.1 Dataset
+
+They adopt **MetaAD** \[*NOTE: Could not find this dataset anywhere, neither could their reviewers at ICLR 2026*\] as the benchmark:
+
+- **120k** real-world driving clips, each **3 seconds**,
+- multi-sensor + perception annotations,
+- balanced distribution over environments and planning actions,
+- split into **110k train / 10k validation**.
+
+### 5.2 Evaluation Metrics
+
+- **Planning**: F1-score for all categories of lateral + longitudinal meta-actions, aggregated into overall planning accuracy.
+- **Reasoning**: similarity between generated reasoning and annotated reasoning using BLEU-4, CIDEr, and METEOR.
+
+
+### 5.3 Main Performance Results
+
+From the main results table:
+
+- AlphaDrive (2B) reports **77.12** overall planning accuracy.
+- The strongest listed fine-tuned baseline Qwen2VL-7B (*fine-tuned on the Meta-AD dataset*) reports **61.44** accuracy.
+
+They also state:
+
+- planning accuracy improves by **25.5%** vs Qwen2VL-7B and improves key decisions like steering and accel/decel.
+
+And in the contributions:
+
+- **+25.52% vs SFT-trained model**, and
+- **+35.31% with only 20% training data** compared to SFT-trained.
+
+### 5.4 Data-Efficiency Scaling
+
+They measure SFT vs RL vs SFT+RL at 20k, 50k, 110k training sizes:
+
+- **20k**: SFT 41.12, RL 45.46, SFT+RL 55.64
+- **50k**: SFT 53.02, RL 59.33, SFT+RL 70.83
+- **110k**: SFT 65.40, RL 72.41, SFT+RL 77.12
+
+
+### 5.5 Reasoning Strategy Ablation
+
+They compare reasoning training modes and show the best overall score for the **SFT+RL with reasoning enabled** condition (77.12).
+
+---
+
+## 6. Robotic Grounding & Physicality Gap
+
+### 6.1 The Precision Gap
+
+AlphaDrive plans in a **low-frequency, discrete meta-action space** (speed + direction), which is intentionally easier than continuous control.
+
+**Engineering trade-off:**
+
+- **Pro:** avoids asking a VLM to output precise trajectories at high Hz.
+- **Con:** shifts risk to the interface between **symbolic plan → downstream controller**. Need to prove that the downstream stack can **robustly** interpret “decelerate, left” in dense traffic.
+
+### 6.2 Benchmark Critique
+
+- The benchmark is 3-second clips (short horizon).
+- The model’s prompt is explicitly “plan for the next three seconds,” which tightly bounds the problem and may not stress long-horizon negotiation.
+Although a question of what exactly is "long-horizon" is important, as in driving scenarios, even 3 seconds can involve complex interactions (e.g., a pedestrian suddenly crossing, a car ahead braking).
+
+### 6.3 “Emergent multimodal planning” claim
+
+They state that after RL, AlphaDrive shows “emergent multimodal planning capabilities,” generating multiple reasonable plans, and that this could improve safety/efficiency.
+This is consistent with the diversity reward motivation, but it creates a deployment question: **how do you select among multiple plans safely and consistently?**
+
+---
+
+## 7. Critical Synthesis
+
+### 7.1 Load-Bearing Assumptions
+
+1. **Reward alignment assumption**
+   The 4-reward design (F1 accuracy + action weights + diversity + format) must correlate with “better driving,” not just better label matching.
+
+2. **Multi-solution optimization assumption**
+   GRPO’s group-relative ranking is assumed to be a good match for planning where multiple valid solutions exist.
+
+3. **Reasoning usefulness assumption**
+   Distilled reasoning is assumed to improve decisions, not merely produce nicer explanations; they explicitly found RL-only reasoning to be messy.
+   But, how do we know that decisions are actually improving because of better reasoning, rather than just better reward optimization?
+
+### 7.2 Reproducibility Assessment
+
+**Pros:**
+
+- Concrete equations for GRPO and explicit reward pseudo-code.
+- Clean ablation studies on data size and reasoning strategies.
+
+**Gaps:**
+
+- Claims about latency motivation (2B chosen to meet latency requirements) are not paired here with actual runtime numbers.
+- “Emergent multimodal planning” is asserted, but not fully closed-loop validated with a selection policy and safety metrics.
+- The MetaAD dataset is not publicly available, which hinders reproducibility and external validation.
+
+### 7.3 Failure Modes
+
+1. **Perception-limited reasoning (traffic lights / key cues)**
+   They explicitly note insufficient perception of key elements like traffic lights harmed direct RL reasoning.
+   - Risk: confident but wrong plans when cues are present but not used.
+
+2. **Diversity reward producing “diverse but unsafe” plans**
+   Diversity is rewarded by penalizing frequency among sampled answers.
+   - Risk: incentivize disagreement without feasibility grounding, making downstream selection harder.
+
+3. **Format-induced brittleness**
+   Format reward is hard-zero when tags fail.
+   - Risk: rare formatting drift can be catastrophic in a production parser unless you robustify extraction.
+
+### 7.4 The Next 10,000 GPU-hour Experiment
+
+**Experiment A — “Causal reasoning validity” instead of BLEU/CIDEr**
+- Problem: reasoning evaluation uses BLEU/CIDEr/METEOR similarity.
+- Proposal: build a labeled eval slice with causal factor tags (red light present, pedestrian crossing, stopped lead vehicle, occlusion).
+Score:
+  - whether reasoning cites the correct causal factors
+  - whether counterfactual masking flips the plan appropriately
+- Success: improvement in causal correctness *and* planning F1.
+
+**Experiment B — “Multimodal plan selection” in closed-loop**
+- Motivation: they claim multimodal planning emerges post-RL.
+- Proposal: generate K plans, run a safety/rule feasibility filter, select, then evaluate closed-loop safety proxies (hard-brake rate, time-to-collision proxy, rule violations).
+
+### 7.5 Sign-Off Criteria
+
+**Technical recommendation:**
+
+- **Sign off for research adoption:** Yes — strong evidence that tailored RL (GRPO) + planning reward engineering + reasoning distillation improves a high-level VLM planner and yields better data-efficiency.
+- **Sign off for production readiness:** Conditional No — missing inference reality metrics and closed-loop validation for multi-plan selection; format brittleness needs hardened parsing and fallback policies.
+
+---
+
+## References
+
+\[1\] AlphaDrive: “AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning,” arXiv 2025.
+
+\[2\] DeepSeek-R1: "Incentivizing Reasoning Capability in LLMs via Reinforcement Learning," arXiv 2025.
+
+\[3\] PPO: "Proximal Policy Optimization Algorithms," arXiv 2017.
+
+\[4\] DPO: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model," arXiv 2023.
+
+\[5\] DeepSeekMath: "DeepSeek-Math: Pushing the Limits of Mathematical Reasoning in Open Language Models," arXiv 2024.
+
+\[6\] CoT: "Chain of Thought Prompting Elicits Reasoning in Large Language Models," arXiv 2022.
+
+\[7\] Qwen2-VL: "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution," arXiv 2024.
+
+---
+
+# Technical Paper Audit: EMMA
+
+**Title**: AlphaDrive: Unleashing the Power of VLMs in Autonomous Driving via Reinforcement Learning and Reasoning <br />
+**Authors**: (as listed in the paper) <br />
+**Audit Author**: Zack Allen <br />
+**Paper**: EMMA: End-to-End Multimodal Model for  Autonomous Driving (2025 arXiv) <br />
+**Topic**: MLLM <br />
+
+---
+
+# 1. Executive Summary
+
+EMMA is a multimodal transformer that unifies perception, mapping, scene understanding, and planning into a single foundation model trained primarily using trajectory self-supervision. It consumes camera images, ego vehicle motion history, and navigation commands, and directly outputs future ego trajectories along with optional intermediate reasoning, object detections, and road graph representations.
+
+Unlike modular autonomy stacks, which explicitly decompose perception, prediction, and planning, EMMA performs these functions implicitly within a single learned latent representation. The model is trained using large-scale multimodal driving data, including over 24 million driving sequences, and instruction tuning across multiple structured driving tasks.
+
+The central technical claim is that multimodal foundation models can learn a unified internal world model sufficient for autonomous driving planning when trained at sufficient scale.
+
+From an autonomy engineering perspective, EMMA represents a transition from explicitly engineered autonomy pipelines to learned implicit world-model planners.
+
+However, critical open questions remain around closed-loop stability, safety guarantees, distributional robustness, and interpretability.
+
+---
+
+# 2. System-Level Problem Formulation
+
+The autonomous driving planner must compute a future ego trajectory conditioned on incomplete, noisy observations and goal constraints.
+
+Formally, this can be expressed as:
+
+```
+τ* = argmax P(τ | o₀:t, g)
+```
+
+Where:
+
+* τ = future ego trajectory
+* o₀:t = sensor observations
+* g = navigation goal
+
+Traditional pipelines factor this into:
+
+```
+Perception → State Estimation → Prediction → Planning
+```
+
+EMMA instead directly models:
+
+```
+τ ~ P(τ | tokens(image, history, navigation))
+```
+
+This collapses state estimation, prediction, and planning into a single learned probabilistic model.
+
+---
+
+# 3. Architecture Deep Dive
+
+## 3.1 Input Representation and Tokenization
+
+EMMA consumes multimodal tokens from three primary sources:
+
+### Vision tokens
+
+Input:
+
+* Multi-camera surround-view RGB images
+* Typical setup: 6–8 cameras covering 360°
+
+Images are encoded using a vision encoder producing visual tokens.
+
+These tokens represent:
+
+* Object geometry
+* Scene structure
+* Spatial relationships
+
+Unlike LiDAR-based pipelines, EMMA must infer depth and geometry implicitly.
+
+This is a major architectural constraint.
+
+---
+
+### Ego trajectory history tokens
+
+Past ego motion is encoded as coordinate sequences:
+
+Example:
+
+```
+(0.0, 0.0)
+(1.2, 0.1)
+(2.4, 0.3)
+```
+
+This provides:
+
+* Ego velocity
+* Ego heading
+* Ego acceleration
+
+This enables transformer to infer ego dynamics.
+
+---
+
+### Navigation command tokens
+
+Example:
+
+```
+Turn right in 100 meters
+```
+
+This provides goal conditioning.
+
+---
+
+## 3.2 Transformer Core
+
+The core model is a multimodal transformer derived from Gemini / PaLI architectures.
+
+Processes:
+
+```
+[vision tokens | ego tokens | navigation tokens]
+```
+
+Produces autoregressive output tokens.
+
+Transformer must internally represent:
+
+* Scene geometry
+* Agent states
+* Agent interactions
+* Ego dynamics
+* Planning policy
+
+This is an extremely high-dimensional latent representation.
+
+---
+
+## 3.3 Output Representation
+
+EMMA produces structured outputs in token form.
+
+Primary output:
+
+Future ego trajectory:
+
+```
+(xₜ₊₁, yₜ₊₁)
+(xₜ₊₂, yₜ₊₂)
+...
+```
+
+Secondary outputs (optional):
+
+Object detections:
+
+```
+Vehicle at (10.2, 3.4)
+Pedestrian at (5.3, -1.2)
+```
+
+Road graph:
+
+```
+Lane centerline coordinates
+```
+
+These outputs suggest internal latent world model representation.
+
+---
+
+# 4. Training Pipeline and Dataset Composition
+
+## 4.1 Motion planning datasets
+
+nuScenes:
+
+* 1000 scenes
+* 20 second clips
+* 18,686 training examples
+
+Waymo Open Motion Dataset:
+
+* 103,000 scenes
+* 487,061 training windows
+* 9-second windows
+
+Internal Waymo motion dataset:
+
+* 24 million sequences
+* 30 second clips
+* Dominant dataset component
+
+This scale is several orders of magnitude larger than academic datasets.
+
+---
+
+## 4.2 Object detection datasets
+
+Waymo Open Dataset:
+
+* ~1150 scenes
+
+Internal Waymo detection dataset:
+
+* 12 million labeled examples
+
+Provides object supervision.
+
+---
+
+## 4.3 Road graph dataset
+
+Internal Waymo dataset containing:
+
+* Lane centerlines
+* Intersections
+* Traffic topology
+
+Sampled across geographic diversity.
+
+---
+
+## 4.4 Instruction tuning tasks
+
+Model is instruction tuned across:
+
+- Trajectory prediction
+- Object detection
+- Road graph generation
+
+This creates multitask training signals.
+
+---
+
+# 5. Mechanistic Interpretation: Internal World Model Hypothesis
+
+To predict trajectory accurately, EMMA must internally estimate full scene state.
+
+This includes:
+
+- Object positions
+- Object velocities
+- Object interaction dynamics
+- Ego dynamics
+
+Transformer latent state therefore functions as implicit world model.
+
+Formally:
+
+Transformer learns approximation of:
+
+```
+P(Sₜ₊₁ | Sₜ)
+```
+
+Where Sₜ is full world state.
+
+This makes EMMA closer to world model architecture than traditional planner.
+
+---
+
+# 6. Scaling Properties and Training Regime
+
+Dataset scale:
+
+Motion sequences: 24M
+Detection examples: 12M
+
+Total multimodal tokens likely > 10¹¹ tokens.
+
+Foundation model scaling laws apply:
+
+Loss ∝ DatasetSize^-α
+
+Scaling likely critical to performance.
+
+Model likely compute-bound rather than architecture-bound.
+
+---
+
+# 7. Closed-Loop Behavior and Stability Risk
+
+Training is open-loop imitation learning.
+
+Closed-loop deployment introduces feedback effects.
+
+Error at time t affects state at time t+1.
+
+This creates compounding error risk.
+
+This is a known limitation of behavior cloning.
+
+Closed-loop evaluation required to validate stability.
+
+---
+
+# 8. Failure Mode Taxonomy (Autonomy-Critical)
+
+## 8.1 Perception failure
+
+Camera-only perception may fail under:
+
+Low light
+Glare
+Weather
+Occlusion
+
+Failure propagates directly to planner.
+
+No modular fallback.
+
+---
+
+## 8.2 Distribution shift
+
+Model trained on limited geographic distribution.
+
+Performance outside training distribution uncertain.
+
+---
+
+## 8.3 World model incompleteness
+
+Transformer latent space may not encode full state.
+
+This may produce inconsistent planning.
+
+---
+
+## 8.4 Precision and tokenization limits
+
+Coordinate tokenization introduces quantization.
+
+This limits trajectory precision.
+
+---
+
+# 9. Architectural Tradeoff vs Modular Autonomy Stack
+
+**Advantages**:
+
+- Unified architecture
+- Shared representation
+- Scaling efficiency
+
+**Disadvantages**:
+
+- No explicit state representation
+- Hard debugging
+- No safety guarantees
+
+Modular stacks provide stronger engineering guarantees.
+
+Foundation model planners provide stronger scaling potential.
+
+---
+
+# 10. Load-Bearing Assumptions
+
+Assumption 1:
+
+Transformer latent space can represent full scene state.
+
+Assumption 2:
+
+Trajectory supervision sufficient to learn perception.
+
+Assumption 3:
+
+Scaling improves performance without architectural change.
+
+---
+
+# 11. Reproducibility and Engineering Cost
+
+Training requires:
+
+- Millions of GPU hours
+- Internal datasets
+
+External reproduction currently impractical.
+
+This is industrial-scale foundation model.
+
+---
+
+# 12. Research Assessment
+
+- Architectural significance: Extremely high
+- Scientific significance: High
+- Engineering maturity: Moderate
+- Deployment readiness: Unknown
+
+---
+
+# 13. Key Research Questions
+
+Critical unanswered questions:
+
+- Closed-loop stability
+- Safety under distribution shift
+- Scaling limits
+- Interpretability
+
+These determine deployment feasibility.
+
+---
+
+# 14. Internal Engineering Sign-Off Assessment
+
+- Research significance: Approved
+- Production readiness: Not yet sufficient
+
+EMMA represents foundational architectural shift but requires significant validation before production deployment.
+
+---
+
+# 15. References
+
+Waymo LLC, EMMA: End-to-End Multimodal Model for Autonomous Driving, arXiv 2025.
+
+---
+
+# Technical Paper Audit: Alpamayo-R1
+
+**Title**: Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail (arXiv Jan. 2026)
+**Authors**: Nvidia
+**Audit Author**: Aritra Chakrabarty and Zack Allen
+
+---
+
+## 1. Summary
+
+Alpamayo-R1 (AR1) is a **vision–language–action (VLA)** based driving policy designed to improve **generalization** in safety-critical long-tail scenarios where pure imitation learning is brittle.
+The paper’s central claim is that “reasoning” only helps driving if it is **(i) causally grounded, (ii) decision-aligned, and (iii) behavior-consistent**, and that you need both *data* (via a reasoning specific dataset) and *training* to make it possible.
+
+AR1 couples two outputs:
+a structured **Chain of Causation (CoC)** reasoning trace, and a **6.4s future ego trajectory** (controls/trajectory), so the model is trained to jointly predict the *action* and the *thought process* in one step.
+
+The system is built on three core ideas:
+
+1) **CoC dataset**: a large-scale reasoning dataset produced via *hybrid auto-labeling + human-in-the-loop* that ties each trace to:
+   - a **closed-set driving decision** (longitudinal + lateral), and
+   - explicitly identified **components** (causal factors) that justify the decision.
+
+2) **Modular VLA architecture**:  
+   - **Cosmos-Reason** provides the vision-language backbone and world understanding priors (Physical AI pretraining),  
+   - A **diffusion / flow-matching trajectory decoder (“action expert”)** produces **dynamically feasible plans** efficiently.
+
+3) **RL post-training for alignment** (GRPO-style):
+   - improves CoC trace quality,
+   - enforces reasoning–action faithfulness,
+   - and optionally optimizes for safety.
+
+---
+
+## 2. Problem Domain & Taxonomy
+
+### 2.1 The Technical Challenge
+
+The paper is addressing a concrete deployment failure pattern:
+
+> A policy can look good in open-loop trajectory metrics, yet still fail in closed-loop, interactive, long-tail scenarios.
+
+{/* AC: I don't know how I feel about this line tbh, maybe some more detail? */}
+
+AR1 frames this as three gaps:
+
+1) **Long-tail supervision sparsity**  
+   The rare, safety-critical cases (unusual merges, occlusions, aggressive agents, ambiguous right-of-way) are underrepresented in standard imitation learning data.
+   
+2) **Causal understanding gap**  
+   Many “reasoning datasets” for AVs have explanations that are:
+   - vague (“be cautious”),
+   - not decision-committing (no explicit maneuver),
+   - or have reasoning inconsistent with the action output.
+
+3) **Inference feasibility gap**  
+   For a VLA policy to be usable, it must produce:
+   - smooth, physically plausible trajectories, and
+   - do so under tight latency budgets as token-by-token action decoding is often too slow.
+
+### 2.2 Context
+
+AR1 is positioned in the “foundation model” branch for autonomous driving:
+
+- *Scaling imitation* improves average performance, but long-tail brittleness persists.
+- *Reasoning-augmented driving* is promising, but often fails due to ungrounded text that does not change behavior.
+- *Closed-loop evaluation* is necessary because long-tail failures are interactive and compounding.
+
+The paper argues that driving “reasoning” needs **behavioral anchoring** and **causal attribution**, otherwise it becomes decorative.
+
+### 2.3 Approaches
+
+Alpamayo-R1 is best understood as **trajectory prediction with structured reasoning supervision**.
+The key design choice is that the model is trained to produce (1) a continuous future trajectory and (2) a causally grounded reasoning trace that is *tethered to a closed-set driving decision*.
+
+#### Outputs
+- **CoC reasoning trace**  
+  A structured explanation aligned to a **closed-set driving decision** that is anchored to an *explicit* decision category.
+- **Continuous future trajectory**  
+  The model predicts a **future trajectory over a fixed horizon (6.4s)**.
+
+---
+
+## 3. Architectural Overview (Pipeline-Level)
+
+### 3.1 Input/Output Contract
+
+#### Inputs
+- Multi-camera imagery (surround view)  
+  The underlying setup is a **surround-view camera suite** (the paper’s data/interface assumes multi-view perception rather than a single monocular input).
+- Route / navigation signals  
+
+#### Outputs
+- CoC reasoning trace anchored to a *closed-set driving decision*  
+  The reasoning is supervised to match a structured “because-of” chain tied to an explicit decision category.
+- *6.4-second future trajectory*  
+  Continuous motion output over the fixed horizon.
+
+
+### 3.2 Base Model Choice
+
+AR1’s base model is **Cosmos-Reason**, which the paper treats as a Physical-AI prior: a backbone VLM already trained to understand physical interaction and spatiotemporal dynamics.
+
+Then AR1 adds two domain-specific “heads”:
+
+1) **Reasoning decoder** (language tokens) trained on CoC.  
+2) **Action expert** that decodes trajectory+controls efficiently (diffusion / flow matching).
+
+**Why this modularity is necessary:**
+- A single autoregressive decoder that emits both reasoning and 100+ action tokens can be too slow.
+- Separating the action generator allows a small number of denoising steps to produce smooth trajectories.
+
+The paper includes a runtime comparison that illustrates this directly:
+- **AR1 reasoning + flow-matching decode** ≈ **99ms** end-to-end,  
+- vs **AR1 reasoning + autoregressive trajectory tokens** ≈ **312ms**.
+
+---
+
+## 4. Training Method & Objective Deep-Dive
+
+AR1 is explicitly staged rather than “train everything end-to-end once.” The motivation is that they want:
+- strong perception + physical priors,
+- controllable action decoding,
+- then structured reasoning,
+- then alignment.
+
+### 4.1 GRPO as the RL Backbone
+
+For post-training, the paper uses a **GRPO-style** (Group Relative Policy Optimization) approach:
+
+- Sample multiple rollouts per prompt/context.
+- Score them with reward models / critics.
+- Use relative advantages within the group to stabilize learning.
+- Apply KL regularization to keep the policy near the SFT reference.
+
+Why GRPO:
+- It’s practical for LLM/VLM alignment where rewards are noisy and absolute calibration is hard.
+- Group baselines reduce variance without requiring a perfect value function to be learned.
+
+### 4.2 Planning Reward Modeling
+
+Alpamayo-R1’s post-training reward is defined as a **3-component planning reward model** (with an optional safety extension in ablations).
+The goal is to jointly optimize: **(i)** reasoning quality, **(ii)** reasoning–action alignment, and **(iii)** physically meaningful trajectory quality.
+
+#### Reward 1 — Reasoning Quality Reward ($r_\text{reason}$)
+
+A Large Reasoning Model (LRM) critic grades the generated CoC trace with a structured rubric (score range **0–5**).
+This reward  explicitly pushes the trace to be:
+
+- **behavior-consistent** with the chosen driving decision,
+- **causally coherent** (reasons actually justify the maneuver),
+- and grounded in the context of the observed scene.
+
+This yields a scalar reward $r_\text{reason}$ that encourages *grounded* rationales rather than plausible-but-unfaithful explanations.
+
+#### Reward 2 — CoC–Action Consistency Reward ($r_\text{consistency}$)
+
+To prevent “good reasoning that doesn’t drive the car,” Alpamayo-R1 adds a binary **reasoning–action consistency** reward:
+
+1. Convert the **predicted trajectory** into **meta-actions** (a closed-set label on **longitudinal** and **lateral** behavior).
+2. Parse the generated CoC trace to infer the intended maneuver/meta-action.
+3. Apply rule-based matching across both axes.
+
+The reward is assigned as:
+- $r_\text{consistency} = 1$ if the reasoning-implied meta-actions match the trajectory-derived meta-actions **for both longitudinal and lateral behavior**,
+- otherwise $r_\text{consistency} = 0$ (including cases where the intent cannot be parsed reliably).
+
+This term is crucial because it makes the model pay a direct penalty for producing rationales that “sound right” but do not correspond to the actual decoded plan.
+
+#### Reward 3 — Low-Level Trajectory Quality Reward ($r_\text{traj}$)
+
+Finally, Alpamayo-R1 includes a continuous trajectory reward that directly regularizes the physical plan by combining:
+
+- **L2 imitation** to the expert trajectory (closeness to demonstrated behavior),
+- a **collision indicator penalty** (safety constraint),
+- and a **jerk penalty** (comfort / smoothness).
+
+This reward anchors the policy so improvements in CoC reasoning do not come at the expense of degraded driving quality.
+
+#### Optional Extension — Safety Reward (Ablation / Variant)
+
+Beyond the core 3-component reward model, the paper also explores adding an explicit **safety reward** in post-training variants (e.g., to reduce close-encounter or unsafe interaction rates in closed-loop evaluation).
+This an additional configuration studied in analysis, rather than part of the base reward-model definition.
+
+#### Reward Composition
+
+In Alpamayo-R1, the overall reward used for GRPO-style post-training is a weighted combination of the three core terms:
+
+- $r_\text{reason}$ improves CoC reasoning quality under the rubric.
+- $r_\text{consistency}$ enforces alignment between reasoning and the trajectory-derived decision.
+- $r_\text{traj}$ preserves (and can improve) low-level plan quality, including safety/comfort.
+
+Empirically, the paper’s analysis supports the qualitative takeaway that **reasoning-only optimization can drift actions**, and that adding *consistency + trajectory regularization* helps maintain behavior while still improving reasoning.
+
+### 4.3 Reasoning Training
+
+Before RL, AR1 does *supervised fine-tuning* on CoC.
+
+The key technical point is that CoC is *decision-grounded*:
+
+- Each sample includes a closed-set decision label (longitudinal + lateral).
+- Each trace includes explicitly named causal factors (“critical components”).
+- The trace must link these factors to the decision in a minimal, behavior-consistent way.
+
+---
+
+## 5. Data & Scaling
+
+### 5.1 Dataset
+
+AR1 training uses a large internal driving corpus and a dedicated reasoning corpus.
+
+**Driving corpus ($\mathcal{D}_{overall}$)** (as described in the paper):
+- ~**80,000 hours** of driving,
+- spanning **>2,500 cities** across **25 countries**,
+- with geo-fenced evaluation to reduce leakage.
+
+**CoC reasoning corpus ($\mathcal{D}_{CoC}$)**:
+- ~**700K** video segments with CoC traces,
+- constructed via hybrid auto-labeling + human-in-the-loop.
+
+Note: the auto-labeling prompts can condition on **future context and the executed trajectory** to disambiguate what the “correct” decision was in a multimodal scene.
+This is how they avoid producing generic or incorrect explanations.
+
+### 5.2 Evaluation Metrics
+
+The paper uses both open-loop and closed-loop metrics.
+
+**Open-loop:**
+- minADE over a 6.4s horizon (e.g., minADE6@6.4s),
+- other trajectory quality proxies (the paper includes multiple variants / splits).
+
+**Closed-loop (AlpaSim):**
+- close encounter rate (all and at-fault variants),
+- off-road rate,
+- composite AlpaSim score (scenario-level safety performance).
+
+{/* AC: Maybe I should give an explanation of Open loop vs Closed Loop to make things easier to understand? */}
+
+### 5.3 Main Performance Results
+
+The results the paper focuses on most:
+
+1) **CoC reasoning improves hard-case planning quality**  
+On a challenging long-tail split (route enabled, 0.5B backbone), CoC reasoning improves minADE6 from **0.994 → 0.868** (~12.7% relative improvement).
+
+2) **Closed-loop safety improves in curated interactive scenarios**  
+In AlpaSim (75 curated scenarios), close encounter rate drops from **17% → 11%** (≈35% relative reduction), while off-road remains comparable.
+
+3) **Scaling to larger models improves both open-loop and closed-loop**  
+On the PhysicalAI-AV benchmark with a larger AR1 model, the paper reports improvements such as:
+- minADE6@6.4s **0.913 → 0.849**, and
+- at-fault close encounter rate **9% → 4%**,
+with AlpaSim score improving **0.35 → 0.72**.
+
+### 5.4 Data-Efficiency Scaling
+
+The paper contains data scaling experiments where:
+- increasing the number/diversity of segments improves minADE with diminishing returns,
+- long-tail slices benefit from more diverse data.
+
+### 5.5 Reasoning Strategy Ablation
+
+The paper’s ablations support the view that “reasoning” has to be the *right* kind:
+
+- **Meta-action-only supervision** helps somewhat but can remain inconsistent.  
+- **CoC structured reasoning** yields larger gains because it forces attention to causal factors and commits to decisions.  
+- **RL on reasoning reward alone** can degrade action metrics (reasoning becomes optimized independently).  
+- **Adding reasoning–action consistency reward** mitigates this and improves faithfulness.
+
+---
+
+## 6. Robotic Grounding & Physicality Gap
+
+### 6.1 The Precision Gap
+
+The “precision gap” here is the mismatch between:
+- language-level reasoning (“stop because pedestrian crossing”),
+- and control-level execution (smooth braking, feasible curvature, comfort).
+
+AR1’s main method for closing this gap is the **action expert**:
+- it generates *dynamically feasible* trajectories (unicycle-style control parameterization is used in the paper),
+- and does so with a small number of steps for latency.
+
+The paper treats motion as a robotics problem, instead of relying on text generation.
+
+### 6.2 Benchmark Critique
+
+AR1’s implicit critique of common benchmarks is consistent with the trend:
+
+- **Open-loop ADE** does not fully capture interactive failure modes.
+- Long-tail failures are about compounding interaction and rare dynamics, which require **closed-loop** testing.
+
+The paper’s closed-loop AlpaSim evaluation is therefore important, even if limited in size.
+
+---
+
+## 7. Critical Synthesis
+
+### 7.1 Load-Bearing Assumptions
+
+1) **CoC labels are sufficiently correct at scale**  
+Even with human-in-the-loop, large-scale auto-labeling can drift; AR1 assumes the resulting reasoning traces are reliable enough to serve as supervision and RL targets.
+
+2) **LLM/LRM critics are calibrated**  
+Reasoning reward is computed by a large reasoning model judge; the approach assumes the judge scores correlate with true causal fidelity and not superficial templates.
+
+3) **Closed-set decision taxonomy is expressive enough**  
+CoC enforces decisions from a predefined set; AR1 assumes this is enough to capture the key maneuver choices relevant to long-tail safety.
+
+4) **Diffusion decoding produces plans that are controller-compatible**  
+AR1 assumes the produced plans remain feasible and stable under downstream tracking (they describe MPC tracking in AlpaSim).
+
+### 7.2 Reproducibility Assessment
+
+**Strong points:**
+- Clear conceptual pipeline and staged training.
+- Concrete dataset construction recipe (auto-labeling + human calibration).
+- Runtime comparisons that highlight why architectural choices matter.
+
+**Reproducibility gaps (typical for industry papers):**
+- Many details depend on internal data and infrastructure (80k hours dataset, on-vehicle stack, exact scenario library).
+- Judge prompts/rubrics and calibration details matter a lot for RL outcomes; the paper provides structure but full reproducibility would require more artifacts.
+
+### 7.3 Failure Modes
+
+1) **Reasoning–action mismatch**  
+If the consistency mechanism fails, the model can produce plausible traces that don’t constrain behavior.
+
+2) **Reward hacking / templating**  
+Any RL stage with an LRM judge risks learning stylistic patterns that score well.
+
+3) **Out-of-distribution causal factors**  
+If a novel long-tail event includes a causal driver that is underrepresented in CoC, the model *may* default to generic explanations and unsafe behavior.
+
+4) **Latency vs capability trade-offs**  
+Richer reasoning and more cameras can increase token load; maintaining real-time constraints remains a hard design tension.
+
+### 7.4 The Next 10,000 GPU-hour Experiment
+
+If I were continuing this line of work, I would prioritize **causal faithfulness tests** that go beyond “the text looks right.”
+
+1) **Counterfactual causal editing**  
+Systematically remove/alter a critical component (mask a pedestrian, remove a stop sign, perturb a lead vehicle velocity) and check:
+- does the CoC trace change appropriately?
+- does the action change appropriately?
+- does reasoning–action consistency remain high?
+
+2) **Judge robustness audit**  
+Randomize judge prompts / rubrics, measure variance, and test for template exploitation.
+
+3) **Closed-loop breadth expansion**  
+Scale from 75 curated scenarios to a substantially larger interactive suite, emphasizing:
+- adversarial merges,
+- occlusions,
+- rare road geometry,
+- unusual agent behaviors.
+
+### 7.5 Sign-Off Criteria
+
+**Sign off for research adoption:** Yes.  
+AR1 is a strong blueprint for making “reasoning” operational in VLA driving: structured causal supervision + fast action decoding + alignment.
+
+**Sign off for production readiness:** Conditional.  
+The paper is persuasive on architecture and training, but a production safety case needs:
+- broader closed-loop coverage,
+- stronger evidence of judge/critic robustness,
+- and systematic failure mode analysis under sensor/agent distribution shift.
+
+---
+
+## References
+
+[1] *Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail*, NVIDIA, 2026.
+
+---
