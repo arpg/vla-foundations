@@ -808,7 +808,7 @@ Waymo LLC, EMMA: End-to-End Multimodal Model for Autonomous Driving, arXiv 2025.
 
 ---
 
-# Technical Paper Audit: Alpamayo-R1 (In Progress)
+# Technical Paper Audit: Alpamayo-R1
 
 **Title**: Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail (arXiv Jan. 2026)
 **Authors**: Nvidia
@@ -818,60 +818,368 @@ Waymo LLC, EMMA: End-to-End Multimodal Model for Autonomous Driving, arXiv 2025.
 
 ## 1. Summary
 
----
+Alpamayo-R1 (AR1) is a **vision–language–action (VLA)** based driving policy designed to improve **generalization** in safety-critical long-tail scenarios where pure imitation learning is brittle.
+The paper’s central claim is that “reasoning” only helps driving if it is **(i) causally grounded, (ii) decision-aligned, and (iii) behavior-consistent**, and that you need both *data* (via a reasoning specific dataset) and *training* to make it possible.
 
-## 2. Architectural Overview
+AR1 couples two outputs:
+a structured **Chain of Causation (CoC)** reasoning trace, and a **6.4s future ego trajectory** (controls/trajectory), so the model is trained to jointly predict the *action* and the *thought process* in one step.
 
-### 2.1 Chain-of-Causation (CoC) Reasoning
+The system is built on three core ideas:
 
-### 2.2 Flow-Matching Trajectory Decoder
+1) **CoC dataset**: a large-scale reasoning dataset produced via *hybrid auto-labeling + human-in-the-loop* that ties each trace to:
+   - a **closed-set driving decision** (longitudinal + lateral), and
+   - explicitly identified **components** (causal factors) that justify the decision.
 
-### 2.3 Architectural Trade-Offs
+2) **Modular VLA architecture**:  
+   - **Cosmos-Reason** provides the vision-language backbone and world understanding priors (Physical AI pretraining),  
+   - A **diffusion / flow-matching trajectory decoder (“action expert”)** produces **dynamically feasible plans** efficiently.
 
----
-
-## 3. Data & Scaling
-
-### 3.1 Data Curation Pipeline
-
-### 3.2 Scale Claims
-
-### 3.3 What Scales and What Does Not
-
----
-
-## 4. Downstream Application
-
-### 4.1 Robotics
-
-### 4.2 Missing Closed-Loop Evidence
-
-### 4.3 Real-Time Deployment
+3) **RL post-training for alignment** (GRPO-style):
+   - improves CoC trace quality,
+   - enforces reasoning–action faithfulness,
+   - and optionally optimizes for safety.
 
 ---
 
-## 5. Critical Synthesis & Sign-Off
+## 2. Problem Domain & Taxonomy
 
-### 5.1 Load-Bearing Assumptions
-* **Assumption 1**:
-* **Assumption 2**:
+### 2.1 The Technical Challenge
 
-### 5.2 Reproducibility Assessment
-- Code publicly available?
-- Pre-trained models released?
-- Dataset accessible?
-- Hyperparameters specified?
-- Quantitative evaluation?
+The paper is addressing a concrete deployment failure pattern:
 
-**Score: 3/5 - Somewhat reproducible.**
+> A policy can look good in open-loop trajectory metrics, yet still fail in closed-loop, interactive, long-tail scenarios.
 
-### 5.3 Failure Modes
+{/* AC: I don't know how I feel about this line tbh, maybe some more detail? */}
 
-### 5.4 Sign-Off Criteria
-**Decision:**
+AR1 frames this as three gaps:
+
+1) **Long-tail supervision sparsity**  
+   The rare, safety-critical cases (unusual merges, occlusions, aggressive agents, ambiguous right-of-way) are underrepresented in standard imitation learning data.
+   
+2) **Causal understanding gap**  
+   Many “reasoning datasets” for AVs have explanations that are:
+   - vague (“be cautious”),
+   - not decision-committing (no explicit maneuver),
+   - or have reasoning inconsistent with the action output.
+
+3) **Inference feasibility gap**  
+   For a VLA policy to be usable, it must produce:
+   - smooth, physically plausible trajectories, and
+   - do so under tight latency budgets as token-by-token action decoding is often too slow.
+
+### 2.2 Context
+
+AR1 is positioned in the “foundation model” branch for autonomous driving:
+
+- *Scaling imitation* improves average performance, but long-tail brittleness persists.
+- *Reasoning-augmented driving* is promising, but often fails due to ungrounded text that does not change behavior.
+- *Closed-loop evaluation* is necessary because long-tail failures are interactive and compounding.
+
+The paper argues that driving “reasoning” needs **behavioral anchoring** and **causal attribution**, otherwise it becomes decorative.
+
+### 2.3 Approaches
+
+Alpamayo-R1 is best understood as **trajectory prediction with structured reasoning supervision**.
+The key design choice is that the model is trained to produce (1) a continuous future trajectory and (2) a causally grounded reasoning trace that is *tethered to a closed-set driving decision*.
+
+#### Outputs
+- **CoC reasoning trace**  
+  A structured explanation aligned to a **closed-set driving decision** that is anchored to an *explicit* decision category.
+- **Continuous future trajectory**  
+  The model predicts a **future trajectory over a fixed horizon (6.4s)**.
+
+---
+
+## 3. Architectural Overview (Pipeline-Level)
+
+### 3.1 Input/Output Contract
+
+#### Inputs
+- Multi-camera imagery (surround view)  
+  The underlying setup is a **surround-view camera suite** (the paper’s data/interface assumes multi-view perception rather than a single monocular input).
+- Route / navigation signals  
+
+#### Outputs
+- CoC reasoning trace anchored to a *closed-set driving decision*  
+  The reasoning is supervised to match a structured “because-of” chain tied to an explicit decision category.
+- *6.4-second future trajectory*  
+  Continuous motion output over the fixed horizon.
+
+
+### 3.2 Base Model Choice
+
+AR1’s base model is **Cosmos-Reason**, which the paper treats as a Physical-AI prior: a backbone VLM already trained to understand physical interaction and spatiotemporal dynamics.
+
+Then AR1 adds two domain-specific “heads”:
+
+1) **Reasoning decoder** (language tokens) trained on CoC.  
+2) **Action expert** that decodes trajectory+controls efficiently (diffusion / flow matching).
+
+**Why this modularity is necessary:**
+- A single autoregressive decoder that emits both reasoning and 100+ action tokens can be too slow.
+- Separating the action generator allows a small number of denoising steps to produce smooth trajectories.
+
+The paper includes a runtime comparison that illustrates this directly:
+- **AR1 reasoning + flow-matching decode** ≈ **99ms** end-to-end,  
+- vs **AR1 reasoning + autoregressive trajectory tokens** ≈ **312ms**.
+
+---
+
+## 4. Training Method & Objective Deep-Dive
+
+AR1 is explicitly staged rather than “train everything end-to-end once.” The motivation is that they want:
+- strong perception + physical priors,
+- controllable action decoding,
+- then structured reasoning,
+- then alignment.
+
+### 4.1 GRPO as the RL Backbone
+
+For post-training, the paper uses a **GRPO-style** (Group Relative Policy Optimization) approach:
+
+- Sample multiple rollouts per prompt/context.
+- Score them with reward models / critics.
+- Use relative advantages within the group to stabilize learning.
+- Apply KL regularization to keep the policy near the SFT reference.
+
+Why GRPO:
+- It’s practical for LLM/VLM alignment where rewards are noisy and absolute calibration is hard.
+- Group baselines reduce variance without requiring a perfect value function to be learned.
+
+### 4.2 Planning Reward Modeling
+
+Alpamayo-R1’s post-training reward is defined as a **3-component planning reward model** (with an optional safety extension in ablations).
+The goal is to jointly optimize: **(i)** reasoning quality, **(ii)** reasoning–action alignment, and **(iii)** physically meaningful trajectory quality.
+
+#### Reward 1 — Reasoning Quality Reward ($r_\text{reason}$)
+
+A Large Reasoning Model (LRM) critic grades the generated CoC trace with a structured rubric (score range **0–5**).
+This reward  explicitly pushes the trace to be:
+
+- **behavior-consistent** with the chosen driving decision,
+- **causally coherent** (reasons actually justify the maneuver),
+- and grounded in the context of the observed scene.
+
+This yields a scalar reward $r_\text{reason}$ that encourages *grounded* rationales rather than plausible-but-unfaithful explanations.
+
+#### Reward 2 — CoC–Action Consistency Reward ($r_\text{consistency}$)
+
+To prevent “good reasoning that doesn’t drive the car,” Alpamayo-R1 adds a binary **reasoning–action consistency** reward:
+
+1. Convert the **predicted trajectory** into **meta-actions** (a closed-set label on **longitudinal** and **lateral** behavior).
+2. Parse the generated CoC trace to infer the intended maneuver/meta-action.
+3. Apply rule-based matching across both axes.
+
+The reward is assigned as:
+- $r_\text{consistency} = 1$ if the reasoning-implied meta-actions match the trajectory-derived meta-actions **for both longitudinal and lateral behavior**,
+- otherwise $r_\text{consistency} = 0$ (including cases where the intent cannot be parsed reliably).
+
+This term is crucial because it makes the model pay a direct penalty for producing rationales that “sound right” but do not correspond to the actual decoded plan.
+
+#### Reward 3 — Low-Level Trajectory Quality Reward ($r_\text{traj}$)
+
+Finally, Alpamayo-R1 includes a continuous trajectory reward that directly regularizes the physical plan by combining:
+
+- **L2 imitation** to the expert trajectory (closeness to demonstrated behavior),
+- a **collision indicator penalty** (safety constraint),
+- and a **jerk penalty** (comfort / smoothness).
+
+This reward anchors the policy so improvements in CoC reasoning do not come at the expense of degraded driving quality.
+
+#### Optional Extension — Safety Reward (Ablation / Variant)
+
+Beyond the core 3-component reward model, the paper also explores adding an explicit **safety reward** in post-training variants (e.g., to reduce close-encounter or unsafe interaction rates in closed-loop evaluation).
+This an additional configuration studied in analysis, rather than part of the base reward-model definition.
+
+#### Reward Composition
+
+In Alpamayo-R1, the overall reward used for GRPO-style post-training is a weighted combination of the three core terms:
+
+- $r_\text{reason}$ improves CoC reasoning quality under the rubric.
+- $r_\text{consistency}$ enforces alignment between reasoning and the trajectory-derived decision.
+- $r_\text{traj}$ preserves (and can improve) low-level plan quality, including safety/comfort.
+
+Empirically, the paper’s analysis supports the qualitative takeaway that **reasoning-only optimization can drift actions**, and that adding *consistency + trajectory regularization* helps maintain behavior while still improving reasoning.
+
+### 4.3 Reasoning Training
+
+Before RL, AR1 does *supervised fine-tuning* on CoC.
+
+The key technical point is that CoC is *decision-grounded*:
+
+- Each sample includes a closed-set decision label (longitudinal + lateral).
+- Each trace includes explicitly named causal factors (“critical components”).
+- The trace must link these factors to the decision in a minimal, behavior-consistent way.
+
+---
+
+## 5. Data & Scaling
+
+### 5.1 Dataset
+
+AR1 training uses a large internal driving corpus and a dedicated reasoning corpus.
+
+**Driving corpus (\(\mathcal{D}_{overall}\))** (as described in the paper):
+- ~**80,000 hours** of driving,
+- spanning **>2,500 cities** across **25 countries**,
+- with geo-fenced evaluation to reduce leakage.
+
+**CoC reasoning corpus (\(\mathcal{D}_{CoC}\))**:
+- ~**700K** video segments with CoC traces,
+- constructed via hybrid auto-labeling + human-in-the-loop.
+
+Note: the auto-labeling prompts can condition on **future context and the executed trajectory** to disambiguate what the “correct” decision was in a multimodal scene.
+This is how they avoid producing generic or incorrect explanations.
+
+### 5.2 Evaluation Metrics
+
+The paper uses both open-loop and closed-loop metrics.
+
+**Open-loop:**
+- minADE over a 6.4s horizon (e.g., minADE6@6.4s),
+- other trajectory quality proxies (the paper includes multiple variants / splits).
+
+**Closed-loop (AlpaSim):**
+- close encounter rate (all and at-fault variants),
+- off-road rate,
+- composite AlpaSim score (scenario-level safety performance).
+
+{/* AC: Maybe I should give an explanation of Open loop vs Closed Loop to make things easier to understand? */}
+
+### 5.3 Main Performance Results
+
+The results the paper focuses on most:
+
+1) **CoC reasoning improves hard-case planning quality**  
+On a challenging long-tail split (route enabled, 0.5B backbone), CoC reasoning improves minADE6 from **0.994 → 0.868** (~12.7% relative improvement).
+
+2) **Closed-loop safety improves in curated interactive scenarios**  
+In AlpaSim (75 curated scenarios), close encounter rate drops from **17% → 11%** (≈35% relative reduction), while off-road remains comparable.
+
+3) **Scaling to larger models improves both open-loop and closed-loop**  
+On the PhysicalAI-AV benchmark with a larger AR1 model, the paper reports improvements such as:
+- minADE6@6.4s **0.913 → 0.849**, and
+- at-fault close encounter rate **9% → 4%**,
+with AlpaSim score improving **0.35 → 0.72**.
+
+### 5.4 Data-Efficiency Scaling
+
+The paper contains data scaling experiments where:
+- increasing the number/diversity of segments improves minADE with diminishing returns,
+- long-tail slices benefit from more diverse data.
+
+### 5.5 Reasoning Strategy Ablation
+
+The paper’s ablations support the view that “reasoning” has to be the *right* kind:
+
+- **Meta-action-only supervision** helps somewhat but can remain inconsistent.  
+- **CoC structured reasoning** yields larger gains because it forces attention to causal factors and commits to decisions.  
+- **RL on reasoning reward alone** can degrade action metrics (reasoning becomes optimized independently).  
+- **Adding reasoning–action consistency reward** mitigates this and improves faithfulness.
+
+---
+
+## 6. Robotic Grounding & Physicality Gap
+
+### 6.1 The Precision Gap
+
+The “precision gap” here is the mismatch between:
+- language-level reasoning (“stop because pedestrian crossing”),
+- and control-level execution (smooth braking, feasible curvature, comfort).
+
+AR1’s main method for closing this gap is the **action expert**:
+- it generates *dynamically feasible* trajectories (unicycle-style control parameterization is used in the paper),
+- and does so with a small number of steps for latency.
+
+The paper treats motion as a robotics problem, instead of relying on text generation.
+
+### 6.2 Benchmark Critique
+
+AR1’s implicit critique of common benchmarks is consistent with the trend:
+
+- **Open-loop ADE** does not fully capture interactive failure modes.
+- Long-tail failures are about compounding interaction and rare dynamics, which require **closed-loop** testing.
+
+The paper’s closed-loop AlpaSim evaluation is therefore important, even if limited in size.
+
+---
+
+## 7. Critical Synthesis
+
+### 7.1 Load-Bearing Assumptions
+
+1) **CoC labels are sufficiently correct at scale**  
+Even with human-in-the-loop, large-scale auto-labeling can drift; AR1 assumes the resulting reasoning traces are reliable enough to serve as supervision and RL targets.
+
+2) **LLM/LRM critics are calibrated**  
+Reasoning reward is computed by a large reasoning model judge; the approach assumes the judge scores correlate with true causal fidelity and not superficial templates.
+
+3) **Closed-set decision taxonomy is expressive enough**  
+CoC enforces decisions from a predefined set; AR1 assumes this is enough to capture the key maneuver choices relevant to long-tail safety.
+
+4) **Diffusion decoding produces plans that are controller-compatible**  
+AR1 assumes the produced plans remain feasible and stable under downstream tracking (they describe MPC tracking in AlpaSim).
+
+### 7.2 Reproducibility Assessment
+
+**Strong points:**
+- Clear conceptual pipeline and staged training.
+- Concrete dataset construction recipe (auto-labeling + human calibration).
+- Runtime comparisons that highlight why architectural choices matter.
+
+**Reproducibility gaps (typical for industry papers):**
+- Many details depend on internal data and infrastructure (80k hours dataset, on-vehicle stack, exact scenario library).
+- Judge prompts/rubrics and calibration details matter a lot for RL outcomes; the paper provides structure but full reproducibility would require more artifacts.
+
+### 7.3 Failure Modes
+
+1) **Reasoning–action mismatch**  
+If the consistency mechanism fails, the model can produce plausible traces that don’t constrain behavior.
+
+2) **Reward hacking / templating**  
+Any RL stage with an LRM judge risks learning stylistic patterns that score well.
+
+3) **Out-of-distribution causal factors**  
+If a novel long-tail event includes a causal driver that is underrepresented in CoC, the model *may* default to generic explanations and unsafe behavior.
+
+4) **Latency vs capability trade-offs**  
+Richer reasoning and more cameras can increase token load; maintaining real-time constraints remains a hard design tension.
+
+### 7.4 The Next 10,000 GPU-hour Experiment
+
+If I were continuing this line of work, I would prioritize **causal faithfulness tests** that go beyond “the text looks right.”
+
+1) **Counterfactual causal editing**  
+Systematically remove/alter a critical component (mask a pedestrian, remove a stop sign, perturb a lead vehicle velocity) and check:
+- does the CoC trace change appropriately?
+- does the action change appropriately?
+- does reasoning–action consistency remain high?
+
+2) **Judge robustness audit**  
+Randomize judge prompts / rubrics, measure variance, and test for template exploitation.
+
+3) **Closed-loop breadth expansion**  
+Scale from 75 curated scenarios to a substantially larger interactive suite, emphasizing:
+- adversarial merges,
+- occlusions,
+- rare road geometry,
+- unusual agent behaviors.
+
+### 7.5 Sign-Off Criteria
+
+**Sign off for research adoption:** Yes.  
+AR1 is a strong blueprint for making “reasoning” operational in VLA driving: structured causal supervision + fast action decoding + alignment.
+
+**Sign off for production readiness:** Conditional.  
+The paper is persuasive on architecture and training, but a production safety case needs:
+- broader closed-loop coverage,
+- stronger evidence of judge/critic robustness,
+- and systematic failure mode analysis under sensor/agent distribution shift.
 
 ---
 
 ## References
+
+[1] *Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail*, NVIDIA, 2026.
 
 ---
