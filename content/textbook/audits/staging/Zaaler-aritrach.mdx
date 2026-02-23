@@ -154,6 +154,8 @@ A useful industry taxonomy for “VLMs in driving”:
 
 AlphaDrive’s “architecture” is best described as a **training + inference pipeline**.
 
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/alphadrive/alphadrive_architecture.png" alt="AlphaDrive Architecture" width="900" />
+
 ### 3.1 Input/Output Contract
 
 - **Input**: front-view image + planning prompt containing the vehicle’s current speed and navigation info.
@@ -261,6 +263,8 @@ And in the contributions:
 
 - **+25.52% vs SFT-trained model**, and
 - **+35.31% with only 20% training data** compared to SFT-trained.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/alphadrive/alphadrive_vis.png" alt="AlphaDrive results visualization" width="900" />
 
 ### 5.4 Data-Efficiency Scaling
 
@@ -762,6 +766,8 @@ The key design choice is that the model is trained to produce (1) a continuous f
 
 ## 3. Architectural Overview (Pipeline-Level)
 
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/alpamayo/alpamayo_main_arch.png" alt="Alpamayo Architecture" width="900" />
+
 ### 3.1 Input/Output Contract
 
 #### Inputs
@@ -803,6 +809,8 @@ The motivation is that they want:
 - controllable action decoding,
 - then structured reasoning,
 - then alignment.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/alpamayo/alpamayo_train_pipeline.png" alt="Alpamayo Training Pipeline" width="900" />
 
 ### 4.1 GRPO as the RL Backbone
 
