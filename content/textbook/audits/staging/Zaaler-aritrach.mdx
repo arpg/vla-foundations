@@ -129,7 +129,8 @@ The paper argues that naive “correctness reward” used in math/programming ap
 
 ### 2.2 Context
 - **End-to-end driving models** can output trajectories/controls directly from sensors, but they are “black-box” systems that struggle with the long-tail of driving cases because they lack explicit reasoning.
-- **VLM-based planners** shift some of that burden: use vision + language prompting to decide higher-level actions, which can incorporate “commonsense” reasoning. The paper provides an example prompt where the model is asked to plan for the next three seconds using a speed + navigation command.
+- **VLM-based planners** shift some of that burden: use vision + language prompting to decide higher-level actions, which can incorporate “commonsense” reasoning.
+The paper provides an example prompt where the model is asked to plan for the next three seconds using a speed + navigation command.
 - The gap AlphaDrive tries to close is **training strategy**: applying RL and reasoning methods that have shown value in large LMs (DPO/GRPO, chain-of-thought, inference-time scaling), but tailored to the planning structure and evaluation realities in driving.
 
 ### 2.3 Approaches
@@ -174,7 +175,8 @@ They use **Qwen2VL-2B** as the base model, motivated by:
 
 ### 4.1 GRPO as the RL Backbone
 
-AlphaDrive uses **Group Relative Policy Optimization (GRPO)**. The paper defines GRPO as:
+AlphaDrive uses **Group Relative Policy Optimization (GRPO)**.
+The paper defines GRPO as:
 
 - sample a group of outputs $\{o_i\}_{i=1}^{G}$ from an old policy,
 - optimize a PPO-style clipped objective with KL regularization,
@@ -284,7 +286,8 @@ AlphaDrive plans in a **low-frequency, discrete meta-action space** (speed + dir
 **Engineering trade-off:**
 
 - **Pro:** avoids asking a VLM to output precise trajectories at high Hz.
-- **Con:** shifts risk to the interface between **symbolic plan → downstream controller**. Need to prove that the downstream stack can **robustly** interpret “decelerate, left” in dense traffic.
+- **Con:** shifts risk to the interface between **symbolic plan → downstream controller**.
+Need to prove that the downstream stack can **robustly** interpret “decelerate, left” in dense traffic.
 
 ### 6.2 Benchmark Critique
 
@@ -393,11 +396,16 @@ Score:
 
 ## 1. Summary
 
-EMMA is a **Gemini-powered end-to-end multimodal model** for autonomous driving that directly maps raw surround-view camera images into driving-specific outputs: **future ego trajectories**, 3D object detections, road graph elements, and scene understanding predictions. All non-sensor inputs (navigation commands, ego history) and all outputs (trajectory waypoints, bounding boxes) are represented as **plain text**, unifying every task within a single language space and allowing task-specific behavior to be selected at inference time via prompt variation.
+EMMA is a **Gemini-powered end-to-end multimodal model** for autonomous driving that directly maps raw surround-view camera images into driving-specific outputs: **future ego trajectories**, 3D object detections, road graph elements, and scene understanding predictions. 
+All non-sensor inputs (navigation commands, ego history) and all outputs (trajectory waypoints, bounding boxes) are represented as **plain text**, unifying every task within a single language space and allowing task-specific behavior to be selected at inference time via prompt variation.
 
-The core thesis is that **large-scale multimodal foundation models carry world knowledge and reasoning capabilities that specialized modular autonomy stacks cannot replicate**, and that recasting driving tasks as VQA problems is sufficient to unlock those capabilities without specialized components. EMMA fine-tunes Gemini with self-supervised trajectory objectives (requiring only future ego locations, no human labels), optionally augmented with **chain-of-thought (CoT) reasoning** that produces a hierarchical driving rationale before outputting waypoints. The generalist variant co-trains across planning, 3D detection, and road graph estimation via instruction tuning.
+The core thesis is that **large-scale multimodal foundation models carry world knowledge and reasoning capabilities that specialized modular autonomy stacks cannot replicate**, and that recasting driving tasks as VQA problems is sufficient to unlock those capabilities without specialized components. 
+EMMA fine-tunes Gemini with self-supervised trajectory objectives (requiring only future ego locations, no human labels), optionally augmented with **chain-of-thought (CoT) reasoning** that produces a hierarchical driving rationale before outputting waypoints. 
+The generalist variant co-trains across planning, 3D detection, and road graph estimation via instruction tuning.
 
-On nuScenes, EMMA achieves **state-of-the-art open-loop planning**, outperforming prior supervised methods by 6.4% and self-supervised methods by 17.1% in average L2. On Waymo Motion Dataset, EMMA+ (EMMA trained on a 24 million example internal dataset) with Chain of Thought (CoT) reasoning surpasses MotionLM and Wayformer by **13.5% at the 5-second horizon**. EMMA Generalist co-training also outperforms single-task specialist models by up to **5.5%** across all three tasks simultaneously.
+On nuScenes, EMMA achieves **state-of-the-art open-loop planning**, outperforming prior supervised methods by 6.4% and self-supervised methods by 17.1% in average L2. 
+On Waymo Motion Dataset, EMMA+ (EMMA trained on a 24 million example internal dataset) with Chain of Thought (CoT) reasoning surpasses MotionLM and Wayformer by **13.5% at the 5-second horizon**. 
+EMMA Generalist co-training also outperforms single-task specialist models by up to **5.5%** across all three tasks simultaneously.
 
 ---
 
@@ -412,11 +420,14 @@ On nuScenes, EMMA achieves **state-of-the-art open-loop planning**, outperformin
 - long-tail scenarios require **generalizable world knowledge** difficult to enumerate in training data
 - the continuous waypoint output space is heterogeneous from the natural language space used for all other tasks
 
-The paper argues modular pipelines with fixed symbolic interfaces are brittle at the long tail, and end-to-end imitation approaches trained on limited datasets fail to generalize. EMMA's resolution: leverage the pre-training scale and world knowledge of Gemini, fine-tuned within a unified language output space.
+The paper argues modular pipelines with fixed symbolic interfaces are brittle at the long tail, and end-to-end imitation approaches trained on limited datasets fail to generalize. 
+EMMA's resolution: leverage the pre-training scale and world knowledge of Gemini, fine-tuned within a unified language output space.
 
 ### 2.2 Context
 
-Recent work \[6,12\] revealed that strong benchmark performance on prior end-to-end models could be achieved by simply extrapolating historical ego status — raising questions about genuine scene understanding. EMMA addresses this by ablating Gemini pre-trained weights (vs. random initialization) and showing that CoT scene reasoning substantively improves trajectories beyond what ego-status extrapolation supports. Unlike **VLM-augmented driving planners** (DriveGPT4, DriveVLM, OmniDrive\[7\]) that bolt an LLM onto a conventional autonomy stack as a post-hoc explainer, EMMA treats the MLLM as a first-class citizen that directly makes the driving decisions.
+Recent work \[6,12\] revealed that strong benchmark performance on prior end-to-end models could be achieved by simply extrapolating historical ego status, raising questions about genuine scene understanding. 
+EMMA addresses this by ablating Gemini pre-trained weights (versus random initialization) and showing that CoT scene reasoning substantively improves trajectories beyond what ego-status extrapolation supports. 
+Unlike **VLM-augmented driving planners** (DriveGPT4, DriveVLM, OmniDrive\[7\]) that bolt an LLM onto a conventional autonomy stack as a post-hoc explainer, EMMA treats the MLLM as a first-class citizen that directly makes the driving decisions.
 
 ### 2.3 Previous Approaches and EMMA
 
@@ -436,18 +447,22 @@ EMMA's "architecture" is best described as a **fine-tuning and multi-task instru
 
 - **Vision input ($V$):** Surround-view camera images (6–8 cameras, 360° coverage). No LiDAR, radar, or HD maps.
 - **Language input ($T$):** A high-level intent command (e.g., "go straight") and historical ego waypoints as plain-text BEV coordinate pairs: $T_{ego} = \{(x_t, y_t)\}_{t=-T_h}^{-1}$.
-- **Output format:** All outputs are natural language text — trajectory waypoints as floating-point pairs, bounding boxes as `[x, y, z, l, w, h, θ, class]`, road graph polylines as semicolon-delimited waypoint sequences with `valid`/`invalid` tagging.
+- **Output format:** All outputs are natural language text: trajectory waypoints as floating-point pairs, bounding boxes as `[x, y, z, l, w, h, θ, class]`, road graph polylines as semicolon-delimited waypoint sequences with `valid`/`invalid` tagging.
 
 The complete planning formulation is $O_{trajectory} = \mathcal{G}(T_{intent}, T_{ego}, V)$; with CoT: $(O_{rationale}, O_{trajectory}) = \mathcal{G}(T_{intent}, T_{ego}, V)$.
 
-**Key design choice — text over special tokens:** EMMA uses direct floating-point text for coordinates rather than learned discretization (cf. MotionLM)\[4\]. This maximally reuses pre-trained weights at the cost of more output tokens per coordinate.
+**Key design choice — text over special tokens:** 
+EMMA uses direct floating-point text for coordinates rather than learned discretization (compared with MotionLM)\[4\]. 
+This maximally reuses pre-trained weights at the cost of more output tokens per coordinate.
 
 ![Figure 1: EMMA Overview Diagram](./figures/emma/emma-architecture.png)
 *Figure 1: EMMA takes 3 inputs (surround-view cameras, high-level command, historical ego status) and outputs future trajectories along with optional chain-of-thought rationale and perception outputs.*
 
 ### 3.2 Base Model Choice
 
-Primary experiments use **Gemini 1.0 Nano-1** (1.8B-parameter)\[2\], with additional validation on **PaLI-X** (22B-parameter)\[3\] (EMMA†) confirming generalizability across MLLM architectures. No specialized driving components are added — the entire model is fine-tuned from Gemini weights using task-specific prompt-answer pairs from driving logs. Training hardware is not disclosed; the internal dataset scale implies industrial-level compute that makes external reproduction impractical.
+Primary experiments use **Gemini 1.0 Nano-1** (1.8B-parameter)\[2\], with additional validation on **PaLI-X** (22B-parameter)\[3\] (EMMA†) confirming generalizability across MLLM architectures. 
+No specialized driving components are added — the entire model is fine-tuned from Gemini weights using task-specific prompt-answer pairs from driving logs. 
+Training hardware is not disclosed; the internal dataset scale implies industrial-level compute that makes external reproduction impractical.
 
 ---
 
@@ -455,9 +470,12 @@ Primary experiments use **Gemini 1.0 Nano-1** (1.8B-parameter)\[2\], with additi
 
 ### 4.1 Self-Supervised Planning Objective
 
-EMMA's core training objective is **autoregressive next-token prediction** over text-encoded trajectory waypoints, conditioned on visual and language tokens. Self-Supervision requires only future ego locations from driving logs — no human annotation, perception labels, or HD map labels. This is a critical scalability property enabling training on Waymo's internal fleet data (24M sequences, 203K hours).
+EMMA's core training objective is **autoregressive next-token prediction** over text-encoded trajectory waypoints, conditioned on visual and language tokens. 
+Self-Supervision requires only future ego locations from driving logs — no human annotation, perception labels, or HD map labels. 
+This is a critical scalability property enabling training on Waymo's internal fleet data (24M sequences, 203K hours).
 
-**Open-loop training, closed-loop gap:** Training is imitation learning on logged trajectories, so the model is never exposed to the distribution shift caused by its own compounding errors. This is a known failure mode of behavior cloning and is explicitly acknowledged as an unresolved limitation.
+**Open-loop training, closed-loop gap:** Training is imitation learning on logged trajectories, so the model is never exposed to the distribution shift caused by its own compounding errors. 
+This is a known failure mode of behavior cloning and is explicitly acknowledged as an unresolved limitation.
 
 ### 4.2 Chain-of-Thought Reasoning Structure
 
@@ -471,15 +489,19 @@ EMMA predicts a four-component **driving rationale** before outputting waypoints
 | R4 — Meta Driving Decision | High-level plan from 12 heuristic categories | +3.0% |
 | **Full CoT (R2+R3+R4)** | | **+6.7%** |
 
-Rationale captions are generated automatically using off-the-shelf Waymo perception/prediction models and Gemini prompting — no additional human labels required. Prediction order of rationale vs. trajectory does not significantly affect quality post-convergence, allowing early stopping on trajectory tokens at inference time.
+Rationale captions are generated automatically using off-the-shelf Waymo perception/prediction models and Gemini prompting so no additional human labels required. 
+Prediction order of rationale versus trajectory does not significantly affect quality post-convergence, allowing early stopping on trajectory tokens at inference time.
 
 ![Table 1: CoT Reasoning Ablation](./figures/emma/emma-cotraining.png)
-*Table 1: Ablation on chain-of-thought components. Meta decision and critical object identification contribute the largest gains (+3.0% and +1.5%). Full CoT improves planning by +6.7%.*
-
+*Table 1: Ablation on chain-of-thought components. 
+Meta decision and critical object identification contribute the largest gains (+3.0% and +1.5%). 
+Full CoT improves planning by +6.7%.*
 
 ### 4.3 Generalist Multi-Task Training
 
-Three task families are co-trained via instruction tuning with task-specific prompts: **3D object detection** (7D bounding boxes sorted by depth), **road graph estimation** (lane polylines as BEV waypoints), and **scene understanding** (binary blockage detection). During each training iteration, batches are drawn from all task datasets simultaneously, with each dataset sampled at a frequency proportional to its size — so larger datasets like the 24M-sequence motion planning set naturally dominate training. Key road graph design choices — dynamic curvature-based waypoint sampling, ego-origin alignment, shuffled ordering, and padding — contribute **70–90% performance differences** on lane-level metrics, with language-like punctuation adding another ~10%.
+Three task families are co-trained via instruction tuning with task-specific prompts: **3D object detection** (7D bounding boxes sorted by depth), **road graph estimation** (lane polylines as BEV waypoints), and **scene understanding** (binary blockage detection). 
+During each training iteration, batches are drawn from all task datasets simultaneously, with each dataset sampled at a frequency proportional to its size — so larger datasets like the 24M-sequence motion planning set naturally dominate training. 
+Key road graph design choices — dynamic curvature-based waypoint sampling, ego-origin alignment, shuffled ordering, and padding — contribute **70–90% performance differences** on lane-level metrics, with language-like punctuation adding another ~10%.
 
 ![Figure 2: EMMA Generalist Illustration](./figures/emma/generalist-emma.png)
 *Figure 2: Task-specific prompts (left) drive EMMA to produce text predictions (middle) decoded into structured outputs and visualized on input images (right), across motion planning, 3D detection, road graph estimation, and scene understanding Q&A.*
@@ -499,21 +521,24 @@ Three task families are co-trained via instruction tuning with task-specific pro
 | **Internal Detection** | **6,250** | **11,765,140** |
 | **Internal Road Graph** | **64,135** | **8,304,671** |
 
-The internal motion planning dataset is ~355× larger than WOMD, comprising 30-second real-world clips sampled at one frame per scenario. This scale is the primary driver of EMMA+ performance.
+The internal motion planning dataset is ~355× larger than WOMD, comprising 30-second real-world clips sampled at one frame per scenario. 
+This scale is the primary driver of EMMA+ performance.
 
 ### 5.2 Evaluation Metrics
 
 - **Planning:** L2 displacement error (meters) at 1s, 2s/3s, and 5s horizons. Multiple trajectory sampling used on WOMD (Top-K up to K=24, selecting the "median" trajectory); single top-1 on nuScenes.
 - **3D Detection:** LET-3D-AP\[13\] precision/recall and F1-score on WOD camera-primary benchmark.
 - **Road Graph:** Lane-level and pixel-level precision/recall.
-- **Scene Understanding:** Accuracy vs. human baseline on blockage detection.
+- **Scene Understanding:** Accuracy versus human baseline on blockage detection.
 
 ### 5.3 Main Performance Results
 
-**nuScenes** — EMMA: **0.32m avg L2** (self-supervised), outperforming all prior self-supervised methods (BEV-Planner: 0.35m)\[6\] and supervised methods (OmniDrive: 0.33m, despite HD-map labels). EMMA (random init): 0.37m, confirming Gemini pre-training weights drive the advantage. EMMA+: **0.29m**.
+**nuScenes** — EMMA: **0.32m avg L2** (self-supervised), outperforming all prior self-supervised methods (BEV-Planner: 0.35m)\[6\] and supervised methods (OmniDrive: 0.33m, despite HD-map labels). 
+EMMA (random init): 0.37m, confirming Gemini pre-training weights drive the advantage. EMMA+: **0.29m**.
 
 ![Table 2: nuScenes Planning Results](./figures/emma/nuscenes-results.png)
-*Table 2: End-to-end motion planning on nuScenes. EMMA and EMMA+ achieve state-of-the-art, outperforming all prior supervised and self-supervised methods.*
+*Table 2: End-to-end motion planning on nuScenes. 
+EMMA and EMMA+ achieve state-of-the-art, outperforming all prior supervised and self-supervised methods.*
 
 **WOMD** — EMMA+ (w/ CoT): **0.027 / 0.203 / 0.543m at 1s/3s/5s**, outperforming MotionLM (0.696m at 5s) and Wayformer (0.628m at 5s) by 13.5–22.5%, while those baselines consume LiDAR-derived agent boxes, HD maps, and traffic light states as input.
 
@@ -523,20 +548,26 @@ The internal motion planning dataset is ~355× larger than WOMD, comprising 30-s
 **WOD 3D Detection** — EMMA+: F1 **0.85** for vehicles (BEVFormer F1-max: 0.82), achieving **16.3% relative improvement in vehicle precision** at the same recall.
 
 ![Figure 3: 3D Detection Precision-Recall Curves](./figures/emma/emma_improved_detection.png)
-*Figure 3: Camera-primary 3D detection on WOD using LET matching. EMMA+ achieves 16.3% relative improvement in vehicle precision at the same recall vs. BEVFormer.*
+*Figure 3: Camera-primary 3D detection on WOD using LET matching. 
+EMMA+ achieves 16.3% relative improvement in vehicle precision at the same recall versus BEVFormer.*
 
 ### 5.4 Data Scaling & Generalist Co-Training
 
 **Scaling:** Evaluation perplexity decreases monotonically with dataset size (3%→100% of internal data); performance has **not saturated at full scale**, consistent with neural scaling laws.
 
 ![Figure 4: Data Scaling Curves](./figures/emma/emma-data-scaling.png)
-*Figure 4: Eval perplexity for end-to-end planning vs. training FLOPs at four dataset sizes (3%–100% of internal 24M dataset). Performance has not saturated at full scale.*
+*Figure 4: Eval perplexity for end-to-end planning versus training FLOPs at four dataset sizes (3%–100% of internal 24M dataset). 
+Performance has not saturated at full scale.*
 
-**Co-training gains:** Detection + planning: +2.4% detection, +1.6% planning. Road graph + planning: +3.5% road graph, +1.4% planning. All three together: **+5.5% detection, +2.4% road graph, +1.4% planning** vs. single-task specialists. Planning is the dominant anchor — detection + road graph without planning yields −1.4% planning.
+**Co-training gains:** Detection + planning: +2.4% detection, +1.6% planning. 
+Road graph + planning: +3.5% road graph, +1.4% planning. 
+All three together: **+5.5% detection, +2.4% road graph, +1.4% planning** versus single-task specialists. 
+Planning is the dominant anchor — detection + road graph without planning yields −1.4% planning.
 
 
 ![Table 4: Generalist Co-Training Results](./figures/emma emma-cotraining-experiments.png)
-*Table 4: Co-training across all three tasks yields the best results, outperforming single-task specialist models by up to +5.5%. Planning is the dominant anchor task — co-training detection and road graph without it yields −1.4% planning performance.*
+*Table 4: Co-training across all three tasks yields the best results, outperforming single-task specialist models by up to +5.5%. 
+Planning is the dominant anchor task — co-training detection and road graph without it yields −1.4% planning performance.*
 
 ---
 
@@ -544,15 +575,23 @@ The internal motion planning dataset is ~355× larger than WOMD, comprising 30-s
 
 ### 6.1 The Precision Gap
 
-EMMA outputs continuous BEV waypoints as plain-text floating-point pairs discretized to two decimal places — an inherent quantization cost of the unified language representation. More critically, EMMA is **camera-only**: detection performance degrades sharply beyond 30m (F1: 0.93 at 0–30m vs. 0.73 at 50m+), precisely where objects must be detected earliest at highway speeds. The tradeoff is generalizability and simplicity vs. inherent depth precision.
+EMMA outputs continuous BEV waypoints as plain-text floating-point pairs discretized to two decimal places, an inherent quantization cost of the unified language representation. 
+More critically, EMMA is **camera-only**: detection performance degrades sharply beyond 30m (F1: 0.93 at 0–30m versus 0.73 at 50m+), precisely where objects must be detected earliest at highway speeds. 
+The tradeoff is generalizability and simplicity versus inherent depth precision.
 
 ### 6.2 Benchmark Critique
 
-The paper explicitly acknowledges **nuScenes' limitations**: collision-rate metrics are sensitive to BEV grid resolution, and many scenarios can be trivially solved by ego-status extrapolation. The random-init ablation partially addresses this, but the more fundamental issue is that all evaluation is **open-loop** — predictions are scored against logged ground-truth without interactive feedback. Open-loop performance is a necessary but not sufficient condition for safe deployment. The paper identifies NAVSIM\[10\] and realistic sensor simulation as potential paths forward.
+The paper explicitly acknowledges **nuScenes' limitations**: collision-rate metrics are sensitive to BEV grid resolution, and many scenarios can be trivially solved by ego-status extrapolation. 
+The random-init ablation partially addresses this, but the more fundamental issue is that all evaluation is **open-loop** — predictions are scored against logged ground-truth without interactive feedback. 
+Open-loop performance is a necessary but not sufficient condition for safe deployment. 
+The paper identifies NAVSIM\[10\] and realistic sensor simulation as potential paths forward.
 
 ### 6.3 "Generalist World Model" Claim
 
-EMMA shows a co-trained single model can match or surpass specialist models across three tasks simultaneously, suggesting the joint visual representation encodes a more complete scene model. However, the paper concedes there is "no guarantee that these outputs will be always consistent." When trajectory and detection outputs contradict each other (i.e. stopping for an agent that was never detected) there is no way to verify the model's reasoning. The paper acknowledges this risk but provides no metric to measure how often it occurs.
+EMMA shows a co-trained single model can match or surpass specialist models across three tasks simultaneously, suggesting the joint visual representation encodes a more complete scene model. 
+However, the paper concedes there is "no guarantee that these outputs will be always consistent." 
+When trajectory and detection outputs contradict each other (for example, stopping for an agent that was never detected) there is no way to verify the model's reasoning. 
+The paper acknowledges this risk but provides no metric to measure how often it occurs.
 
 ---
 
@@ -560,19 +599,26 @@ EMMA shows a co-trained single model can match or surpass specialist models acro
 
 ### 7.1 Load-Bearing Assumptions
 
-1. **Pre-training transfer is the performance driver, not scale alone.** EMMA's gains could come from Gemini's world knowledge or its 24M proprietary dataset. The paper tests them together, so their individual contributions can't be separated.
+1. **Pre-training transfer is the performance driver, not scale alone.** 
+EMMA's gains could come from Gemini's world knowledge or its 24M proprietary dataset. 
+The paper tests them together, so their individual contributions can't be separated.
 
-2. **Text coordinate representation is sufficient for safe planning.** Waypoints are generated token-by-token like prose. Small systematic errors may average out in L2 but still cause dangerous local failures (e.g. a stopping line).
+2. **Text coordinate representation is sufficient for safe planning.** Waypoints are generated token-by-token like prose. 
+Small systematic errors may average out in L2 but still cause dangerous local failures (e.g. a stopping line).
 
-3. **Self-supervised trajectory labels are sufficient to learn perception.** Only trained on ego waypoints — no perception labels. The model may be pattern-matching scenes rather than genuinely reconstructing them geometrically.
+3. **Self-supervised trajectory labels are sufficient to learn perception.** Only trained on ego waypoints, no perception labels. 
+The model may be pattern-matching scenes rather than genuinely reconstructing them geometrically.
 
-4. **Open-loop performance transfers to closed-loop behavior.** The broadest and most critical assumption — entirely unvalidated empirically.
+4. **Open-loop performance transfers to closed-loop behavior.** The broadest and most critical assumption, entirely unvalidated empirically.
 
 ### 7.2 Reproducibility Assessment
 
 **Pros:** Clear input/output formulation; concrete prompts and model answers in Appendix A.4; thorough ablations on CoT, data scaling, road graph design choices, and co-training; public benchmark results reproducible in principle.
 
-**Gaps:** Internal Waymo 24M-sequence dataset unavailable externally — EMMA+ is unreproducible. Gemini weights are proprietary **(PaLI-X variant non-trivially underperforms: 0.680m vs. 0.543m at WOMD 5s)**. Inference latency and memory footprint not systematically reported. Multi-task output consistency not measured despite acknowledged risk.
+**Gaps:** Internal Waymo 24M-sequence dataset unavailable externally — EMMA+ is unreproducible. 
+Gemini weights are proprietary **(PaLI-X variant non-trivially underperforms: 0.680m versus 0.543m at WOMD 5s)**. 
+Inference latency and memory footprint not systematically reported. 
+Multi-task output consistency not measured despite acknowledged risk.
 
 ### 7.3 Failure Modes
 
@@ -585,44 +631,48 @@ EMMA shows a co-trained single model can match or surpass specialist models acro
 3. **Road graph failures on degraded visual cues.** (Figure 12) EMMA misses an upcoming lane merge due to a worn painted arrow.
 - **Risk**: Trajectory violations at merge points.
 
-4. **Insufficient lateral clearance in proximity.** (Figure 12) Suboptimal offset from a nearby motorbike — acceptable in aggregate but locally unsafe.
+4. **Insufficient lateral clearance in proximity.** (Figure 12) Suboptimal offset from a nearby motorbike => acceptable in aggregate but locally unsafe.
 
 5. **Closed-loop error compounding.** The central known risk of behavior cloning: systematic trajectory biases accumulate into out-of-distribution states not seen during training.
 
 ### 7.4 The Next 10,000 GPU-hour Experiment
 
-**Experiment A — "Closed-Loop Stability via Sensor Simulation"** </br>
+**Experiment A — "Closed-Loop Stability via Sensor Simulation"** <br />
 Leverage neural scene reconstruction (NeRF/Gaussian Splatting) to generate novel camera observations from perturbed ego states, enabling reactive closed-loop evaluation without a full physical simulator.
 - **Metrics**: Closed-loop L2, hard-braking rate, near-miss rate (TTC < threshold), out-of-lane-boundary rate over 30-second episodes. 
 - **Success**: Closed-loop rankings consistent with open-loop, or failure modes that directly inform the next architectural iteration.
 
-**Experiment B — "Multi-Task Output Consistency Verification"** </br>
+**Experiment B — "Multi-Task Output Consistency Verification"** <br />
 Define a consistency oracle: if a bounding box is predicted at $(x, y, \theta)$, the trajectory should respect that agent's right-of-way; if the road graph predicts a merge in 40m, the trajectory should respond within that horizon. Run on the full nuScenes validation set.
 - **Success**: Consistency failure rate < 5% for safety-critical classes, or inconsistencies used to build a consistency-regularized training objective.
 
 ### 7.5 Sign-Off Criteria
 
-- **Sign off for research adoption:** Yes — strong evidence that MLLM fine-tuning with self-supervised trajectory objectives achieves state-of-the-art open-loop planning while improving perception tasks. Co-training results and CoT ablations support genuine scene understanding. Unsaturated scaling curves indicate continued ROI on data and compute.
+- **Sign off for research adoption:** Yes — strong evidence that MLLM fine-tuning with self-supervised trajectory objectives achieves state-of-the-art open-loop planning while improving perception tasks. 
+Co-training results and CoT ablations support genuine scene understanding. 
+Unsaturated scaling curves indicate continued ROI on data and compute.
 
-- **Sign off for production readiness:** Conditional No — missing closed-loop validation, no LiDAR integration, no formal multi-task consistency guarantee, and non-trivial inference latency (3 FPS optimized vs. ~20 FPS required). The path exists but requires: (1) closed-loop evaluation infrastructure, (2) LiDAR/radar fusion, (3) latency optimization, (4) formal consistency verification.
+- **Sign off for production readiness:** 
+Conditional No — missing closed-loop validation, no LiDAR integration, no formal multi-task consistency guarantee, and non-trivial inference latency (3 FPS optimized versus ~20 FPS required). 
+The path exists but requires: (1) closed-loop evaluation infrastructure, (2) LiDAR/radar fusion, (3) latency optimization, (4) formal consistency verification.
 
 ---
 
 ## References
 
-\[1\] EMMA: Hwang et al., TMLR 07/2025. </br>
-\[2\] Gemini: Gemini Team Google, arXiv 2023. </br>
-\[3\] PaLI-X: Chen et al., CVPR 2024.  </br>
-\[4\] MotionLM: Seff et al., ICCV 2023.  </br>
-\[5\] Wayformer: Nayakanti et al., ICRA 2023.  </br>
-\[6\] BEV-Planner: Li et al., CVPR 2024.  </br>
-\[7\] OmniDrive: Wang et al., arXiv 2024.  </br>
-\[8\] UniAD: Hu et al., CVPR 2023.  </br>
-\[9\] Pix2Seq: Chen et al., ICLR 2022.  </br>
-\[10\] NAVSIM: Dauner et al., NeurIPS 2024.  </br>
-\[11\] CoT: Wei et al., NeurIPS 2022.  </br>
-\[12\] AD-MLP: Zhai et al., arXiv 2023.  </br>
-\[13\] LET-3D-AP: Hung et al., ICRA 2024. </br>
+\[1\] EMMA: Hwang et al., TMLR 07/2025. <br />
+\[2\] Gemini: Gemini Team Google, arXiv 2023. <br />
+\[3\] PaLI-X: Chen et al., CVPR 2024.  <br />
+\[4\] MotionLM: Seff et al., ICCV 2023.  <br />
+\[5\] Wayformer: Nayakanti et al., ICRA 2023.  <br />
+\[6\] BEV-Planner: Li et al., CVPR 2024.  <br />
+\[7\] OmniDrive: Wang et al., arXiv 2024.  <br />
+\[8\] UniAD: Hu et al., CVPR 2023.  <br />
+\[9\] Pix2Seq: Chen et al., ICLR 2022.  <br />
+\[10\] NAVSIM: Dauner et al., NeurIPS 2024.  <br />
+\[11\] CoT: Wei et al., NeurIPS 2022.  <br />
+\[12\] AD-MLP: Zhai et al., arXiv 2023.  <br />
+\[13\] LET-3D-AP: Hung et al., ICRA 2024. <br />
 
 ---
 
@@ -747,7 +797,8 @@ The paper includes a runtime comparison that illustrates this directly:
 
 ## 4. Training Method & Objective Deep-Dive
 
-AR1 is explicitly staged rather than “train everything end-to-end once.” The motivation is that they want:
+AR1 is explicitly staged rather than “train everything end-to-end once.”
+The motivation is that they want:
 - strong perception + physical priors,
 - controllable action decoding,
 - then structured reasoning,
