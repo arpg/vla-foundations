@@ -1,7 +1,7 @@
 # Technical Paper Audit: Alpamayo-R1
 
 **Title**: Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail  
-**Authors**: (as listed in the paper)  
+**Authors**: Nvidia  
 **Audit Author**: Aritra  
 **Paper**: Alpamayo-R1 (NVIDIA, 2026)  
 **Topic**: Autonomous Driving
@@ -211,12 +211,12 @@ The key technical point is that CoC is *decision-grounded*:
 
 AR1 training uses a large internal driving corpus and a dedicated reasoning corpus.
 
-**Driving corpus (\(\mathcal{D}_{overall}\))** (as described in the paper):
+**Driving corpus ($\mathcal{D}_{overall}$)** (as described in the paper):
 - ~**80,000 hours** of driving,
 - spanning **>2,500 cities** across **25 countries**,
 - with geo-fenced evaluation to reduce leakage.
 
-**CoC reasoning corpus (\(\mathcal{D}_{CoC}\))**:
+**CoC reasoning corpus ($\mathcal{D}_{CoC}$)**:
 - ~**700K** video segments with CoC traces,
 - constructed via hybrid auto-labeling + human-in-the-loop.
 
@@ -372,4 +372,17 @@ The paper is persuasive on architecture and training, but a production safety ca
 
 ## References
 
-[1] *Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail*, NVIDIA, 2026.
+\[1\] Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Autonomous Driving in the Long Tail, NVIDIA, 2026.
+
+\[2\] Chain-of-Thought Prompting Elicits Reasoning in Large Language Models, arXiv 2022.
+
+\[3\] DeepSeek-R1: "Incentivizing Reasoning Capability in LLMs via Reinforcement Learning," arXiv 2025.
+
+\[4\] Training language models to follow instructions with human feedback, OpenAI, 2022.
+
+\[5\] DeepSeekMath: "DeepSeek-Math: Pushing the Limits of Mathematical Reasoning in Open Language Models," arXiv 2024.
+
+\[6\] Flow Matching for Generative Modeling, arXiv 2022.
+
+\[7\] Cosmos-Reason1: From Physical Common Sense To Embodied Reasoning, Nvidia, 2025.
+---
