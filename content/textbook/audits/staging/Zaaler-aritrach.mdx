@@ -459,7 +459,7 @@ The complete planning formulation is $O_{trajectory} = \mathcal{G}(T_{intent}, T
 EMMA uses direct floating-point text for coordinates rather than learned discretization (compared with MotionLM)\[4\]. 
 This maximally reuses pre-trained weights at the cost of more output tokens per coordinate.
 
-![Figure 1: EMMA Overview Diagram](./figures/emma/emma-architecture.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/emma-architecture.png" alt="Figure 1: EMMA Overview Diagram" width="900" />
 *Figure 1: EMMA takes 3 inputs (surround-view cameras, high-level command, historical ego status) and outputs future trajectories along with optional chain-of-thought rationale and perception outputs.*
 
 ### 3.2 Base Model Choice
@@ -496,7 +496,7 @@ EMMA predicts a four-component **driving rationale** before outputting waypoints
 Rationale captions are generated automatically using off-the-shelf Waymo perception/prediction models and Gemini prompting so no additional human labels required. 
 Prediction order of rationale versus trajectory does not significantly affect quality post-convergence, allowing early stopping on trajectory tokens at inference time.
 
-![Table 1: CoT Reasoning Ablation](./figures/emma/emma-cotraining.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/emma-cotraining.png" alt="Table 1: CoT Reasoning Ablation" width="900" />
 *Table 1: Ablation on chain-of-thought components. 
 Meta decision and critical object identification contribute the largest gains (+3.0% and +1.5%). 
 Full CoT improves planning by +6.7%.*
@@ -507,7 +507,7 @@ Three task families are co-trained via instruction tuning with task-specific pro
 During each training iteration, batches are drawn from all task datasets simultaneously, with each dataset sampled at a frequency proportional to its size — so larger datasets like the 24M-sequence motion planning set naturally dominate training. 
 Key road graph design choices — dynamic curvature-based waypoint sampling, ego-origin alignment, shuffled ordering, and padding — contribute **70–90% performance differences** on lane-level metrics, with language-like punctuation adding another ~10%.
 
-![Figure 2: EMMA Generalist Illustration](./figures/emma/generalist-emma.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/generalist-emma.png" alt="Figure 2: EMMA Generalist Illustration" width="900" />
 *Figure 2: Task-specific prompts (left) drive EMMA to produce text predictions (middle) decoded into structured outputs and visualized on input images (right), across motion planning, 3D detection, road graph estimation, and scene understanding Q&A.*
 
 ---
@@ -540,18 +540,18 @@ This scale is the primary driver of EMMA+ performance.
 **nuScenes** — EMMA: **0.32m avg L2** (self-supervised), outperforming all prior self-supervised methods (BEV-Planner: 0.35m)\[6\] and supervised methods (OmniDrive: 0.33m, despite HD-map labels). 
 EMMA (random init): 0.37m, confirming Gemini pre-training weights drive the advantage. EMMA+: **0.29m**.
 
-![Table 2: nuScenes Planning Results](./figures/emma/nuscenes-results.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/nuscenes-results.png" alt="Table 2: nuScenes Planning Results" width="900" />
 *Table 2: End-to-end motion planning on nuScenes. 
 EMMA and EMMA+ achieve state-of-the-art, outperforming all prior supervised and self-supervised methods.*
 
 **WOMD** — EMMA+ (w/ CoT): **0.027 / 0.203 / 0.543m at 1s/3s/5s**, outperforming MotionLM (0.696m at 5s) and Wayformer (0.628m at 5s) by 13.5–22.5%, while those baselines consume LiDAR-derived agent boxes, HD maps, and traffic light states as input.
 
-![Table 3: WOMD Planning Results](./figures/emma/womd-results.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/womd-results.png" alt="Table 3: WOMD Planning Results" width="900" />
 *Table 3: End-to-end motion planning on WOMD. EMMA+ (w/ CoT) achieves best quality across all time horizons, outperforming MotionLM\[4\] and Wayformer\[5\] by 13.5–22.5% at the 5-second horizon.*
 
 **WOD 3D Detection** — EMMA+: F1 **0.85** for vehicles (BEVFormer F1-max: 0.82), achieving **16.3% relative improvement in vehicle precision** at the same recall.
 
-![Figure 3: 3D Detection Precision-Recall Curves](./figures/emma/emma_improved_detection.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/emma_improved_detection.png" alt="Figure 3: 3D Detection Precision-Recall Curves" width="900" />
 *Figure 3: Camera-primary 3D detection on WOD using LET matching. 
 EMMA+ achieves 16.3% relative improvement in vehicle precision at the same recall versus BEVFormer.*
 
@@ -559,7 +559,7 @@ EMMA+ achieves 16.3% relative improvement in vehicle precision at the same recal
 
 **Scaling:** Evaluation perplexity decreases monotonically with dataset size (3%→100% of internal data); performance has **not saturated at full scale**, consistent with neural scaling laws.
 
-![Figure 4: Data Scaling Curves](./figures/emma/emma-data-scaling.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/emma-data-scaling.png" alt="Figure 4: Data Scaling Curves" width="900" />
 *Figure 4: Eval perplexity for end-to-end planning versus training FLOPs at four dataset sizes (3%–100% of internal 24M dataset). 
 Performance has not saturated at full scale.*
 
@@ -569,7 +569,7 @@ All three together: **+5.5% detection, +2.4% road graph, +1.4% planning** versus
 Planning is the dominant anchor — detection + road graph without planning yields −1.4% planning.
 
 
-![Table 4: Generalist Co-Training Results](./figures/emma emma-cotraining-experiments.png)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/audit/Zaaler-aritrach-autonomous-driving/content/textbook/audits/staging/figures/emma/emma-cotraining-experiments.png" alt="Table 4: Generalist Co-Training Results" width="900" />
 *Table 4: Co-training across all three tasks yields the best results, outperforming single-task specialist models by up to +5.5%. 
 Planning is the dominant anchor task — co-training detection and road graph without it yields −1.4% planning performance.*
 
