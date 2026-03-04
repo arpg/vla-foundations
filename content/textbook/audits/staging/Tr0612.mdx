@@ -288,7 +288,7 @@ The “/” entries indicate that certain baseline models do not produce languag
   
   - OCR: 3.58/4
   - Math reasoning: 1.73/2
-  - 43/52 success rate (82.7%) -->
+  - 43/52 success rate (82.7%) 
     
 Performance gap appears only in open-world scenarios, showing preserved reasoning under distribution shift. */}
 
@@ -653,10 +653,10 @@ ForceVLA was trained on compute nodes equipped with:
 
 - Optimizer: **Adam**
 
-<!-- 
+{/* 
   * $$\beta_1 = 0.9, \quad \beta_2 = 0.95$$
 * Peak learning rate: $$2.5 \times 10^{-5}$$
-* Decayed to: $$2.5 \times 10^{-6}$$ -->
+* Decayed to: $$2.5 \times 10^{-6}$$ */}
 
 - Total training steps:
   
@@ -677,7 +677,7 @@ ForceVLA was trained on compute nodes equipped with:
 ---
 
 TODO: Should I include the dataset details they collected
-<!-- ### Dataset Details (ForceVLA-Data)
+{/* ### Dataset Details (ForceVLA-Data)
 
 A new dataset was collected specifically for **contact-rich manipulation**, emphasizing synchronized:
 
@@ -709,7 +709,7 @@ Actions are represented as the target TCP pose and gripper width, and all sensor
   - Whiteboard wiping
   - Cucumber peeling
 
-Object positions and orientations were varied to increase diversity. -->
+Object positions and orientations were varied to increase diversity. */}
 
 ---
 ### Evaluation
@@ -724,14 +724,14 @@ Task success rates are shown in **Figure **.
 
 As illustrated in Figure , ForceVLA achieves the highest overall average success rate (**60.5%**), outperforming π0-base without force (**37.3%**) and π0-base with direct force input (**40.2%**), yielding a **23.2% improvement**.
 
-<!-- Across individual tasks, ForceVLA achieves:
+{/* Across individual tasks, ForceVLA achieves:
 
 * **80%** on Insert Plug
 * **67%** on Pump Bottle
 * **64%** on Wipe Board (motion)
 * **27%** on Wipe Board (full erase)
 * **100%** on Peel Cucumber
-* **25%** on Insert USB -->
+* **25%** on Insert USB */}
 
 In contrast, π0-fast shows instability when naive force is added (average drops to **14.2%**), indicating sensitivity to direct force concatenation. 
 While π0-base benefits modestly from force input, it remains substantially below ForceVLA across most tasks.
@@ -783,9 +783,9 @@ However, in contact-rich manipulation, hardware constraints may fundamentally li
 
    - Can the model generalize to new materials or objects with different stiffness or compliance?
 
-<!-- 4. **MoE Routing Dependence**
+{/* 4. **MoE Routing Dependence**
    - Is performance tightly coupled to routing behavior learned under specific sensing conditions?
-   - Could routing instability under noisy force input degrade control smoothness? -->
+   - Could routing instability under noisy force input degrade control smoothness? */}
 
 ### Reproducibility
 
@@ -829,7 +829,7 @@ Taken together, these findings imply that scaling experts in MoE architectures m
 3. AdaMoE
 
 TODO: Complete the Table
-<!-- 
+{/* 
 Possible axes:
 
 | Pattern                    | Example   | What it affects               |
@@ -838,7 +838,7 @@ Possible axes:
 | Dual gating                | FedVLA    | heterogeneity specialization  |
 | Force/physics gating       | ForceVLA  | multimodal physical signals   |
 | Static / fixed routing     | DriveMoE  | efficiency bias               |
-| Action-specialized experts | AdaMoE    | skill modularization          | -->
+| Action-specialized experts | AdaMoE    | skill modularization          | */}
 
 ---
 
@@ -846,30 +846,41 @@ Possible axes:
 
 [1] R. A. Jacobs et al., "Adaptive Mixtures of Local Experts," *Neural Computation*, vol. 3, no. 1, pp. 79–87, 1991.
 
-[2] N. Shazeer et al., "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer," arXiv:1701.06538 [cs.LG], 2017. [Online]. Available: https://arxiv.org/abs/1701.06538
+[2] N. Shazeer et al., "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer," arXiv:1701.06538 [cs.LG], 2017. 
+[Online]. Available: https://arxiv.org/abs/1701.06538
 
-[3] W. Fedus et al., "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity," arXiv:2101.03961 [cs.LG], 2021. [Online]. Available: https://arxiv.org/abs/2101.03961
+[3] W. Fedus et al., "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity," arXiv:2101.03961 [cs.LG], 2021. 
+[Online]. Available: https://arxiv.org/abs/2101.03961
 
-[4] C. Riquelme et al., "Scaling Vision with Sparse Mixture of Experts," arXiv:2106.05974, 2021. [Online]. Available: https://arxiv.org/abs/2106.05974
+[4] C. Riquelme et al., "Scaling Vision with Sparse Mixture of Experts," arXiv:2106.05974, 2021. 
+[Online]. Available: https://arxiv.org/abs/2106.05974
 
-[5] S. Rajbhandari et al., "DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale," arXiv:2201.05596, 2022. [Online]. Available: https://arxiv.org/abs/2201.05596
+[5] S. Rajbhandari et al., "DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale," arXiv:2201.05596, 2022. 
+[Online]. Available: https://arxiv.org/abs/2201.05596
 
-[6] D. Dai et al., "DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models," arXiv:2401.06066 [cs.CL], 2024. [Online]. Available: https://arxiv.org/abs/2401.06066
+[6] D. Dai et al., "DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models," arXiv:2401.06066 [cs.CL], 2024. 
+[Online]. Available: https://arxiv.org/abs/2401.06066
 
-[7] M. J. Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model," arXiv:2406.09246, 2024. [Online]. Available: https://arxiv.org/abs/2406.09246
+[7] M. J. Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model," arXiv:2406.09246, 2024. 
+[Online]. Available: https://arxiv.org/abs/2406.09246
 
-[8] J. Wen et al., "DexVLA: Vision-Language Model with Plug-In Diffusion Expert for General Robot Control," arXiv:2502.05855, 2025. [Online]. Available: https://arxiv.org/abs/2502.05855
+[8] J. Wen et al., "DexVLA: Vision-Language Model with Plug-In Diffusion Expert for General Robot Control," arXiv:2502.05855, 2025. 
+[Online]. Available: https://arxiv.org/abs/2502.05855
 
-[9] Z. Zhou et al., "ChatVLA-2: Vision-Language-Action Model with Open-World Embodied Reasoning from Pretrained Knowledge," arXiv:2505.21906 [cs.RO], 2025. [Online]. Available: https://arxiv.org/abs/2505.21906
+[9] Z. Zhou et al., "ChatVLA-2: Vision-Language-Action Model with Open-World Embodied Reasoning from Pretrained Knowledge," arXiv:2505.21906 [cs.RO], 2025. 
+[Online]. Available: https://arxiv.org/abs/2505.21906
 
-[10] J. Yu et al., "ForceVLA: Enhancing VLA Models with a Force-aware MoE for Contact-rich Manipulation," arXiv:2505.22159 [cs.RO], 2025. [Online]. Available: https://arxiv.org/abs/2505.22159
+[10] J. Yu et al., "ForceVLA: Enhancing VLA Models with a Force-aware MoE for Contact-rich Manipulation," arXiv:2505.22159 [cs.RO], 2025. 
+[Online]. Available: https://arxiv.org/abs/2505.22159
 
-[11] K. Black et al., "π₀: A Vision-Language-Action Flow Model for General Robot Control," arXiv:2410.24164 [cs.LG], 2024. [Online]. Available: https://arxiv.org/abs/2410.24164
+[11] K. Black et al., "π₀: A Vision-Language-Action Flow Model for General Robot Control," arXiv:2410.24164 [cs.LG], 2024. 
+[Online]. Available: https://arxiv.org/abs/2410.24164
 
 [12] D. Lepikhin et al., "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding," arXiv:2006.16668 [cs.CL], 2020. 
 [Online]. Available: https://arxiv.org/abs/2006.16668
 
-[13] S. Jelassi et al., "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," arXiv:2410.19034 [cs.LG], 2024. [Online]. Available: https://arxiv.org/abs/2410.19034
+[13] S. Jelassi et al., "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," arXiv:2410.19034 [cs.LG], 2024. 
+[Online]. Available: https://arxiv.org/abs/2410.19034
 
 # ToDo
 
