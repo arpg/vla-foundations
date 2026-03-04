@@ -75,7 +75,7 @@ It arises one central question:
 
 ## Architectural Decisions
 
-TODO : Summarise the architecture including Backbone and why that backbone.
+TODO : add about the Backbone and why that backbone.
 
 **Where is MoE applied ?**
 
@@ -93,7 +93,7 @@ This reflects an assumption:
 
 ---
 
-**Why Dynamic Routing**
+**Why Dynamic Routing ?**
 
 Static expert assignment risks:
 
@@ -144,7 +144,7 @@ This raises a couple of question:
 
 ---
 
-**The Interface It Defines**
+**Interface Design and Assumptions**
 
 ChatVLA-2 implicitly defines a three-part boundary:
 
@@ -498,9 +498,7 @@ TODO: Compare this architecture with other Contact related model
    - This produces a **dedicated force token** aligned to the VLM embedding dimension.
 3. **Token Concatenation**
    - The force token is appended to the visual-language tokens:
-     $$
-     E_{in} = [E_{VL}; E_F]
-     $$
+     $E_{in} = [E_{VL}; E_F]$
    - Importantly, force is injected **after** the VLM encoder to preserve pretrained representations (validated via ablation studies).
 
 ### Architecture of FVLMoE: Force-Aware Mixture-of-Experts
