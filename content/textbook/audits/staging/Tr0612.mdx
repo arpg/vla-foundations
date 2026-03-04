@@ -768,7 +768,7 @@ I would not sign this system off for real-world deployment without additional va
 
 Across the audited papers, I observed substantial variation in the number of experts used in MoE-based architectures. Although ChatVLA reports performance differences for different number of experts , this raises a question: does increasing the number of experts genuinely improve reasoning, especially when computational overhead is not a constraint?
 
-Mixture of Parrots paper [14] directly address this issue. Their work shows that MoE models exhibit fundamentally different scaling dynamics for memorization and reasoning tasks, leading to two important conclusions.
+Mixture of Parrots paper [13] directly address this issue. Their work shows that MoE models exhibit fundamentally different scaling dynamics for memorization and reasoning tasks, leading to two important conclusions.
 
 First, reasoning performance depends on hidden dimension (width), not merely the number of experts. In their study of graph reasoning problems such as connectivity and shortest path, they prove that a sparse MoE Transformer cannot solve certain tasks unless its hidden dimension exceeds a critical threshold. *Simply increasing the number of experts does not overcome insufficient width*. By contrast, a dense Transformer with slightly greater width can successfully solve these same tasks. This suggests that reasoning capacity is tied to active representational bandwidth rather than total distributed parameters.
 
@@ -818,11 +818,11 @@ Possible axes:
 
 [10] ForceVLA Authors, "ForceVLA: Force-Aware Vision-Language-Action Models with Mixture-of-Experts," arXiv, 2025.
 
-[11] ChatVLA-2 Authors, "ChatVLA-2: Dynamic Mixture-of-Experts for Vision-Language-Action Models," arXiv:2410.24164 [cs.LG], 2024. [Online]. Available: https://arxiv.org/abs/2410.24164
+[11] K. Black, N. Brown, D. Driess, A. Esmail, M. Equi, C. Finn, N. Fusai, L. Groom, K. Hausman, B. Ichter, S. Jakubczak, T. Jones, L. Ke, S. Levine, A. Li-Bell, M. Mothukuri, S. Nair, K. Pertsch, L. X. Shi, J. Tanner, Q. Vuong, A. Walling, H. Wang, and U. Zhilinsky, "π₀: A Vision-Language-Action Flow Model for General Robot Control," arXiv:2410.24164 [cs.LG], 2024. [Online]. Available: https://arxiv.org/abs/2410.24164
 
-[13] D. Lepikhin et al., "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding," arXiv:2006.16668 [cs.CL], 2020. [Online]. Available: https://arxiv.org/abs/2006.16668
+[12] D. Lepikhin et al., "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding," arXiv:2006.16668 [cs.CL], 2020. [Online]. Available: https://arxiv.org/abs/2006.16668
 
-[14] S. Jelassi, C. Mohri, D. Brandfonbrener, A. Gu, N. Vyas, N. Anand, D. Alvarez-Melis, Y. Li, S. M. Kakade, and E. Malach, "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," arXiv:2410.19034 [cs.LG], 2024. [Online]. Available: https://arxiv.org/abs/2410.19034
+[13] S. Jelassi, C. Mohri, D. Brandfonbrener, A. Gu, N. Vyas, N. Anand, D. Alvarez-Melis, Y. Li, S. M. Kakade, and E. Malach, "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," arXiv:2410.19034 [cs.LG], 2024. [Online]. Available: https://arxiv.org/abs/2410.19034
 
 # ToDo
 
