@@ -58,11 +58,15 @@ I also discuss whether the added design complexity is justified by the observed 
 | 2022–2024 | Routing refinements, deployment systems | Multi-task & multimodal MoE      |
 | Today     | Core LLM infrastructure                 | Efficient large-scale perception |
 
-Mixture-of-Experts (MoE) originated as an ensemble-based neural network technique introduced by Jacobs et al. (1991) [1], where a gating network dynamically selects among multiple expert subnetworks. 
-Its modern resurgence began with the sparsely gated MoE layer proposed by Noam Shazeer et al. (2017) [2], which enabled conditional computation in deep transformers by activating only a small subset of experts per token. 
+Mixture-of-Experts (MoE) originated as an ensemble-based neural network technique introduced by Jacobs et al. 
+(1991) [1], where a gating network dynamically selects among multiple expert subnetworks. 
+Its modern resurgence began with the sparsely gated MoE layer proposed by Noam Shazeer et al. 
+(2017) [2], which enabled conditional computation in deep transformers by activating only a small subset of experts per token. 
 This broke the tight coupling between parameter count and computation, allowing language models to scale to billions or trillions of parameters efficiently. 
-Subsequent works such as Switch Transformers [3] and systems like DeepSpeed-MoE [5] improved training stability, routing simplicity, and deployment efficiency, establishing MoE as a core scaling strategy in large language models. 
-The paradigm later extended to vision through Vision Mixture-of-Experts (V-MoE) [4], which integrated sparse expert routing into the Vision Transformer architecture, demonstrating that conditional computation can scale vision models to billions of parameters while preserving accuracy and reducing compute costs. 
+Subsequent works such as Switch Transformers [3] and systems like DeepSpeed-MoE [5] improved training stability, routing simplicity, and deployment efficiency, 
+establishing MoE as a core scaling strategy in large language models. 
+The paradigm later extended to vision through Vision Mixture-of-Experts (V-MoE) [4], which integrated sparse expert routing into the Vision Transformer architecture, 
+demonstrating that conditional computation can scale vision models to billions of parameters while preserving accuracy and reducing compute costs. 
 Collectively, these developments show MoE evolving from an ensemble method into a general architectural principle for scalable, efficient, and specialized modeling across language and vision.
 
 # Paper Audit: ChatVLA-2
@@ -844,42 +848,55 @@ Possible axes:
 
 # References
 
-[1] R. A. Jacobs et al., "Adaptive Mixtures of Local Experts," *Neural Computation*, vol. 3, no. 1, pp. 79–87, 1991.
+[1] R. A. Jacobs et al., "Adaptive Mixtures of Local Experts," 
+*Neural Computation*, vol. 3, no. 1, pp. 79–87, 1991.
 
-[2] N. Shazeer et al., "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer," arXiv:1701.06538 [cs.LG], 2017. 
+[2] N. Shazeer et al., "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer," 
+arXiv:1701.06538 [cs.LG], 2017. 
 [Online]. Available: https://arxiv.org/abs/1701.06538
 
-[3] W. Fedus et al., "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity," arXiv:2101.03961 [cs.LG], 2021. 
+[3] W. Fedus et al., "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity," 
+arXiv:2101.03961 [cs.LG], 2021. 
 [Online]. Available: https://arxiv.org/abs/2101.03961
 
-[4] C. Riquelme et al., "Scaling Vision with Sparse Mixture of Experts," arXiv:2106.05974, 2021. 
+[4] C. Riquelme et al., "Scaling Vision with Sparse Mixture of Experts," 
+arXiv:2106.05974, 2021. 
 [Online]. Available: https://arxiv.org/abs/2106.05974
 
-[5] S. Rajbhandari et al., "DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale," arXiv:2201.05596, 2022. 
+[5] S. Rajbhandari et al., "DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale," 
+arXiv:2201.05596, 2022. 
 [Online]. Available: https://arxiv.org/abs/2201.05596
 
-[6] D. Dai et al., "DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models," arXiv:2401.06066 [cs.CL], 2024. 
+[6] D. Dai et al., "DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models," 
+arXiv:2401.06066 [cs.CL], 2024. 
 [Online]. Available: https://arxiv.org/abs/2401.06066
 
-[7] M. J. Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model," arXiv:2406.09246, 2024. 
+[7] M. J. Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model," 
+arXiv:2406.09246, 2024. 
 [Online]. Available: https://arxiv.org/abs/2406.09246
 
-[8] J. Wen et al., "DexVLA: Vision-Language Model with Plug-In Diffusion Expert for General Robot Control," arXiv:2502.05855, 2025. 
+[8] J. Wen et al., "DexVLA: Vision-Language Model with Plug-In Diffusion Expert for General Robot Control," 
+arXiv:2502.05855, 2025. 
 [Online]. Available: https://arxiv.org/abs/2502.05855
 
-[9] Z. Zhou et al., "ChatVLA-2: Vision-Language-Action Model with Open-World Embodied Reasoning from Pretrained Knowledge," arXiv:2505.21906 [cs.RO], 2025. 
+[9] Z. Zhou et al., "ChatVLA-2: Vision-Language-Action Model with Open-World Embodied Reasoning from Pretrained Knowledge," 
+arXiv:2505.21906 [cs.RO], 2025. 
 [Online]. Available: https://arxiv.org/abs/2505.21906
 
-[10] J. Yu et al., "ForceVLA: Enhancing VLA Models with a Force-aware MoE for Contact-rich Manipulation," arXiv:2505.22159 [cs.RO], 2025. 
+[10] J. Yu et al., "ForceVLA: Enhancing VLA Models with a Force-aware MoE for Contact-rich Manipulation," 
+arXiv:2505.22159 [cs.RO], 2025. 
 [Online]. Available: https://arxiv.org/abs/2505.22159
 
-[11] K. Black et al., "π₀: A Vision-Language-Action Flow Model for General Robot Control," arXiv:2410.24164 [cs.LG], 2024. 
+[11] K. Black et al., "π₀: A Vision-Language-Action Flow Model for General Robot Control," 
+arXiv:2410.24164 [cs.LG], 2024. 
 [Online]. Available: https://arxiv.org/abs/2410.24164
 
-[12] D. Lepikhin et al., "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding," arXiv:2006.16668 [cs.CL], 2020. 
+[12] D. Lepikhin et al., "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding," 
+arXiv:2006.16668 [cs.CL], 2020. 
 [Online]. Available: https://arxiv.org/abs/2006.16668
 
-[13] S. Jelassi et al., "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," arXiv:2410.19034 [cs.LG], 2024. 
+[13] S. Jelassi et al., "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," 
+arXiv:2410.19034 [cs.LG], 2024. 
 [Online]. Available: https://arxiv.org/abs/2410.19034
 
 # ToDo
