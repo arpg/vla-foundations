@@ -36,7 +36,7 @@ jobs:
       - name: Commit and auto-merge via PR
         if: steps.diff.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.BYPASS_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="data/reviewer-stats-$(date -u +%Y-%m-%d)"
           git config user.name "github-actions[bot]"
