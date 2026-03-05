@@ -1,19 +1,22 @@
 {
-  "generated_at": "2026-02-17T21:21:17.406701+00:00",
+  "generated_at": "2026-03-05T15:46:55.961256+00:00",
   "reviewers": [
     {
       "login": "crheckman",
       "avatar_url": "https://avatars.githubusercontent.com/u/9009669?v=4",
       "name": "crheckman",
-      "total_comments": 103,
-      "inline_comments": 95,
-      "discussion_comments": 8,
+      "total_comments": 116,
+      "inline_comments": 105,
+      "discussion_comments": 11,
       "prs_reviewed": [
         23,
         27,
         32,
         48,
-        57
+        54,
+        55,
+        57,
+        61
       ],
       "is_instructor": true,
       "sample_comments": [
@@ -22,9 +25,9 @@
         "I think you need to mention something about computational efficiency too.\n\nWe need to address the computational feasibility of the WFM in the control loop. If we run the WFM and VLA in parallel for pr..."
       ],
       "comment_categories": {
-        "technical_depth": 29,
+        "technical_depth": 35,
         "constructive_suggestion": 13,
-        "clarification_request": 36,
+        "clarification_request": 40,
         "praise": 3
       },
       "quality_score": 10.0,
@@ -34,14 +37,15 @@
       "login": "lorinachey",
       "avatar_url": "https://avatars.githubusercontent.com/u/45807309?v=4",
       "name": "lorinachey",
-      "total_comments": 22,
-      "inline_comments": 22,
+      "total_comments": 30,
+      "inline_comments": 30,
       "discussion_comments": 0,
       "prs_reviewed": [
         23,
         27,
         32,
-        57
+        57,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
@@ -50,135 +54,168 @@
         "This is just a general curiosity about latent code books question. What is to stop a VQ approach from having the same types of issues as discrete binning for action tokens? Does the VQ-BeT paper discu..."
       ],
       "comment_categories": {
-        "technical_depth": 7,
-        "constructive_suggestion": 3,
-        "clarification_request": 14,
+        "technical_depth": 8,
+        "constructive_suggestion": 4,
+        "clarification_request": 19,
         "praise": 4
       },
-      "quality_score": 5.5,
+      "quality_score": 5.8,
       "quality_tier": "Exemplary"
     },
     {
       "login": "Zaaler",
       "avatar_url": "https://avatars.githubusercontent.com/u/6465181?v=4",
       "name": "Zaaler",
-      "total_comments": 25,
-      "inline_comments": 25,
+      "total_comments": 27,
+      "inline_comments": 27,
       "discussion_comments": 0,
       "prs_reviewed": [
         48,
-        57
+        57,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
         "The opening to the audit does a comparison of the individual papers. Then the massive paper audits with all the good stuff. When I started reading the introduction to this audit, I didn't realize the...",
         "Good summary of contents. I think the introduction should contain more of a fusion of the information with a statement that you can make now that you have read these papers. The final sentence of the...",
-        "Might be valuable to discuss the crux of real-time world model simulation. Is it that the world model cant be updated in real time, so any AV control inputs can be simulated into the future? If so, wh..."
+        "I dont think the description of the training data is well covered. Trajectories can be tracked in either joint or task planning space. Which do these models use? Has anyone explored training between t..."
       ],
       "comment_categories": {
         "technical_depth": 2,
         "constructive_suggestion": 2,
-        "clarification_request": 11,
+        "clarification_request": 13,
         "praise": 2
       },
-      "quality_score": 4.2,
+      "quality_score": 4.1,
       "quality_tier": "Strong"
     },
     {
       "login": "krusnim",
       "avatar_url": "https://avatars.githubusercontent.com/u/111299311?v=4",
       "name": "krusnim",
-      "total_comments": 12,
-      "inline_comments": 11,
+      "total_comments": 15,
+      "inline_comments": 14,
       "discussion_comments": 1,
       "prs_reviewed": [
         27,
         32,
         48,
-        57
+        57,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
-        "I don't understand _why_ Genie used this platformer data. (Are platformers specifically what Genie is \"for?\") They boast that this \"generalizes beyond gaming to robotic manipulation,\" but that seems v...",
-        "Hmm, yes, we do focus mostly on grasping and similar tasks. We should expand on other tasks. We hardly talk about MotionLM at all.\r\n\r\nI don't totally understand why FAST handles discontinuities well,...",
-        "I'm not 100% sure I'm interpreting the FAST paper correctly. My impression is that they tear out all of pi0's \"action expert\" / flow matching system and use FAST instead in pi0-FAST. But it's made mor..."
+        "I haven't read the pi0.5 paper in detail, but my understanding is that they provide some ablations on this data mixture and argue why each component is important. I'd like to see some more detailed an...",
+        "This audit is missing a thesis, which I suspect others have pointed out, but the individual sections should _also_ have theses. In particular, pi0.5 comes with some serious claims of generality - whic...",
+        "IMO, this would be a good place to be more detailed and more opinionated. What design decisions contributed to these scaling behaviors? Do you agree with them?\n\nFor instance - OpenVLA uses single-imag..."
       ],
       "comment_categories": {
         "technical_depth": 3,
         "constructive_suggestion": 5,
-        "clarification_request": 4,
+        "clarification_request": 7,
         "praise": 1
       },
-      "quality_score": 3.8,
+      "quality_score": 4.0,
       "quality_tier": "Strong"
     },
     {
       "login": "aritrach",
       "avatar_url": "https://avatars.githubusercontent.com/u/17310630?v=4",
       "name": "aritrach",
-      "total_comments": 7,
-      "inline_comments": 7,
+      "total_comments": 8,
+      "inline_comments": 8,
       "discussion_comments": 0,
       "prs_reviewed": [
         23,
         27,
         32,
         48,
-        57
+        57,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
         "Was their target in the paper to use this world model for training purposes? Or was it to actually control vehicles in real time? If they are addressing it as a limitation, I'm wondering what their or...",
-        "Is the reasoning for improvement just attributed to data distribution shift here? Or are methods like chain of thought still used?",
-        "Silly question, but is there any slowdown observed during inference time? Or is the overhead mostly during the training phase?"
+        "When you say 'diffusion policy baselines', do you mean JUST diffusion, or do the authors also compare to Octo which uses a diffusion action head?",
+        "Is the reasoning for improvement just attributed to data distribution shift here? Or are methods like chain of thought still used?"
       ],
       "comment_categories": {
-        "technical_depth": 1,
+        "technical_depth": 2,
         "constructive_suggestion": 0,
-        "clarification_request": 7,
+        "clarification_request": 8,
         "praise": 0
       },
-      "quality_score": 3.0,
+      "quality_score": 3.2,
       "quality_tier": "Solid"
     },
     {
-      "login": "Jdvakil",
-      "avatar_url": "https://avatars.githubusercontent.com/u/61257499?v=4",
-      "name": "Jdvakil",
+      "login": "jt7347",
+      "avatar_url": "https://avatars.githubusercontent.com/u/124174685?v=4",
+      "name": "jt7347",
+      "total_comments": 11,
+      "inline_comments": 10,
+      "discussion_comments": 1,
+      "prs_reviewed": [
+        27,
+        32,
+        57,
+        61
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
+        "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist...",
+        "It currently does not do so explicitly - there's emergent behaviors that they talk of, but this is largely learned from the datasets training itself - for example, modelling trajectory behavior around..."
+      ],
+      "comment_categories": {
+        "technical_depth": 2,
+        "constructive_suggestion": 3,
+        "clarification_request": 3,
+        "praise": 2
+      },
+      "quality_score": 2.9,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "zlaouar",
+      "avatar_url": "https://avatars.githubusercontent.com/u/33535050?v=4",
+      "name": "zlaouar",
       "total_comments": 7,
       "inline_comments": 7,
       "discussion_comments": 0,
       "prs_reviewed": [
-        23,
         27,
-        48
+        48,
+        57,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
-        "What are some examples of multi-modal data? In robotics it could mean different sources of data (sensors, exo/ego camera, audio, ++) but in the broader vision multi-modal data is used across AI/ML. Th...",
-        "I would like to see more description on what these real-valued positions are on the actuators, or even what continuous control variables would be.",
-        "Why is the field moving towards action tokenization if the control based approach is working well? How would you compare these two approached?"
+        "How do you think this compares to the diffusion-based and discrete token prediction based action representations in Octo and OpenVLA? \n\nI'd like to understand the cost/benefit analysis of treating act...",
+        "I think this audit is missing a a larger discussion on limitations / load-bearing walls. You can even add a section after each paper to discuss the approach specific limitations. \n\nWe understand from...",
+        "I would appreciate a brief history of world models dating back from the 80s/90s. This paper gives a good introduction: [World Models](https://arxiv.org/pdf/1803.10122)\n\nThis dispels the idea that worl..."
       ],
       "comment_categories": {
         "technical_depth": 2,
-        "constructive_suggestion": 1,
-        "clarification_request": 3,
+        "constructive_suggestion": 2,
+        "clarification_request": 4,
         "praise": 0
       },
-      "quality_score": 2.8,
+      "quality_score": 2.9,
       "quality_tier": "Solid"
     },
     {
       "login": "Hhy903",
       "avatar_url": "https://avatars.githubusercontent.com/u/103019577?v=4",
       "name": "Hhy903",
-      "total_comments": 6,
-      "inline_comments": 5,
+      "total_comments": 7,
+      "inline_comments": 6,
       "discussion_comments": 1,
       "prs_reviewed": [
         27,
         32,
-        57
+        57,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
@@ -192,7 +229,7 @@
         "clarification_request": 4,
         "praise": 0
       },
-      "quality_score": 2.8,
+      "quality_score": 2.7,
       "quality_tier": "Solid"
     },
     {
@@ -219,34 +256,35 @@
         "clarification_request": 4,
         "praise": 0
       },
-      "quality_score": 2.8,
+      "quality_score": 2.7,
       "quality_tier": "Solid"
     },
     {
-      "login": "jt7347",
-      "avatar_url": "https://avatars.githubusercontent.com/u/124174685?v=4",
-      "name": "jt7347",
-      "total_comments": 10,
+      "login": "Jdvakil",
+      "avatar_url": "https://avatars.githubusercontent.com/u/61257499?v=4",
+      "name": "Jdvakil",
+      "total_comments": 9,
       "inline_comments": 9,
-      "discussion_comments": 1,
+      "discussion_comments": 0,
       "prs_reviewed": [
+        23,
         27,
-        32,
-        57
+        48,
+        61
       ],
       "is_instructor": false,
       "sample_comments": [
-        "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
-        "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist...",
-        "It currently does not do so explicitly - there's emergent behaviors that they talk of, but this is largely learned from the datasets training itself - for example, modelling trajectory behavior around..."
+        "What are some examples of multi-modal data? In robotics it could mean different sources of data (sensors, exo/ego camera, audio, ++) but in the broader vision multi-modal data is used across AI/ML. Th...",
+        "Moravec's paradox is essentially higher level of reasoning is relatively less computationally intensive than lower-level of reasoning. Which ties into vision and reasoning having more resources (data)...",
+        "I would like to see more description on what these real-valued positions are on the actuators, or even what continuous control variables would be."
       ],
       "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 2,
-        "clarification_request": 2,
-        "praise": 2
+        "technical_depth": 2,
+        "constructive_suggestion": 1,
+        "clarification_request": 3,
+        "praise": 0
       },
-      "quality_score": 2.4,
+      "quality_score": 2.6,
       "quality_tier": "Solid"
     },
     {
@@ -273,34 +311,7 @@
         "clarification_request": 4,
         "praise": 0
       },
-      "quality_score": 2.4,
-      "quality_tier": "Solid"
-    },
-    {
-      "login": "zlaouar",
-      "avatar_url": "https://avatars.githubusercontent.com/u/33535050?v=4",
-      "name": "zlaouar",
-      "total_comments": 5,
-      "inline_comments": 5,
-      "discussion_comments": 0,
-      "prs_reviewed": [
-        27,
-        48,
-        57
-      ],
-      "is_instructor": false,
-      "sample_comments": [
-        "I would appreciate a brief history of world models dating back from the 80s/90s. This paper gives a good introduction: [World Models](https://arxiv.org/pdf/1803.10122)\n\nThis dispels the idea that worl...",
-        "I don't have a reference for some of the variables used, like $N_q$. I recommend defining the variables in place or adopting a textual description instead.",
-        "This makes it seem like these are the only components necessary for robotic navigation with VLAs. Is this what you mean?"
-      ],
-      "comment_categories": {
-        "technical_depth": 1,
-        "constructive_suggestion": 2,
-        "clarification_request": 2,
-        "praise": 0
-      },
-      "quality_score": 2.4,
+      "quality_score": 2.3,
       "quality_tier": "Solid"
     },
     {
@@ -326,7 +337,7 @@
         "clarification_request": 2,
         "praise": 0
       },
-      "quality_score": 2.2,
+      "quality_score": 2.1,
       "quality_tier": "Solid"
     },
     {
@@ -351,7 +362,7 @@
         "clarification_request": 1,
         "praise": 0
       },
-      "quality_score": 1.6,
+      "quality_score": 1.5,
       "quality_tier": "Developing"
     },
     {
@@ -374,7 +385,7 @@
         "clarification_request": 1,
         "praise": 0
       },
-      "quality_score": 1.6,
+      "quality_score": 1.5,
       "quality_tier": "Developing"
     },
     {
@@ -397,7 +408,7 @@
         "clarification_request": 1,
         "praise": 0
       },
-      "quality_score": 1.5,
+      "quality_score": 1.4,
       "quality_tier": "Developing"
     },
     {
@@ -467,7 +478,7 @@
       "authors": [
         "Zaaler"
       ],
-      "total_comments": 0
+      "total_comments": 1
     },
     {
       "number": 55,
@@ -475,7 +486,7 @@
       "authors": [
         "Hhy903"
       ],
-      "total_comments": 0
+      "total_comments": 1
     },
     {
       "number": 57,
@@ -491,7 +502,7 @@
       "authors": [
         "Jdvakil"
       ],
-      "total_comments": 0
+      "total_comments": 31
     }
   ]
 }
