@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   actions: write
+  pull-requests: write
 
 jobs:
   refresh:
@@ -32,14 +33,24 @@ jobs:
         run: |
           git diff --quiet data/reviewer-stats.json && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push
+      - name: Commit and auto-merge via PR
         if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          BRANCH="data/reviewer-stats-$(date -u +%Y-%m-%d)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add data/reviewer-stats.json
           git commit -m "chore: refresh reviewer data ($(date -u +%Y-%m-%d))"
-          git push
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: refresh reviewer data ($(date -u +%Y-%m-%d))" \
+            --body "Automated weekly refresh of reviewer stats. Auto-merging." \
+            --base main \
+            --head "$BRANCH"
+          gh pr merge "$BRANCH" --squash --delete-branch --admin
 
       - name: Trigger deploy
         if: steps.diff.outputs.changed == 'true'
