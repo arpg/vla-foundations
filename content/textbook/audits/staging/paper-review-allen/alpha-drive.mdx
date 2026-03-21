@@ -1,0 +1,197 @@
+First pass: fill Sections 1, 3, 9
+
+Second pass: fill Sections 2, 4
+
+Final pass: fill Sections 6, 8, 10
+
+# Paper Audit Notes
+
+**Paper title:** Alpha drive  
+**Authors / Year:**  
+**Group theme:**  
+**Link / PDF:**  
+
+---
+
+## 1. Core Claim & Motivation
+*(What problem is being solved and why this paper exists)*
+
+- Problem statement: Current methods for autonomous driving struggle with long-tailed problems due to limited common sense and reasoning abilities.
+
+- Why existing methods fail: Other attempts at using VLMs to solve this problem have relied on pre-trained models with simple supervised fine-tuning (SFT) on driving data. They haven't explored how best to use the data.
+
+- Main contribution: They decided to introduce Group Relative Policy Optimization based Reinforcment Learning rewards tailored for planning (i.e. planning accuracy, action weighted, planning diversity, and planning format). Two stage planning reasoning training strategy that combines SFT with RL 
+
+- Claimed novelty: Significantly improved planning performance and training efficiency. The system also exhibits some emergent multi-modal planning capabilities => there model generates multiple feasible solutions. They are the first to integrate GRPO RL with planning reasoning for autonomous vehicles.
+
+- Holes in Current work:
+1. Current models are black-box in nature and lack common sense (truck carrying cones => car should break)
+2. VLMS used for understanding the driving scene and planning (sometimes end to end with trajectories)
+3. These currently rely on Supervised Fine Tuning without considering more advanced training methods.
+4. 
+> One-sentence summary in plain language:
+
+---
+
+## 2. Technical Approach
+RL strategy based on Group Relative Policy Optimization which allows multiple solutions (multimodal planning). For planning reasoning, first stage LLM generates small high-quality dataset derived from real driving actions. Using Supervised Fine Tuning (teaching planning language), infuse the model with the structure of planning explanations, important entities and causal factors to mention, actual driving actions relation to reasoning. Prevents hallucinations at beginning of RL.
+
+STF (Sound like good planner) | RL (Be a good planner under task reward)
+
+GRPO considers relative superiority or inferiority between multiple output groups
+
+Planning Accuracy Metric F1 Score
+- Early stages in training = imperfect format hard to evaluate against ground truth
+- Extract all words from prediction and look for GT = model outputs all words
+- F1 prevents shortcuts and improves stability in beginning
+
+Produced for Speed and Direction
+
+### Architecture / Model
+- Backbone(s):
+- Modalities:
+- Fusion mechanism:
+- Action / policy output format:
+
+### Training Setup
+- Dataset(s):
+- Supervision type:
+- Loss functions:
+- Pretraining vs finetuning:
+- Key hyperparameters:
+
+> Important equations / definitions:
+> - 
+> - 
+
+---
+
+## 3. Assumptions
+*(What must be true for this to work)*
+
+### Perception
+- 
+
+### Data
+- 
+
+### Control & Dynamics
+- 
+
+### Embodiment
+- 
+
+> What breaks first on a real robot?
+
+---
+
+## 4. Evaluation & Evidence
+### Validation Approach:
+
+#### Meta Action Planning Accuracy and F1 Score
+1. Lateral and longitudinal meta-actions (i.e lat: keep lane, lon: accelerate)
+2. F1 Score: When I predicted this action was I correct AND did I catch all instance when this should occur (see equation.)
+3. Overal planning Accuracy: Exact match of lat and long
+
+#### Planning Reasoning Evaluation
+- Model generates a natural language reasoning chain and its compared to the human-annoted explanation.
+1. BLEU-4: n-gram precision up to 4 grams. Captures exact phrase overlap, penalizes paraphrasing heavily
+2. METEOR: Awards semantic similarity, less stress about accuracy
+3. CIDEr: TF-IDF weighted n-grams: rewards terms that are frequent in the reference and rare across data. Measures informative content, but is data dependent.
+
+#### Combined Result
+1. F1 Score: Did we choose the right high-level driving action
+2. BMC: Did the model explain its decision in a human-like content accurate way.
+
+### Benchmarks / Tasks
+- Simulation or real-world:
+- Tasks:
+- Metrics:
+- Baselines:
+
+### Results
+- Clear wins:
+- Weak or failing cases:
+- Any suspicious comparisons:
+
+> Figures / tables worth citing:
+> - Fig. __:
+> - Table __:
+
+---
+
+## 5. Scaling Properties
+*(Does this method scale? At what cost?)*
+
+- Model size(s):
+- Dataset size(s):
+- Compute requirements:
+- Evidence of scaling laws:
+
+> Is scaling smooth, brittle, or untested?
+
+---
+
+## 6. Information Flow & Decay
+*(Where information is lost across the pipeline)*
+
+- Perception → Representation:
+- Representation → Planning:
+- Planning → Control:
+- Language → Action grounding:
+
+> Where does precision degrade the most?
+
+---
+
+## 7. Limitations
+
+### Stated by Authors
+- Due to lack of rich data annotation, AlphaDrive is unable to output more complex driving behaviors like lane changes of nudges.
+- Planning reasoning GTs are produced by LLMs on driving action GTs. These suffer from inaccurate perception and failure to capture key factors.
+    - Systematic validation required to improve data quality and verify performance.
+
+### My Critique
+- Unrealistic assumptions:
+- Missing ablations:
+- Failure modes not discussed:
+
+---
+
+## 8. Comparison Hooks
+*(Notes to use when comparing across papers)*
+
+- Compared to other papers:
+  - More / less general?
+  - More / less scalable?
+  - More / less physically grounded?
+
+---
+
+## 9. Key Takeaway
+*(1–2 sentences you could put directly in the audit)*
+
+> Using Group Relative Policy Optimization based Reinforcment Learning rewards is required because, unlike math data, AV actions may not be uniquely correct and lack textbooks and solution manuals. This reward strategy greatly improves the ability to determine multiple best lateral and longitudinal actions.
+> Using BLEU-4, METEOR, CIDEr to grade language generated reasoning greatly improves the ability to
+produce human understandable descriptions of actions instead of the black-box of end-to-end models.
+
+---
+
+## 10. Questions for the Audit
+*(What you would challenge or ask the authors)*
+
+- 
+- 
+- 
+
+---
+
+## 🚩 Red Flags (check if applicable)
+- [ ] Sim-only validation
+- [ ] No real-time constraints discussed
+- [ ] Unclear action representation
+- [ ] Language not grounded in control
+- [ ] Results rely on massive hidden data
+- [ ] Evaluation tasks too narrow
+
+---
