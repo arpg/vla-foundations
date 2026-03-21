@@ -1,0 +1,918 @@
+---
+title: "Mixture of Experts in Vision-Language-Action model"
+author: "Thanushraam Suresh Kumar"
+paper: "ChatVLA2,ForceVLA"
+topic: "Mixture of Experts"
+---
+
+## Table of Contents
+
+- [Introduction](#introduction)
+  - [Scope of This Audit](#scope-of-this-audit)
+  - [Historical Context: MoE](#historical-context-moe)
+- [Paper Audit: ChatVLA-2](#paper-audit-chatvla-2)
+  - [Architectural Decisions](#architectural-decisions)
+  - [Training](#training)
+  - [Experiment and Results](#experiment-and-results)
+  - [Critical Synthesis \& Sign off](#critical-synthesis--sign-off)
+- [Paper Audit: ForceVLA](#paper-audit-forcevla)
+  - [Architecture Summary](#architecture-summary)
+  - [Training](#training-1)
+  - [Critical Synthesis \& Sign-Off](#critical-synthesis--sign-off-1)
+- [Additional Analysis](#additional-analysis)
+  - [MoE leads to better reasoning or memorization](#moe-leads-to-better-reasoning-or-memorization)
+  - [MoE Architectures in Different Domain](#moe-architectures-in-different-domain)
+- [References](#references)
+- [ToDo](#todo)
+
+
+# Introduction
+
+**What is Mixture-of-Experts?**
+
+Mixture of Expert(MoE) is a approach that divides an AI model into sub-networks or experts, each specializing in a subset of the input data, to jointly perform a task.
+Instead of activating every parameter for every input, MoE dynamically selects a small number of experts through a learned routing or gating mechanism.
+This enables models to increase representational capacity without incurring proportional increases in computational cost.
+
+At a high level, an MoE architecture consists of:
+
+- **Expert networks** – typically feed-forward networks (FFNs) or modules that specialize in different subspaces of the input distribution.
+- **Routing / gating function** – a learned mechanism that determines which experts are activated for a given input.
+- **Sparse execution** – only a subset (e.g., top-k experts per token) is executed per input, reducing active computation.
+
+The core promise of MoE is simple but powerful: **capacity can scale faster than compute.**
+
+## Scope of This Audit
+
+This audit examines the use of Mixture-of-Experts (MoE) in Vision-Language-Action (VLA) systems, with a focus on ChatVLA-2 and ForceVLA.
+The goal is to assess whether MoE improves the reasoning–action interface rather than adding architectural complexity.
+I also discuss whether the added design complexity is justified by the observed gains.
+
+## Historical Context: MoE
+
+| Phase     | Language                                | Vision                           |
+| --------- | --------------------------------------- | -------------------------------- |
+| 1990s     | Ensemble-style MoE                      | —                                |
+| 2017      | Sparsely-Gated MoE enables scaling      | —                                |
+| 2020–2021 | Switch, scalable LLM MoE                | V-MoE extends to vision          |
+| 2022–2024 | Routing refinements, deployment systems | Multi-task & multimodal MoE      |
+| Today     | Core LLM infrastructure                 | Efficient large-scale perception |
+
+Mixture-of-Experts (MoE) originated as an ensemble-based neural network technique introduced by Jacobs et al.(1991) [1], 
+where a gating network dynamically selects among multiple expert subnetworks.
+Its modern resurgence began with the sparsely gated MoE layer proposed by Noam Shazeer et al.(2017) [2], which enabled conditional computation 
+in deep transformers by activating only a small subset of experts per token.
+This broke the tight coupling between parameter count and computation, allowing language models to scale to billions or trillions of parameters efficiently.
+Subsequent works such as Switch Transformers [3] and systems like DeepSpeed-MoE [5] improved training stability, routing simplicity, and deployment efficiency, 
+establishing MoE as a core scaling strategy in large language models.
+The paradigm later extended to vision through Vision Mixture-of-Experts (V-MoE) [4], which integrated sparse expert routing into the Vision Transformer architecture, 
+demonstrating that conditional computation can scale vision models to billions of parameters while preserving accuracy and reducing compute costs.
+Collectively, these developments show MoE evolving from an ensemble method into a general architectural principle for scalable, efficient, and specialized modeling across language and vision.
+
+# Paper Audit: ChatVLA-2
+
+ChatVLA-2 [9] positions Mixture-of-Experts not as a scaling mechanism, but as an **interface control mechanism** between multimodal reasoning and robotic action execution.
+
+The central claim is that tightly coupling reasoning and control degrades either:
+
+- reasoning generalization (if fine-tuned too aggressively), or
+- control stability (if reasoning dominates action layers).
+
+This paper proposes that this boundary should be explicitly managed and introduces Dynamic MoE as the mechanism to do so.
+
+It arises one central question:
+
+> Does their MoE architecture meaningfully stabilize the reasoning–action interface,or just adding a smarter-looking middle layer that hides it?
+
+---
+
+## Architectural Decisions
+
+TODO : add about the Backbone and why that backbone.
+
+**Where is MoE applied ?**
+
+ChatVLA-2 integrates a **Dynamic Mixture-of-Experts layer** within the VLA architecture, selectively activating experts based on multimodal input representations.
+
+Eight experts are instantiated, and two are selected per input during inference.
+
+However, the important design decision is not the number of experts, it is **where intervention occurs**.
+
+Rather than restructuring the pretrained VLM backbone, ChatVLA-2 preserves it and injects MoE primarily within the action pathway.
+This limits disturbance to pretrained reasoning weights.
+
+This reflects an assumption:
+
+> The pretrained VLM already encodes strong world knowledge, and instability arises when action learning corrupts that representation.
+
+---
+
+**Why Dynamic Routing ?**
+
+Static expert assignment risks:
+
+- over-specialization
+- expert collapse
+- suppression of pretrained knowledge
+
+Dynamic routing allows input-dependent expert activation, preventing consistent bias toward a fixed expert subset.
+
+However, this introduces a new dependency:
+
+- The gating network becomes a bottleneck.
+- Routing errors may propagate directly into action instability.
+
+An important question to investigate:
+
+> What signal does the router use to separate reasoning complexity from control complexity?
+
+If routing is dominated by visual similarity, the system may still overfit robot-specific domains.
+
+---
+
+**Aligning Reasoning with Action**
+
+A defining contribution of ChatVLA-2 is the claim that actions must not merely follow instructions, but follow **generated reasoning traces**.
+
+Unlike FiLM-based approaches (e.g., DiffusionVLA, DexVLA), which inject reasoning tokens uniformly, ChatVLA-2:
+
+- Projects reasoning tokens via MLP
+- Combines them with timestep embeddings
+- Conditions scale/shift parameters
+- Injects them only in later layers
+
+This selective conditioning suggests:
+
+- Early layers preserve low-level motor stability
+- Later layers adapt to reasoning
+
+The architectural philosophy here is :
+
+> Modify only layers that minimally disturb control primitives.
+
+This raises a couple of question:
+
+- Is reasoning alignment achieved because of MoE?
+- Or because of late-layer conditioning?
+- Would the model perform similarly without MoE but with staged freezing?
+
+---
+
+**Interface Design and Assumptions**
+
+ChatVLA-2 implicitly defines a three-part boundary:
+
+1. Pretrained reasoning backbone
+2. Dynamic expert selection layer
+3. Action-conditioned decoding
+
+MoE operates as a mediator.
+
+However, several interface assumptions remain implicit:
+
+- Does expert routing vary across time steps?
+- Is routing consistent within a trajectory?
+- Is expert selection correlated with reasoning tokens or visual features?
+
+In embodied systems, even slight routing instability can produce compounding control errors.
+
+This is where VLA differs from LLMs:
+Routing errors affect physics.
+
+---
+
+## Training
+
+ChatVLA-2 is trained through co-training on both image–text data and robot trajectories to support open-world reasoning and embodied control.
+
+![Training Strategy](https://raw.githubusercontent.com/arpg/vla-foundations/audit/Tr0612-mixtureofexpert/content/textbook/audits/staging/Training_Strategy_ChatVLA2.png)
+
+### Training Data
+
+**Image–Text Data**
+The model leverages a mixture of established benchmarks and task-aligned datasets:
+
+- ~32k samples from **COCO**
+- ~20k from **TextVQA**
+- ~54k from **GQA**
+- ~2k robotics-related samples from **RoboPoint** (simulated)
+- ~5k real-world robotics samples (tabletop and broader scenes)
+
+Robotics-related image–text pairs follow the same reasoning template used in the toy placement task.
+Text augmentation is applied to increase query diversity.
+To avoid biasing the model toward specific skills (e.g., OCR or math), numeric-heavy TextVQA samples are filtered out.
+Each example is limited to 5 dialogue turns, and images are resized to 320×240.
+
+**Robot Data**
+includes:
+
+- 600 trajectories from a math-matching task
+- 300 trajectories from a toy placement task
+
+All trajectories are annotated with structured reasoning phrases.
+These annotations are initialized with fixed templates and then diversified using GPT-4o to prevent overfitting to rigid reasoning patterns.
+
+**Training Setup**
+
+- Image–text to robot data ratio: 1:3
+- Total training steps: 50k
+- Initial learning rate: 2e-5
+- 3k-step warm-up
+- Cosine decay to 2e-6
+
+Overall, the training strategy aims to preserve pretrained multimodal knowledge while grounding it in robotic control, without explicitly biasing the model toward specific reasoning skills.
+
+### Training Strategy & Implementation
+
+The model adopts a two-stage training strategy aligned with its modular design.
+
+1. In Stage 1, the model is jointly trained on image–text and robotic data to develop both general reasoning and embodied understanding.
+2. In Stage 2, the Vision-Language Model (VLM) backbone is frozen and only the action experts are updated.
+This design is motivated by the concern that jointly optimizing reasoning and control objectives may cause gradient interference in shared representations.
+
+While freezing the VLM helps preserve pretrained reasoning capabilities, it may also retain biases from large-scale image–text data and limit adaptation to robot-specific dynamics.
+
+Training is conducted in mixed precision (FP16) using AdamW.
+Stage 1 runs for 15k steps with a learning rate of 2e-5.
+Stage 2 runs for 50k steps, with a 3k-step warm-up and cosine decay from 2e-5 to 2e-6.
+The total reported training cost is approximately **340 GPU hours**.
+
+TODO : Add the GPU model/Vram
+
+---
+
+## Experiment and Results
+
+![Experiment Setup](https://raw.githubusercontent.com/arpg/vla-foundations/audit/Tr0612-mixtureofexpert/content/textbook/audits/staging/ChatVLAExperimentSetup.png)
+
+### Overall Evaluation Design
+
+The authors conduct **real-robot experiments only**, arguing that simulation benchmarks cannot capture the level of open-world reasoning demonstrated by their model.
+
+Two tasks are designed to evaluate:
+
+- Mathematical reasoning
+- OCR capability
+- Spatial reasoning
+- Object recognition and localization
+- Open-world generalization
+
+Both tasks are tested in:
+
+- **In-domain settings** (seen during training)
+- **Open-world settings** (unseen equations, objects, or instructions)
+
+---
+
+**Mathematical Reasoning: Math Matching Game**
+
+*Task* -> The robot reads a handwritten math equation on a whiteboard, selects the correct answer card from a table, and places it appropriately.
+
+*Metrics*
+
+1. **Manipulation success rate** (task completion)
+2. **OCR score (4 points total)**
+   - Handwritten number recognition
+   - Card value recognition
+   - Card position recognition
+   - Sign recognition
+3. **Mathematical reasoning score (2 points total)**
+   - Correct answer
+   - Correct card selection
+
+**Setup**
+
+- In-domain: Equations match training distribution (with handwriting variation).
+- Open-world: Equations entirely unseen during training.
+- Robot: ARX-R5 bimanual system (2×6 DoF arms), RealSense L515 camera.
+- 14D state-action space, teleoperation at 50 Hz.
+
+{/* #### Results of Mathematical Reasoning
+
+The “/” entries indicate that certain baseline models do not produce language-based reasoning outputs, making OCR and reasoning metrics not applicable rather than representing zero performance.
+
+- In-domain: ChatVLA-2 performs comparably to strong baselines.
+- Open-world: Other methods nearly fail (0–8/52 success).
+- ChatVLA-2 achieves:
+  
+  - OCR: 3.58/4
+  - Math reasoning: 1.73/2
+  - 43/52 success rate (82.7%) 
+    
+Performance gap appears only in open-world scenarios, showing preserved reasoning under distribution shift. */}
+
+---
+
+**Spatial Reasoning: Toy Placement**
+
+*Task* -> The robot picks an object and places it relative to another object (left, right, front, behind, top, bottom).
+
+*Metrics*
+
+1. Manipulation success rate
+2. Object recognition accuracy
+3. Spatial affordance score (correct relational reasoning)
+
+*Setup*
+
+- In-domain: Objects seen during training.
+- Open-world: Target and reference objects unseen.
+- Robot: 7-DoF Franka Emika arm with Robotiq gripper.
+- ZED 2 camera.
+- Teleoperation at 15 Hz.
+
+{/* #### Results of Spatial Reasoning
+
+- In-domain: Comparable to DexVLA and π0.
+- Open-world:
+  
+  - Object recognition: 0.94
+  - 127/156 success rate (81.4%)
+  - 3.52× improvement over DexVLA */}
+
+### Results
+
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">Method</th>
+      <th colspan="2">In-Domain</th>
+      <th colspan="3">Open-World</th>
+    </tr>
+    <tr>
+      <th>Reasoning Score</th>
+      <th>Success Rate</th>
+      <th>OCR Score (4)</th>
+      <th>Math Reasoning (2)</th>
+      <th>Success Rate</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Octo</td>
+      <td>/</td>
+      <td>2/13</td>
+      <td>/</td>
+      <td>/</td>
+      <td>0/52</td>
+    </tr>
+    <tr>
+      <td>Diffusion Policy</td>
+      <td>/</td>
+      <td>7/13</td>
+      <td>/</td>
+      <td>/</td>
+      <td>3/52</td>
+    </tr>
+    <tr>
+      <td>OpenVLA</td>
+      <td>/</td>
+      <td>2/13</td>
+      <td>/</td>
+      <td>/</td>
+      <td>0/52</td>
+    </tr>
+    <tr>
+      <td>GR00T N1</td>
+      <td>/</td>
+      <td>4/13</td>
+      <td>/</td>
+      <td>/</td>
+      <td>3/52</td>
+    </tr>
+    <tr>
+      <td>DexVLA</td>
+      <td>5.2/6</td>
+      <td>12/13</td>
+      <td>0.21/4</td>
+      <td>0.06/2</td>
+      <td>10/52</td>
+    </tr>
+    <tr>
+      <td>ChatVLA</td>
+      <td>5.8/6</td>
+      <td>10/13</td>
+      <td>1.08/4</td>
+      <td>0.42/2</td>
+      <td>4/52</td>
+    </tr>
+    <tr>
+      <td>π0</td>
+      <td>/</td>
+      <td>12/13</td>
+      <td>/</td>
+      <td>/</td>
+      <td>8/52</td>
+    </tr>
+    <tr>
+      <td><strong>ChatVLA-2</strong></td>
+      <td><strong>6.0/6</strong></td>
+      <td><strong>11/13</strong></td>
+      <td><strong>3.58/4</strong></td>
+      <td><strong>1.73/2</strong></td>
+      <td><strong>43/52</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+**Mathematical Reasoning**
+
+Some baseline models do not generate language-based reasoning outputs, so OCR and reasoning metrics are marked as “/” rather than zero.
+
+* **In-domain:** ChatVLA-2 performs similarly to strong baselines.
+* **Open-world:** Most baseline methods fail (**0–8/52 success**).
+* **ChatVLA-2 results:**
+
+  * OCR: **3.58/4**
+  * Math reasoning: **1.73/2**
+  * **43/52** task success (**82.7%**)
+
+**Spatial Reasoning**
+
+* **In-domain:** Performance is comparable to DexVLA [8] and π0 [11].
+* **Open-world:**
+
+  * Object recognition score: **0.94**
+  * **127/156** task success (**81.4%**)
+  * Represents a **3.52× improvement** over DexVLA [8]
+
+**Experimental Conclusion**
+
+- The model does **not significantly outperform others in in-domain settings**.
+- The advantage appears specifically in **open-world generalization**.
+- Dense or previous VLA models degrade under unseen reasoning conditions.
+- ChatVLA-2 preserves reasoning capability during embodied execution.
+- They have also not described about variation in handwriting, but this one diverts topic to OCR.
+
+---
+
+## Critical Synthesis & Sign off
+
+### Load Bearing Assumptions
+
+**Does freezing the VLM preserve or limit reasoning?**
+Ablations show both training stages are necessary.
+Removing Stage 2 (action-only training with a frozen VLM) significantly reduces robotic performance, indicating that reasoning features must be explicitly grounded into action execution.
+Removing Stage 1 eliminates open-world reasoning entirely, leading to near-zero OCR and math performance.
+While this confirms the importance of both stages, it remains unclear whether freezing the VLM merely protects pretrained reasoning or restricts its adaptation to embodied constraints.
+
+**Is MoE necessary in VLA?**
+Comparisons between dense and MoE variants show that removing MoE substantially reduces success on math-matching tasks, and scaling a dense model to 7B does not recover performance.
+This suggests the advantage is not simply model size.
+The authors argue that dense models suffer from interference between action and reasoning representations, whereas MoE mitigates this via expert specialization.
+Notably, dense models fail entirely on unseen equations, indicating that without MoE, robotic fine-tuning may degrade reasoning robustness under distribution shift.
+
+### Potential Failure Modes
+
+1. **Routing Instability**
+
+   - Does the model switch between experts too frequently over time?
+   - Could these rapid changes lead to unstable or jerky control?
+
+2. **Expert Underuse**
+
+   - Are some experts rarely used during training or inference?
+   - Does the routing system actually keep experts diverse and active?
+
+3. **Reasoning Errors Affecting Actions**
+
+   - If the reasoning output is wrong, will the system still follow it blindly when generating actions?
+   - Is there any mechanism to detect or correct such errors?
+
+4. **Compute Cost vs. Benefit**
+
+   - Does the added complexity of Dynamic MoE justify the performance improvements?
+   - The paper shows accuracy gains but does not report compute costs such as FLOPs or latency, making it difficult to assess efficiency.
+
+### Reproducibility
+
+The paper clearly describes the architecture, staged training strategy, and ablation settings, and the public release of code substantially supports research reproducibility.
+Given the reported hardware requirements, replication appears feasible in well-equipped academic or industrial research environments.
+
+### Sign-Off Criteria
+
+I would not sign this system off for production deployment without additional validation on long-horizon tasks, stability of expert utilization, and clearly defined safety and recovery procedures.
+Further robustness testing is necessary before considering real-world deployment.
+
+---
+
+# Paper Audit: ForceVLA 
+
+The paper argues that existing VLA models struggle with contact-rich manipulation tasks that require precise force control, especially under visual occlusion or dynamic uncertainty.
+To address this gap, the authors propose **ForceVLA** [10], an end-to-end framework that integrates external force sensing as a core modality within VLA systems.
+The work is further supported by a newly collected multimodal dataset tailored for contact-rich manipulation.
+
+**Contribution**
+
+The central contribution is **FVLMoE**, a force-aware Mixture-of-Experts fusion module that dynamically integrates pretrained vision-language embeddings with real-time 6-axis force feedback during action decoding.
+By introducing structured, adaptive force fusion, the model enables context-sensitive and phase-aware action generation, improving performance in tasks that depend on fine-grained physical interaction.
+
+## Architecture Summary
+
+![alt text](https://raw.githubusercontent.com/arpg/vla-foundations/audit/Tr0612-mixtureofexpert/content/textbook/audits/staging/ForceVLA_Architecture.png)
+
+ForceVLA extends a Vision-Language-Action (VLA) model by introducing **FVLMoE**, a force-aware Mixture-of-Experts (MoE) fusion module designed for contact-rich manipulation.
+The key idea is to treat force as a first-class modality and integrate it *after* visual–language encoding, enabling adaptive, phase-aware action generation.
+
+---
+
+TODO: Compare this architecture with other Contact related model
+
+### Overall Pipeline
+
+1. **Vision–Language Encoding**
+   - RGB images and task instructions are processed by a pretrained Vision-Language Model (VLM).
+   - This produces contextual visual-language tokens
+     $$E_{VL} \in \mathbb{R}^{N_{VL} \times D_{model}}$$
+2. **Force Token Construction**
+   - Raw 6-axis force-torque readings
+     $$f_{raw} \in \mathbb{R}^6$$
+     are projected via a linear layer:
+     $$E_F = \phi_F(f_{raw}) \in \mathbb{R}^{D_{model}}$$
+   - This produces a **dedicated force token** aligned to the VLM embedding dimension.
+3. **Token Concatenation**
+   - The force token is appended to the visual-language tokens:
+     $E_{in} = [E_{VL}; E_F]$
+   - Importantly, force is injected **after** the VLM encoder to preserve pretrained representations (validated via ablation studies).
+
+### Architecture of FVLMoE: Force-Aware Mixture-of-Experts
+
+FVLMoE performs multimodal fusion using a sparse Mixture-of-Experts architecture inspired by:
+
+- *Scaling Vision with Sparse Mixture of Experts* [4]
+- *GShard* [12]
+
+#### Stage 1: Shared Encoder
+
+The concatenated tokens pass through:
+
+- Multi-head self-attention
+- Feed-forward network (FFN)
+
+This enables holistic interaction across visual, language, and force tokens.
+
+#### Stage 2: Sparse MoE Fusion
+
+The core fusion mechanism consists of:
+
+- **E = 4 expert networks**
+  
+  - Each expert is an independent MLP
+  - Experts implicitly specialize in different modality interactions or task phases
+- **Gating Network (Router)**
+  
+  - Takes each token as input
+  - Produces routing logits
+  - Selects the top-1 expert (k=1) per token
+  - Computes routing weights
+
+Formally:
+
+$$
+y(x) = \sum_{i \in \text{TopK}(G(x))} g_i(x) E_i(x)
+$$
+
+where:
+
+- $G(x)$ = router
+- $E_i$ = expert networks
+- $g_i(x)$ = routing weights
+
+Only one expert processes each token (sparse routing), improving efficiency and encouraging specialization.
+
+---
+
+**What Experts Exist?**
+
+There are **four MLP experts**, each capable of learning distinct behaviors such as:
+
+- Visual-dominant reasoning
+- Language-conditioned planning
+- Force-reactive corrections
+- Phase-specific control (e.g., alignment vs insertion vs contact stabilization)
+
+Router analysis shows:
+
+- Some experts activate consistently across tasks (general-purpose expert).
+- Others specialize in specific task phases (e.g., insertion contact phase).
+
+---
+
+**How Routing Is Conditioned**
+
+Routing decisions depend on:
+
+1. **High-level semantic context**
+   - Task instructions
+   - Visual scene embeddings
+2. **Low-level interaction feedback**
+   - Real-time force signals
+   - Task progress state
+
+Because force is included as a token in the shared sequence, routing is conditioned jointly on:
+
+- Vision
+- Language
+- Force
+
+This allows dynamic expert selection across different manipulation phases.
+
+---
+
+**Action Generation (Flow-Based Head)**
+
+The fused multimodal features are used to guide a **flow-matching action decoder**:
+
+1. The final $H_{action}$ fused tokens are extracted.
+2. These are element-wise added to:
+   - Proprioceptive state embeddings
+   - Noisy action trajectory embeddings during denoising.
+3. The flow model iteratively refines the action trajectory.
+
+This ensures:
+
+- Force-aware corrections
+- Phase-aligned motion generation
+- Stable contact control
+
+---
+
+**Key Design Insights**
+
+- **Late force fusion** preserves pretrained VLM representations.
+- **Sparse MoE routing** enables modality- and phase-aware specialization.
+- **Dynamic gating** allows adaptation to contact dynamics in real time.
+- Effective fusion (not just force input) is critical for performance gains.
+
+---
+
+## Training
+
+TODO : Should include whole training details!
+
+### Setup
+
+ForceVLA was trained on compute nodes equipped with:
+
+- **8× NVIDIA RTX 4090 GPUs** (24 GB VRAM each)
+- **64 CPU cores**
+- **251 GB system RAM**
+
+**Optimization settings:**
+
+- Optimizer: **Adam**
+
+{/* 
+  * $$\beta_1 = 0.9, \quad \beta_2 = 0.95$$
+* Peak learning rate: $$2.5 \times 10^{-5}$$
+* Decayed to: $$2.5 \times 10^{-6}$$ */}
+
+- Total training steps:
+  
+  - 30,000 steps (multi-task)
+  - 10,000 steps (single-task)
+
+**Parallelism & Efficiency:**
+
+- Multi-task training used 2 GPUs (data parallelism)
+  
+  - Global batch size: 16
+  - Effective batch size: 2048 (via gradient accumulation)
+  - ~12 hours for 30k steps
+- Single-task training used **1 GPU**
+  - ~9 hours for 10k steps
+- Precision: bfloat16
+- Gradient clipping: $|\nabla| = 1.0$
+---
+
+TODO: Should I include the dataset details they collected
+{/* ### Dataset Details (ForceVLA-Data)
+
+A new dataset was collected specifically for **contact-rich manipulation**, emphasizing synchronized:
+
+- Vision (RGB-D)
+- Proprioception
+- 6-axis force-torque signals
+
+The dataset comprises **244 trajectories** totaling approximately **140,000 synchronized timesteps**, with images resized to **480×640** pixels.
+Actions are represented as the target TCP pose and gripper width, and all sensor streams are timestamp-synchronized to ensure temporal alignment across modalities.
+
+**Hardware Setup**
+
+- **Robot:** Flexiv Rizon 7-DOF arm
+- **Gripper:** Dahuan adaptive gripper
+- **Cameras:**
+  
+  - Static third-person view (RealSense D435, 1280×720 @ 30 FPS)
+  - Wrist-mounted egocentric view (RealSense D415, 640×480 @ 30 FPS)
+
+**Data Collection**
+
+- Teleoperation via **Quest 3 VR interface**
+- 5 expert operators
+- 5 contact-rich tasks:
+  
+  - Bottle pumping
+  - Plug insertion
+  - USB insertion
+  - Whiteboard wiping
+  - Cucumber peeling
+
+Object positions and orientations were varied to increase diversity. */}
+
+---
+### Evaluation
+
+The authors explained setup the experiment and also performed various test including testing out the generalization and validating their architecture.
+
+![ForceVLA_Evaluation](https://raw.githubusercontent.com/arpg/vla-foundations/audit/Tr0612-mixtureofexpert/content/textbook/audits/staging/ForceVLA_Evaluation.png)
+
+The model was evaluated on five real-world contact-rich manipulation tasks: Insert USB, Insert Plug, Pump Bottle, Wipe Board (motion and full erase), and Peel Cucumber.
+The model was compared against four π0-based baselines: π0-fast (with and without force) and π0-base (with and without naive force concatenation).
+Task success rates are shown in **Figure **.
+
+As illustrated in Figure , ForceVLA achieves the highest overall average success rate (**60.5%**), outperforming π0-base without force (**37.3%**) and π0-base with direct force input (**40.2%**), 
+yielding a **23.2% improvement**.
+
+{/* Across individual tasks, ForceVLA achieves:
+
+* **80%** on Insert Plug
+* **67%** on Pump Bottle
+* **64%** on Wipe Board (motion)
+* **27%** on Wipe Board (full erase)
+* **100%** on Peel Cucumber
+* **25%** on Insert USB */}
+
+In contrast, π0-fast shows instability when naive force is added (average drops to **14.2%**), indicating sensitivity to direct force concatenation.
+While π0-base benefits modestly from force input, it remains substantially below ForceVLA across most tasks.
+
+Overall, Figure  shows that physics-aware MoE fusion consistently improves contact-rich manipulation performance and robustness compared to standard VLA baselines.
+
+**Validating Architecture**
+
+The authors evaluated different architectural variants to validate their design.
+
+Early fusion (injecting force before the VLM) performed poorly.
+Linear fusion reached 55% while MoE-based early fusion failed (0%), this shows that altering pretrained VLM inputs degrades performance.
+
+Late fusion performed better, with simple concatenation achieving 60%, but the full ForceVLA model reached 80%.
+
+This confirms that force should be integrated after VLM encoding and that adaptive MoE fusion is crucial for optimal performance.
+
+## Critical Synthesis & Sign-Off
+
+### Load-Bearing Assumptions
+
+**Is estimated force sufficient for stable control?**
+ForceVLA relies on estimated external wrench values, assuming that these signals are accurate enough for precise manipulation.
+This presumes that estimation noise, drift, or calibration error does not meaningfully degrade performance, and that learned policies can compensate for sensing inaccuracies.
+However, in high-precision tasks such as tight insertions, deformable object manipulation, or complex assemblies, small force estimation errors may significantly impact stability and success.
+
+**Does performance generalize across different sensing hardware?**
+The experiments use high quality force–torque sensors, which implicitly assumes that the learned policy is not strongly dependent on sensor quality.
+This suggests that low cost or retrofitted sensing setups might still provide signals that are reliable enough for control.
+However, force-based control is often sensitive to latency, noise, and calibration errors.
+As a result, this assumption may not hold when the system is deployed across different hardware setups with varying sensor fidelity.
+
+**Is architecture the primary bottleneck to accessibility?**
+The authors suggest that adapting ForceVLA to more affordable platforms could democratize force-aware manipulation.
+This assumes that architectural innovation, rather than sensing quality, is the dominant limitation.
+However, in contact-rich manipulation, hardware constraints may fundamentally limit achievable performance, regardless of model sophistication.
+
+### Potential Failure Modes
+
+1. **Sensitivity to Force Estimation**
+
+   - Does the system perform worse if the force estimates are noisy or inaccurate?
+   - Can the policy handle sensor drift or delays in force measurements?
+
+2. **Stability Across Different Hardware**
+
+   - Does the model need retraining or recalibration when used with different sensors or hardware?
+   - Could small calibration differences cause unstable behavior?
+
+3. **Overfitting to Specific Contacts**
+
+   - Can the model generalize to new materials or objects with different stiffness or compliance?
+
+{/* 4. **MoE Routing Dependence**
+   - Is performance tightly coupled to routing behavior learned under specific sensing conditions?
+   - Could routing instability under noisy force input degrade control smoothness? */}
+
+### Reproducibility
+
+The paper provides detailed architectural descriptions, training settings, and ablation studies, and commits to releasing code and dataset resources.
+Hardware specifications and optimization parameters are clearly stated, supporting replication in well-equipped research environments.
+However, reproducibility may depend on access to high-quality force-torque sensors, which could limit accessibility for smaller labs.
+
+### Sign-Off Criteria
+
+I would not sign this system off for real-world deployment without additional validation under varying sensor noise levels, lower-cost hardware configurations, and long-horizon contact tasks.
+Robustness to force estimation errors, calibration shifts, and hardware variability must be evaluated before considering production use.
+
+---
+
+# Additional Analysis
+
+## MoE leads to better reasoning or memorization
+
+Across the audited papers, I observed substantial variation in the number of experts used in MoE-based architectures.
+Although ChatVLA reports performance differences for different number of experts, this raises a question: 
+does increasing the number of experts genuinely improve reasoning, especially when computational overhead is not a constraint?
+
+Mixture of Parrots paper [13] directly address this issue.
+Their work shows that MoE models exhibit fundamentally different scaling dynamics for memorization and reasoning tasks, leading to two important conclusions.
+
+First, reasoning performance depends on hidden dimension (width), not merely the number of experts.
+In their study of graph reasoning problems such as connectivity and shortest path, they prove that a sparse MoE Transformer cannot solve certain tasks unless its hidden dimension exceeds a critical threshold.
+*Simply increasing the number of experts does not overcome insufficient width*.
+By contrast, a dense Transformer with slightly greater width can successfully solve these same tasks.
+This suggests that reasoning capacity is tied to active representational bandwidth rather than total distributed parameters.
+
+Second, memorization improves as the number of experts increases.
+For tasks that require remembering input–label pairs, MoE models can store large amounts of information while only activating a small portion of the model during computation.
+In these cases, memorization depends more on the **total number of parameters** in the model rather than the **number of parameters actively used during inference**.
+As a result, adding more experts increases the model’s storage capacity, even if it does not improve its reasoning ability.
+
+Taken together, these findings imply that scaling experts in MoE architectures may primarily strengthen memorization rather than reasoning, 
+a distinction that I feel particularly relevant when evaluating MoE-based VLA systems.
+
+## MoE Architectures in Different Domain
+
+1. DriveMOE
+2. FedVLA
+3. AdaMoE
+
+TODO: Complete the Table
+{/* 
+Possible axes:
+
+| Pattern                    | Example   | What it affects               |
+| -------------------------- | --------- | ----------------------------- |
+| Dynamic routing            | ChatVLA-2 | reasoning ↔ action separation |
+| Dual gating                | FedVLA    | heterogeneity specialization  |
+| Force/physics gating       | ForceVLA  | multimodal physical signals   |
+| Static / fixed routing     | DriveMoE  | efficiency bias               |
+| Action-specialized experts | AdaMoE    | skill modularization          | */}
+
+---
+
+# References
+
+[1] R. A. Jacobs et al., "Adaptive Mixtures of Local Experts," 
+*Neural Computation*, vol. 3, no. 1, pp. 79–87, 1991.
+
+[2] N. Shazeer et al., "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer," 
+arXiv:1701.06538 [cs.LG], 2017. 
+[Online]. Available: https://arxiv.org/abs/1701.06538
+
+[3] W. Fedus et al., "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity," 
+arXiv:2101.03961 [cs.LG], 2021. 
+[Online]. Available: https://arxiv.org/abs/2101.03961
+
+[4] C. Riquelme et al., "Scaling Vision with Sparse Mixture of Experts," 
+arXiv:2106.05974, 2021. 
+[Online]. Available: https://arxiv.org/abs/2106.05974
+
+[5] S. Rajbhandari et al., "DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale," 
+arXiv:2201.05596, 2022. 
+[Online]. Available: https://arxiv.org/abs/2201.05596
+
+[6] D. Dai et al., "DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models," 
+arXiv:2401.06066 [cs.CL], 2024. 
+[Online]. Available: https://arxiv.org/abs/2401.06066
+
+[7] M. J. Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model," 
+arXiv:2406.09246, 2024. 
+[Online]. Available: https://arxiv.org/abs/2406.09246
+
+[8] J. Wen et al., "DexVLA: Vision-Language Model with Plug-In Diffusion Expert for General Robot Control," 
+arXiv:2502.05855, 2025. 
+[Online]. Available: https://arxiv.org/abs/2502.05855
+
+[9] Z. Zhou et al., "ChatVLA-2: Vision-Language-Action Model with Open-World Embodied Reasoning from Pretrained Knowledge," 
+arXiv:2505.21906 [cs.RO], 2025. 
+[Online]. Available: https://arxiv.org/abs/2505.21906
+
+[10] J. Yu et al., "ForceVLA: Enhancing VLA Models with a Force-aware MoE for Contact-rich Manipulation," 
+arXiv:2505.22159 [cs.RO], 2025. 
+[Online]. Available: https://arxiv.org/abs/2505.22159
+
+[11] K. Black et al., "π₀: A Vision-Language-Action Flow Model for General Robot Control," 
+arXiv:2410.24164 [cs.LG], 2024. 
+[Online]. Available: https://arxiv.org/abs/2410.24164
+
+[12] D. Lepikhin et al., "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding," 
+arXiv:2006.16668 [cs.CL], 2020. 
+[Online]. Available: https://arxiv.org/abs/2006.16668
+
+[13] S. Jelassi et al., "Mixture of Parrots: Experts Improve Memorization More Than Reasoning," 
+arXiv:2410.19034 [cs.LG], 2024. 
+[Online]. Available: https://arxiv.org/abs/2410.19034
+
+# ToDo
+
+1. Structure properly
+2. Add details about Number of Experts in ChatVLA2
+3. Add additional MoE architecture used in different domain
+4. Link reference properly with Hyperlinks
