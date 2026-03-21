@@ -1,0 +1,199 @@
+# Safe Autonomy in a Domestic Humanoid Robot: Handling Hazardous Tools Under Latency and Uncertainty
+
+## Scenerio 
+
+Humanoid robots operating in homes must function in unstructured, human-centered environments such as kitchens,
+where people are nearby and object risks depend on context.
+
+Consider a robot preparing food while handling a knife.
+High-level planning may run on a separate model or remote system,
+while low-level controllers execute physical motion.
+If latency or desynchronization occurs between these layers, the robot’s internal state may diverge from the real world.
+
+For instance, the planner may assume the knife has been placed down and proceed to the next task, while the robot is still holding it.
+A motion that would normally be safe such as reaching for a bowl can therefore become hazardous.
+
+This scenario highlights three key challenges for safe autonomy: **failing safely during system inconsistencies,
+defining autonomy boundaries for hazardous tools, and maintaining trust when humans intervene under latency or uncertainty.**
+
+---
+## Failing Safely
+
+Beyond software crashes or sensor faults, humanoid robots can experience state desynchronization,
+where the planner believes an action is finished while the physical system has not confirmed it.
+
+In the kitchen example, the planner may believe the knife has been placed down and allow the robot to reach for another object.
+In reality, the robot may still be gripping the knife, creating a risk of accidental contact with nearby humans or objects.
+
+To address this, the robot should **fail toward reduced capability rather than continuing the task**.
+When uncertainty about hazardous tool possession is detected, the system should enter a **degraded safety mode**.
+
+A safe response could include:
+
+1. **Verifying the state of hazardous objects** before initiating new actions
+    
+2. **Adopting a guarded posture**, keeping the blade oriented away from humans
+    
+3. **Blocking new planner actions** until the knife is safely released
+    
+4. **Alerting a supervising human** if the uncertainty cannot be resolved
+    
+5. **Maintaining safe distance**, resolving the situation through teleoperation or supervision
+
+These measures avoid two dangerous extremes: blindly continuing motion or freezing unpredictably, by placing the robot in a **minimal-risk condition**
+until the system state is verified.
+
+---
+## Defining the Autonomy Boundary
+
+Another key challenge in domestic robotics is determining which decisions can be handled autonomously and which must be deferred to human oversight.
+In kitchen environments, tasks vary widely in risk, so the autonomy boundary should depend on three factors:
+
+- **Risk level of the object involved**
+    
+- **Reversibility of the action**
+    
+- **Confidence in the robot’s perception and execution state**
+
+**Actions Suitable for Autonomous Execution**
+
+The robot can safely perform routine tasks when risk and uncertainty are low.
+These include:
+- reaching for utensils or ingredients
+    
+- stirring or mixing food
+    
+- transporting lightweight objects
+    
+- placing items on surfaces
+    
+- cleaning or organizing items
+
+These actions are generally reversible and pose minimal harm if executed incorrectly.
+
+**Constrained Autonomy for Hazardous Tools**
+
+Handling a knife introduces higher risk and requires stricter constraints. When manipulating hazardous objects, the robot should:
+
+- restrict cutting motions to a designated workspace such as a cutting board
+    
+- continuously track the knife’s position and orientation
+    
+- enforce human proximity safety zones
+    
+- disable reaching for unrelated objects while holding the knife
+    
+- verify that the knife has been placed down before starting a new task
+
+Holding a hazardous tool should therefore place the robot in a **restricted operational mode**, where its range of allowed behaviors is significantly reduced.
+
+**Handling Harmful or Illegal Human Commands**
+
+Robots must also handle situations where humans issue **unsafe or harmful commands**.
+For example, a person might instruct the robot to pick up a knife and harm another individual.
+Even though the command comes from a human, the robot must refuse to execute it.
+
+Domestic humanoid robots should therefore include **policy-level safety constraints** that override direct user instructions when those actions could cause harm.
+
+In such cases, the robot should:
+
+- refuse commands that involve harming humans
+    
+- prioritize safety over obedience
+    
+- escalate the situation to a supervisory system if needed
+    
+- enter a safe standby state
+
+These safeguards ensure that **human-in-the-loop supervision does not become human-directed harm**, maintaining fundamental safety rules regardless of user intent.
+
+**Situations Requiring Human Intervention**
+
+Some states should always trigger a pause and require human supervision. 
+These include:
+
+* uncertainty about whether the robot is still holding the knife
+
+* loss of confidence in blade pose estimation
+
+* sensor or perception disagreement about object state
+
+* unexpected human entry into the active workspace
+
+* planner–execution desynchronization
+
+* prolonged communication latency during hazardous manipulation
+
+In these cases, the robot should stop advancing the task until a human confirms the appropriate next step.
+
+---
+
+## Trust and Latency in Human Oversight
+
+Human oversight may be delayed or intermittent, especially when high-level reasoning runs on remote systems or cloud infrastructure.
+When communication resumes after a delay, the operator must quickly understand the robot’s state to decide how to proceed.
+
+Instead of presenting raw logs or video feeds, the robot should provide a **structured summary of its uncertainty**.
+
+This summary should include:
+
+**State freshness**  
+Perception inputs and system estimates should include timestamps so the operator knows how recent the information is.
+
+**Confidence indicators**  
+The robot should report whether subsystems agree about the current state.
+For example, perception may detect the knife while grasp sensors indicate it was released.
+
+**Action constraints**  
+The interface should clearly indicate which actions are currently allowed or blocked, such as:
+
+- “Knife possession uncertain”
+    
+- “New motion commands inhibited”
+    
+- “Safe placement routine available”
+Presenting information in this structured way allows operators to quickly understand the situation without reconstructing the robot’s internal reasoning.
+
+---
+
+## Managing Cognitive Load During Reconnection
+
+  When communication is restored after a delay, the operator should not be overwhelmed with a backlog of events. 
+  Instead, the system should provide a concise summary of what occurred during the disconnection.
+
+An effective reconnection interface might include:
+
+**Event summary**
+* cutting task started
+
+* planner issued placement command
+
+* placement confirmation not received
+
+* planner initiated reach action
+
+* state mismatch detected
+
+* robot entered guarded safety mode
+
+**Current robot state**
+* object possession: uncertain
+
+* blade orientation: tracked
+
+* arm position: safe posture
+
+* human proximity: clear
+
+**Pending decisions**
+
+* confirm knife placement or execute safe placement routine
+
+* resume cooking task or switch to standby mode
+
+This structured summary allows the operator to quickly understand the situation and make safe decisions when reconnecting to the system.
+
+---
+Safe domestic robots must be designed to detect uncertainty, restrict autonomy when risks increase,
+and clearly communicate their state to human supervisors.
+These principles ensure that when failures occur, the system prioritizes human safety over task completion.
