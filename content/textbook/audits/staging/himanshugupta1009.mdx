@@ -84,14 +84,17 @@ At its core, the work replaces “validate everything” with “validate enough
 At its core, the paper addresses autonomy validation as a **computationally constrained estimation problem**.
 
 Let $D = \{x_1,x_2, \ldots,x_N\}$ denote a large dataset of real-world driving logs. For each scenario $x_i$, evaluating a policy requires running a high-fidelity simulation to obtain an outcome $y_i = f(x_i)$, where $f(\cdot)$ captures metrics such as collision occurrence or task success. The true objective is to estimate a global performance metric over the dataset, for example:  
+
 $$ 
 \mu = \frac{1}{N} \sum_{i=1}^N f(x_i).  
 $$
 
 However, evaluating $f(x_i)$ for all $x_i \in D$ is computationally prohibitive. The system is therefore restricted to evaluating only a subset $S \subset D$, with $|S| \ll N$, and must instead construct an estimator:  
+
 $$  
 \hat{\mu} = \frac{1}{|S|} \sum_{x_i \in S} w_i f(x_i),  
-$$  
+$$
+
 where $w_i$ are weights used to approximate the full-dataset metric.
 
 Under this formulation, the problem reduces to:
@@ -126,6 +129,7 @@ However, masked autoencoding optimizes for **reconstruction fidelity**, not **ca
 ### Difficulty Score Modeling
 
 On top of the learned embedding, a separate **MLP predictor** is trained to estimate a **difficulty score** $d(x_i)$, corresponding to the likelihood of failure (e.g., collision) under simulation. This predictor is trained using outcomes from simulated rollouts, learning a mapping:  
+
 $$  
 d(x_i) \approx \mathbb{P}(\text{failure} \mid x_i).  
 $$
