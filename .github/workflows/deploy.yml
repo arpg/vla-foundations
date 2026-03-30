@@ -18,18 +18,20 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Deploy to Remote Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: direct.ristoffer.ch
-          username: crh
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          script: |
-            cd ~/vla-build
-            git pull origin main
-            npm install
-            npm run build
-            rsync -av --delete out/ /var/www/vlm-robotics.dev/out/
-            echo "Deployment completed at $(date)"
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          cd $GITHUB_WORKSPACE
+          npm ci
+
+      - name: Build
+        run: |
+          cd $GITHUB_WORKSPACE
+          npm run build
+
+      - name: Deploy to local web root
+        run: rsync -av --delete $GITHUB_WORKSPACE/out/ /var/www/vlm-robotics.dev/out/
