@@ -18,33 +18,23 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Deploy Static Site to Remote Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: direct.ristoffer.ch
-          username: crh
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          script: |
-            # Navigate to staging build directory
-            cd ~/vla-staging || mkdir -p ~/vla-staging
-            cd ~/vla-staging
+      - name: Checkout
+        uses: actions/checkout@v4
 
-            # Clone or pull staging branch
-            if [ ! -d ".git" ]; then
-              git clone -b staging https://github.com/arpg/vla-foundations.git .
-            else
-              git fetch origin staging
-              git reset --hard origin/staging
-            fi
+      - name: Install dependencies
+        run: |
+          cd $GITHUB_WORKSPACE
+          npm ci
 
-            # Install dependencies and build
-            npm install
-            npm run build
+      - name: Build
+        run: |
+          cd $GITHUB_WORKSPACE
+          npm run build
 
-            # Deploy to staging subdirectory
-            mkdir -p /var/www/vlm-robotics.dev/public_html/staging
-            cp -r out/* /var/www/vlm-robotics.dev/public_html/staging/
-
-            echo "Staging deployment completed at $(date)"
+      - name: Deploy to staging subdirectory
+        run: |
+          mkdir -p /var/www/vlm-robotics.dev/out/staging
+          rsync -av --delete $GITHUB_WORKSPACE/out/ /var/www/vlm-robotics.dev/out/staging/
+          echo "Staging deployment completed at $(date)"
