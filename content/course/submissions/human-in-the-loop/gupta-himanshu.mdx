@@ -1,0 +1,76 @@
+
+# Human-in-the-Loop Under Disconnection: Autonomous Drone Operations in the Arctic
+
+## 1. Scenario
+
+Consider an autonomous aerial drone deployed in the Arctic for infrastructure inspection and search-and-rescue support. The system is designed as a human-in-the-loop (HITL) system: a remote operator supervises execution and intervenes during uncertain or high-risk situations.
+
+However, Arctic conditions fundamentally violate the assumptions underlying HITL design. Communication is intermittent and high-latency due to satellite links, perception is degraded by snow, wind, and lighting conditions, and there is no nearby human fallback. As a result, the human operator cannot be treated as a reliable real-time safety mechanism.
+
+This scenario forces a reframing: the system must remain safe even when the human is unavailable for extended periods.
+
+---
+
+## 2. Failing Safely Without Human Intervention
+
+In traditional HITL systems, safety is often implicitly delegated to the human operator. In this setting, that assumption fails. The system must instead define an explicit *default safe behavior* under disconnection.
+
+A naive fallback—such as immediate shutdown or hovering—is insufficient. In the Arctic, hovering may lead to energy depletion or drift due to wind, while immediate landing may be unsafe due to terrain uncertainty.
+
+We propose that safe failure must be **context-aware and risk-aware**, not static. Specifically, the system should transition into a *degraded autonomy mode* characterized by:
+
+- Conservative motion (reduced speed, increased safety margins)
+- Avoidance of uncertain regions (e.g., areas with poor perception confidence)
+- Energy-aware decision making (prioritizing return-to-base or safe landing zones)
+- Continuous self-assessment of risk
+
+The key requirement is that safety is not a single state, but a *policy over states* that adapts to environmental uncertainty and system confidence.
+
+---
+
+## 3. The Autonomy Boundary Under Uncertainty
+
+A central design question is: which decisions can be delegated to the system, and which must wait for human approval?
+
+We argue that the autonomy boundary should be defined not by task type, but by **risk and uncertainty thresholds**.
+
+- **Low-risk decisions** (e.g., nominal navigation in well-observed regions) can be fully autonomous.
+- **Moderate-risk decisions** (e.g., navigating near obstacles under partial observability) can be autonomously executed with conservative constraints.
+- **High-risk decisions** (e.g., entering poorly observed or dynamically changing regions) should ideally require human approval.
+
+However, in the presence of communication failures, “waiting for human input” is not always feasible. Therefore, the system must include a *fallback delegation rule*:
+
+> If human input is unavailable beyond a threshold time, high-risk decisions are replaced with predefined safe alternatives (e.g., abort, retreat, or hold in a verified safe region).
+
+This leads to a **tiered autonomy framework**, where autonomy expands conditionally based on human availability and system confidence.
+
+Importantly, this framework treats autonomy not as a fixed capability, but as a dynamically adjusted function of uncertainty and communication reliability.
+
+---
+
+## 4. Trust, Latency, and Human Re-Entry
+
+When communication is restored, the human operator is faced with a critical challenge: making decisions based on delayed and potentially outdated information.
+
+Without careful design, this leads to cognitive overload and poor decision-making.
+
+We propose that the system must explicitly support **human re-entry** through structured state summarization:
+
+- A concise summary of key events during disconnection (e.g., “Entered degraded mode at t=120s due to perception uncertainty”)
+- Current system state with uncertainty annotations (e.g., confidence in localization, obstacle estimates)
+- Highlighted decision points requiring attention
+- A ranked list of risks
+
+Additionally, the system should gate human commands based on consistency with current state estimates. Commands derived from outdated observations should be either rejected or revalidated.
+
+This shifts the human role from continuous supervision to **intermittent high-level decision-making**, supported by system-generated context.
+
+---
+
+## 5. Key Insight
+
+Human-in-the-loop systems are often designed under the assumption that the human is always reachable. In extreme environments such as the Arctic, this assumption fails.
+
+We argue that such systems must instead be designed as **human-optional safety-critical systems**, where autonomy is not merely a performance tool, but the primary mechanism for ensuring safety under uncertainty.
+
+In this paradigm, the human is no longer the fallback. The system is.
