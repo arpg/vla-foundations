@@ -15,7 +15,7 @@ This scenario forces a reframing: the system must remain safe even when the huma
 
 In traditional HITL systems, safety is often implicitly delegated to the human operator. In this setting, that assumption fails. The system must instead define an explicit *default safe behavior* under disconnection.
 
-A naive fallback—such as hovering indefinitely or immediately landing—is insufficient. In the Arctic, hovering may lead to energy depletion or drift due to strong winds, while landing may be unsafe due to uncertain terrain or obstacles hidden by snow.
+A naive fallback, such as hovering indefinitely or immediately landing, is insufficient. In the Arctic, hovering may lead to energy depletion or drift due to strong winds, while landing may be unsafe due to uncertain terrain or obstacles hidden by snow.
 
 Safe failure must therefore be **context-aware and risk-aware**, not static. We define a degraded autonomy mode characterized by:
 
@@ -55,7 +55,7 @@ For example:
 - Attempting to navigate through a narrow ice corridor may normally require human approval  
 - Under disconnection, the system instead retreats to a previously verified safe waypoint  
 
-Autonomy is therefore not fixed—it is a **function of uncertainty and connectivity**.
+Autonomy is therefore not fixed, but is a **function of uncertainty and connectivity**.
 
 ---
 
@@ -63,7 +63,7 @@ Autonomy is therefore not fixed—it is a **function of uncertainty and connecti
 
 When communication is degraded or restored after a delay, the human operator faces a fundamental challenge: acting on delayed and potentially outdated information.
 
-A delayed video feed is not reality—it is the past. Without explicit support, this creates false confidence and unsafe decisions.
+A delayed video feed is not reality, it is the past. Without explicit support, this creates false confidence and unsafe decisions.
 
 We propose that the system must explicitly support **human re-entry** through structured summarization:
 
@@ -94,8 +94,8 @@ We argue that such systems must instead be designed as:
 > **Human-optional safety-critical systems**
 
 In this paradigm:
-- Autonomy is not a convenience—it is the primary safety mechanism  
+- Autonomy is not a convenience, it is the primary safety mechanism  
 - The autonomy boundary is defined by uncertainty and connectivity  
 - The human enhances system performance, but is never required for safety  
 
-The system must be complete on its own. The human makes it better—not possible.
+The system must be complete on its own. The human makes it better, not possible.
