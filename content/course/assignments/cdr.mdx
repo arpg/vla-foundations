@@ -28,7 +28,7 @@ Custom simulated environment of the H1-2 robot playing dodgeball (avoiding colli
 To isolate ideal data segments for learning the dynamics, I am filtering out all data segments that do not detect objects, then clipping each segment into 2s shots, masking out sensors randomly, and only storing 0.2s timestamps in sequence to train the dynamics model at 0.2s prediction horizons instead of next-frame predictions.
 Here is an example of the raw data collection environment:
 
-![Data collection environment](../figures/data_collection_env.gif)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/carson/cdr/content/course/assignments/figures/data_collection_env.gif" alt="Data collection environment" width="900" />
 
 ## The Loss Formulation *(5 min)*
 
@@ -80,16 +80,16 @@ The encoder and dynamics model work really well.
 Each 8x8 depth image being passed into the can be reconstructed without much error and some noise smoothing.
 Here is an example from simulated data being encoded and decoded:
 
-![VAE reconstruction example](../figures/vae_gif.gif)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/carson/cdr/content/course/assignments/figures/vae_gif.gif" alt="VAE reconstruction example" width="900" />
 
 I then expanded the encoder to take in a third dimension to encode all of the $$S$$ sensor images as a single vector.
 This 3D VQ-VAE encoded the full set of sensor images, and the dynamics model also was able to make accurate predictions of the next sensor image set in the sequence:
 
-![3D VQ-VAE prediction example](../figures/rollout_02_animated.gif)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/carson/cdr/content/course/assignments/figures/rollout_02_animated.gif" alt="3D VQ-VAE prediction example" width="900" />
 
 On a single trajectory, the predictions can be converted into a pointcloud like this:
 
-![Pointcloud prediction example](../figures/dream2.gif)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/carson/cdr/content/course/assignments/figures/dream2.gif" alt="Pointcloud prediction example" width="900" />
 
 In this demo, the dots are progressively colored red for each iterative timestep it is predicting.
 You can see that there is a clear trajectory being predicted, and the model hallucinates when the ball is predicted to already have made contact.
@@ -99,7 +99,7 @@ This should act sort of like an EOS token in a language model to signal the end 
 But I am really getting stuck at scaling the model to learn from a larger distribution of trajectories.
 This is the prediction results I was getting from scaling the data to 10000 trajectories:
 
-![Prediction results](../figures/big_model_demo.gif)
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/carson/cdr/content/course/assignments/figures/big_model_demo.gif" alt="Prediction results" width="900" />
 
 The results are much noiser and the trajectories are unclear. 
 This is blocking me from adding actions into the loop because I can't get the model to first understand the different types of ball trajectories it might see.
