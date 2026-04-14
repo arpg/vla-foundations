@@ -1,8 +1,11 @@
 ---
 title: 'CDR: Critical Design Review'
+author: 'Carson Kohlbrenner'
 ---
 
 # Critical Design Review
+
+**Author:** Carson Kohlbrenner
 
 ## The Architectural Delta *(5 min)*
 
@@ -42,16 +45,19 @@ $$
 $$
 
 The reconstruction loss promotes accurate reconstruction of the latent tokens.
+
 $$
 \mathcal{L}_{\text{recon}} = \frac{1}{N} \sum_{i=1}^{N} \| x_i - \hat{x}_i \|^2
 $$
 
 The vector quantization loss promotes the latent tokens to be close to the codebook vectors.
+
 $$
 \mathcal{L}_{\text{VQ}} = \| \text{sg}[z_e(x)] - e \|_2^2
 $$
 
 The commitment loss promotes commitment to the codebook vectors.
+
 $$
 \mathcal{L}_{\text{commitment}} = \beta \| z_e(x) - \text{sg}[e] \|_2^2
 $$
@@ -109,3 +115,9 @@ This is blocking me from adding actions into the loop because I can't get the mo
 
 *Your partner asks the one question they think will come up during the CDR that you are not prepared to answer.
 Write it down.*
+
+From Ari: "How do you know that the model isn't just learning to look at a specific sensor to predict the next frames?"
+
+Response: I did not know how to answer this question when I was asked! 
+After thinking about it, I believe the best way to prevent this sort of learned behavior would be to mask out sensors randomly during training.
+This is the same strategy used in the JEPA paper and it may be the best way to prevent the model from learning to look at a specific sensor to predict the next frames.
