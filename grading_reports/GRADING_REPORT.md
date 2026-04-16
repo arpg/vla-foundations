@@ -1,9 +1,9 @@
 ![Chris-Bot](~/chris_robot.png)
 ### 🤖 Chris's Grading Assistant - Feedback Report
 
-**Student:** @lorinachey
-**PR:** #39
-**Branch:** `scratch-1-lorin`
+**Student:** @krusnim
+**PR:** #36
+**Branch:** `scratch-1-melkrusniak`
 
 Hi! I've reviewed your submission. Here's what I found:
 
@@ -46,7 +46,7 @@ Your code imports and runs cleanly. Nice! ✨
 ## 📝 Documentation & Analysis
 
 ✅ Report submitted! I found:
-- `content/course/submissions/scratch-1/lorin.mdx`
+- `content/course/submissions/scratch-1/mel-krusniak.mdx`
 - `README.md`
 
 Your instructor will review the quality of your analysis.
@@ -56,7 +56,7 @@ Your instructor will review the quality of your analysis.
 ## 🎯 Mastery Features Detected
 
 I noticed you implemented:
-- KV-Caching implementation
+- RoPE vs Sinusoidal ablation study
 
 Great work going beyond the requirements! Your instructor will verify implementation quality.
 

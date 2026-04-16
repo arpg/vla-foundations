@@ -21,3 +21,105 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
+
+/* KaTeX display mode - ensure proper spacing and centering */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1.5rem 0;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+/* KaTeX inline mode */
+.katex {
+  font-size: 1.05em;
+}
+
+/* Prevent double-rendering by hiding any raw LaTeX that might leak through */
+.katex-html {
+  /* KaTeX should render, not raw LaTeX */
+}
+
+/* Better code block styling for audit pages */
+.prose pre {
+  @apply bg-slate-900 text-slate-100 rounded-lg;
+  padding: 1.5rem;
+  overflow-x: auto;
+  border: 1px solid #334155;
+}
+
+.prose code {
+  @apply bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded;
+  font-size: 0.9em;
+}
+
+.prose pre code {
+  @apply bg-transparent text-slate-100 p-0;
+}
+
+/* Better heading hierarchy */
+.prose h1 {
+  @apply text-4xl font-bold text-slate-900 mb-6 mt-12 pb-3 border-b-2 border-slate-200;
+}
+
+.prose h2 {
+  @apply text-3xl font-bold text-slate-800 mb-4 mt-10;
+}
+
+.prose h3 {
+  @apply text-2xl font-semibold text-slate-800 mb-3 mt-8;
+}
+
+.prose h4 {
+  @apply text-xl font-semibold text-slate-700 mb-2 mt-6;
+}
+
+/* Better list styling */
+.prose ul {
+  @apply list-disc pl-6 space-y-2 my-4;
+}
+
+.prose ol {
+  @apply list-decimal pl-6 space-y-2 my-4;
+}
+
+.prose li {
+  @apply text-slate-700 leading-relaxed;
+}
+
+/* Better blockquote styling */
+.prose blockquote {
+  @apply border-l-4 border-blue-500 pl-6 italic text-slate-600 my-6;
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.05), transparent);
+  padding: 1rem 1.5rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+/* Table styling */
+.prose table {
+  @apply w-full border-collapse my-6;
+}
+
+.prose th {
+  @apply bg-slate-100 font-semibold text-left px-4 py-3 border border-slate-300;
+}
+
+.prose td {
+  @apply px-4 py-3 border border-slate-300;
+}
+
+/* Links */
+.prose a {
+  @apply text-blue-600 hover:text-blue-800 underline decoration-blue-300 hover:decoration-blue-500 transition-colors;
+}
+
+/* Image captions and figures */
+.prose img {
+  @apply rounded-lg shadow-md my-6;
+}
+
+/* Horizontal rules */
+.prose hr {
+  @apply border-slate-300 my-12;
+}

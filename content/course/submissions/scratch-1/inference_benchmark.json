@@ -1,0 +1,7 @@
+{
+  "no_cache_sec_mean": 0.1748347809945699,
+  "with_cache_sec_mean": 0.10087291320087388,
+  "speedup": 1.7332183184440366,
+  "prompt_len": 10,
+  "num_new_tokens": 40
+}
