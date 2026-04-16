@@ -13,13 +13,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from typing import Optional, Tuple
-from torch.utils.data import DataLoader, TensorDataset
-
-import os
+import time
 import pickle
-import csv
-import argparse  
+from typing import Optional, Tuple
 
 class RMSNorm(nn.Module):
     """
@@ -36,9 +32,9 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma)
-        # Hint: Use nn.Parameter with torch.ones
-        self.scale = nn.Parameter(torch.ones(dim))  # REPLACE THIS LINE
+        # Learnable scale parameter 'g' (gamma)
+        self.scale = nn.Parameter(torch.ones(dim))
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -47,18 +43,11 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm
-        # Step 1: Compute RMS (root mean square) along the last dimension
-        # Step 2: Normalize by dividing x by RMS
-        # Step 3: Apply learnable scale parameter
-        # HINT: Use torch.mean, torch.rsqrt for efficiency
-        # rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        rms = torch.rsqrt(torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)) # permit broadcasting on last dim
+        x_normed = x * rms
+        x_scaled = x_normed * self.scale
 
-        mean_square = x.pow(2).mean(dim = -1, keepdim = True)
-        inv_rms = torch.rsqrt(mean_square + self.eps)
-
-        # raise NotImplementedError("TODO: Implement RMSNorm forward pass")
-        return x * inv_rms * self.scale
+        return x_scaled
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -110,18 +99,20 @@ class RotaryPositionalEmbedding(nn.Module):
         seq_len = q.shape[2]
 
         # Get cached cos/sin values
-        cos = self.cos_cached[:seq_len, :]
-        sin = self.sin_cached[:seq_len, :]
-
-        # Explicit broadcast to (1, 1, T, D)
-        cos = cos.unsqueeze(0).unsqueeze(0)  # (1,1,T,D)
-        sin = sin.unsqueeze(0).unsqueeze(0)
+        cos = self.cos_cached[:seq_len, ...]
+        sin = self.sin_cached[:seq_len, ...]
 
         # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
-        q_rot = (q * cos) + (self.rotate_half(q) * sin)
-        k_rot = (k * cos) + (self.rotate_half(k) * sin)
+        q = (q * cos) + (self.rotate_half(q) * sin)
+        k = (k * cos) + (self.rotate_half(k) * sin)
 
-        return q_rot, k_rot
+        # ALTERNATIVE: Absolute sinusoidal
+        # q[::2]  = (q + cos)[::2]
+        # q[1::2] = (q + sin)[1::2]
+        # k[::2]  = (k + cos)[::2]
+        # k[1::2] = (k + sin)[1::2]
+        
+        return q, k
 
 
 class CausalSelfAttention(nn.Module):
@@ -143,17 +134,20 @@ class CausalSelfAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
 
         # Linear projections for Q, K, V
-        self.qkv_proj = nn.Linear(dim, 3 * dim, bias=False)
+        self.q_proj = nn.Linear(dim, dim, bias=False)
+        self.kv_proj = nn.Linear(dim, 2 * dim, bias=False)
         self.out_proj = nn.Linear(dim, dim, bias=False)
 
         # Dropout
         self.attn_dropout = nn.Dropout(dropout)
         self.resid_dropout = nn.Dropout(dropout)
 
+        # KV cache
+        self.kvcache = None
+        self.cache_enabled = False
+
         # Rotary embeddings
         self.rope = RotaryPositionalEmbedding(self.head_dim)
-
-        self.last_attn = None
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -163,71 +157,60 @@ class CausalSelfAttention(nn.Module):
         Returns:
             Output tensor (batch, seq_len, dim)
         """
-        B, T, C = x.shape
+        batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention
 
-        # Step 1: Project input to Q, K, V
-        # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
-        # Split into Q, K, V and reshape for multi-head attention
-        # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
-        qkv = self.qkv_proj(x)
+        # Project input to q, k, v
+        # Recall that `reshape` does `view` automatically if it's possible.
 
-        q, k, v = qkv.chunk(3, dim = -1)
 
-        H, D = self.num_heads, self.head_dim
-        q = q.view(B, T, H, D).transpose(1, 2)
-        k = k.view(B, T, H, D).transpose(1, 2)
-        v = v.view(B, T, H, D).transpose(1, 2)
+        if self.cache_enabled and self.kvcache is not None:
+            q = self.q_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim)).transpose(1, 2)
 
-        # Step 2: Apply RoPE to Q and K
-        # q, k = self.rope(q, k)
+            # Get k,v for only most recent token
+            x_recent = x[:, -1:, :]
+            kv_recent = self.kv_proj(x_recent)
+            kv_recent = kv_recent.reshape((batch_size, 1, self.num_heads, self.head_dim, 2)).transpose(1, 2)
+
+            # Shorten the cache if necessary
+            # kv is of shape (batch, seq_len, dim, 2)
+            n = x.shape[1]
+            kv = torch.cat((self.kvcache, kv_recent), dim=2)[:, :, :seq_len, :, :]
+        else:
+            q = self.q_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim)).transpose(1, 2)  
+            kv = self.kv_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim, 2)).transpose(1, 2)
+
+        if self.cache_enabled:
+            self.kvcache = kv
+        
+        k = kv[:, :, :, :, 0]
+        v = kv[:, :, :, :, 1]
+        # Now (q, k, v) should all be of shape (batch, num_heads, seq_len, head_dim)
+
+
+        # Apply RoPE to Q and K
         q, k = self.rope(q, k)
 
-        # Step 3: Compute attention scores
-        # scores = (Q @ K^T) / sqrt(d_k)
-        # Hint: Use torch.matmul or @ operator
-        # Shape should be (batch, num_heads, seq_len, seq_len)
-        scores = (q @ k.transpose(-2, -1)) * self.scale
+        # Compute attention scores
+        scores = (q @ k.transpose(-1, -2)) / math.sqrt(self.head_dim) # (batch, num_heads, seq_len, seq_len)
 
-        # Step 4: Apply causal mask
-        # The mask should prevent position i from attending to positions > i
-        # Hint: Create a lower-triangular matrix using torch.tril
-        # Set masked positions to -inf BEFORE softmax
-        # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
-        if mask is not None:
-            if mask.dtype != torch.bool:
-                mask = mask.bool()
+        # Apply causal mask
+        scores = scores.masked_fill(mask == 0, float('-inf'))
 
-            # (T,T) -> (1,1,T,T)
-            mask = mask.unsqueeze(0).unsqueeze(0)
-            scores = scores.masked_fill(~mask, float("-inf"))
+        # print(torch.exp(scores))
 
-        # Step 5: Apply softmax and dropout
-        # attn_weights = F.softmax(scores, dim=-1)
-        # attn_weights = self.attn_dropout(attn_weights)
-        attn = F.softmax(scores, dim = -1)
-        attn = self.attn_dropout(attn)
+        # Softmax
+        attn_weights = torch.nn.functional.softmax(scores, dim=-1)
 
-        # Save attention map for visualization (no grad)
-        self.last_attn = attn.detach()
+        # Dropout
+        attn_weights = self.attn_dropout(attn_weights)
 
-        # Step 6: Apply attention to values
-        # out = attn_weights @ V
-        out = attn @ v
+        # Apply values
+        out = attn_weights @ v # (batch, num_heads, seq_len, head_dim)
 
-        # Step 7: Reshape and project back
         # Concatenate heads and apply output projection
-        # Hint: Use .transpose() and .contiguous().view() to reshape
-        out = out.transpose(1, 2).contiguous().view(B, T, C)
-
-        out = self.out_proj(out)
-        out = self.resid_dropout(out)
-
-        return out
-
-        # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
-
+        # Heads may or may not be contiguous - reshape should handle both cases
+        return out.transpose(1, 2).reshape((batch_size, seq_len, self.dim))
 
 class FeedForward(nn.Module):
     """
@@ -334,11 +317,11 @@ class DecoderOnlyTransformer(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, 
-                input_ids, 
-                targets=None, *, 
-                use_causal_mask: bool = True):
-
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        targets: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             input_ids: Input token indices (batch, seq_len)
@@ -353,9 +336,7 @@ class DecoderOnlyTransformer(nn.Module):
         x = self.token_embedding(input_ids)  # (batch, seq_len, dim)
 
         # Create causal mask (lower triangular)
-        mask = None
-        if use_causal_mask:
-            mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool))
+        mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
         # Apply transformer blocks
         for block in self.blocks:
@@ -370,8 +351,8 @@ class DecoderOnlyTransformer(nn.Module):
         if targets is not None:
             # Flatten for cross-entropy
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                logits.reshape(-1, self.vocab_size),
+                targets.reshape(-1),
                 ignore_index=-1,  # Ignore padding tokens
             )
 
@@ -384,6 +365,7 @@ class DecoderOnlyTransformer(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
+        use_cache: bool = False
     ) -> torch.Tensor:
         """
         Autoregressive generation
@@ -396,6 +378,14 @@ class DecoderOnlyTransformer(nn.Module):
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
+
+        # KV caching: Use only when autoregressively generating (ie, right here)
+        #   Also, clear the cache on every call to `generate`.
+        if use_cache:
+            for block in self.blocks:
+                block.attention.cache_enabled = True
+                block.attention.kvcache = None
+
         for _ in range(max_new_tokens):
             # Crop context if too long
             input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
@@ -416,191 +406,174 @@ class DecoderOnlyTransformer(nn.Module):
             # Append to sequence
             input_ids = torch.cat([input_ids, next_token], dim=1)
 
+        if use_cache:
+            for block in self.blocks:
+                block.attention.cache_enabled = False
+
         return input_ids
 
 
 def train_epoch(
-    model,
-    dataloader,
-    optimizer,
-    device,
-    epoch: int,
-    *,
-    ckpt_dir: str = "checkpoints",
-    global_step: int = 0,
-    save_every: int = 1000,
-    log_every: int = 100,
-    use_causal_mask: bool = True,
-    loss_csv: str = "checkpoints/step_loss.csv",
-) -> tuple[float, int]:
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    epoch: int
+) -> float:
+    """
+    Train for one epoch
 
+    Args:
+        model: The transformer model
+        dataloader: Training data loader
+        optimizer: Optimizer
+        device: Device to train on
+        epoch: Current epoch number
+    Returns:
+        Average loss for the epoch
+    """
     model.train()
-    os.makedirs(ckpt_dir, exist_ok=True)
-
-    # create step loss csv header once
-    if global_step == 0 and (not os.path.exists(loss_csv)):
-        os.makedirs(os.path.dirname(loss_csv), exist_ok=True)
-        with open(loss_csv, "w", newline="") as f:
-            csv.writer(f).writerow(["step", "loss"])
-
     total_loss = 0.0
     num_batches = 0
 
-    for batch_idx, batch in enumerate(dataloader):
-        tokens = batch[0].to(device) if isinstance(batch, (tuple, list)) else batch.to(device)
+    for data in dataloader:
+        batch = data[0].to(device)
+        logits, loss = model(batch[:, 0:48], batch[:, 1:49])
 
-        x = tokens[:, :-1].contiguous()
-        y = tokens[:, 1:].contiguous()
-
-        logits, loss = model(x, targets=None, use_causal_mask=use_causal_mask)
-
-        if loss is None:
-            B, Tm1, V = logits.shape
-            loss = F.cross_entropy(logits.view(B * Tm1, V), y.view(B * Tm1))
-
-        optimizer.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
+        optimizer.zero_grad()
 
-        total_loss += loss.item()
+        total_loss += loss
         num_batches += 1
-        global_step += 1
 
-        # append step loss
-        with open(loss_csv, "a", newline="") as f:
-            csv.writer(f).writerow([global_step, loss.item()])
+    return total_loss / num_batches
 
-        if global_step % log_every == 0:
-            ppl = math.exp(loss.item()) if loss.item() < 20 else float("inf")
-            print(f"epoch {epoch} | step {global_step} | loss {loss.item():.4f} | ppl {ppl:.2f}")
 
-        if global_step % save_every == 0:
-            ckpt_path = os.path.join(ckpt_dir, f"step_{global_step:07d}.pt")
-            torch.save(
-                {
-                    "global_step": global_step,
-                    "epoch": epoch,
-                    "model_state": model.state_dict(),
-                    "optimizer_state": optimizer.state_dict(),
-                    "loss": loss.item(),
-                },
-                ckpt_path,
-            )
-            print(f"[checkpoint] saved: {ckpt_path}")
+def test_performance(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device
+) -> float:
+    """
+    Test loss on a test dataset
 
-    return total_loss / max(1, num_batches), global_step
+    Args:
+        model: The transformer model
+        dataloader: Test data loader
+        device: Device to test on
+    Returns:
+        Average loss for the test data
+    """
+
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
+
+    for data in dataloader:
+        batch = data[0].to(device)
+        logits, loss = model(batch[:, 0:48], batch[:, 1:49])
+
+        total_loss += loss
+        num_batches += 1
+    return total_loss / num_batches
+
+
+def test_inference_time(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device,
+    use_cache: bool = False
+) -> float:
+    """
+    Test inference time on the test dataset
+
+    Args:
+        model: The transformer model
+        dataloader: test data loader
+        device: Device to test on
+    Returns:
+        Average inference time for 10 steps of generation (with batching allowed) 
+    """
+
+    total_time = 0
+    num_samples = 0
+
+    for data in dataloader:
+        batch = data[0].to(device)
+
+        ago = time.perf_counter()
+        model.generate(batch, 100, use_cache=use_cache)
+        total_time += time.perf_counter() - ago
+        num_samples += 10
+
+    return total_time / num_samples
 
 
 def main():
+    """
+    Main training script
+
+    Usage:
+        python backbone.py
+    """
     # Hyperparameters
-    vocab_size = 256
-    dim = 256
-    num_layers = 4
-    num_heads = 8
-    ff_hidden_dim = 1024
-    max_seq_len = 50
-    batch_size = 32
+    vocab_size = 256  # Discretized action space
+    dim = 256  # Model dimension
+    num_layers = 4  # Number of transformer blocks
+    num_heads = 8  # Number of attention heads
+    ff_hidden_dim = 1024  # Feed-forward hidden dimension
+    max_seq_len = 50  # Maximum sequence length
+    batch_size = 64 # "if you have enough VRAM"
     learning_rate = 1e-4
-    num_epochs = 10
+    num_epochs = 40
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--no_causal_mask", action="store_true")
-    args = parser.parse_args()
+    # Set up device (CUDA used in development).
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-    use_causal_mask = not args.no_causal_mask
-    mode = "no_mask" if args.no_causal_mask else "causal"
+    # Load synthetic data from data/trajectories.pkl
+    with open("data/trajectories.pkl", 'rb') as f:
+        train_dataset = torch.utils.data.TensorDataset(pickle.load(f)['actions'][:9000, :])
 
-    # Device
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
+    with open("data/trajectories.pkl", 'rb') as f:
+        test_dataset = torch.utils.data.TensorDataset(pickle.load(f)['actions'][9000:, :])
 
-    # Load dataset
-    data_path = os.path.join("data", "trajectories.pkl")
-    if not os.path.exists(data_path):
-        raise FileNotFoundError(
-            f"Dataset not found at {data_path}. Run: python generate_data.py --output data/trajectories.pkl"
-        )
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader  = torch.utils.data.DataLoader(test_dataset,  batch_size=batch_size, shuffle=True)
 
-    with open(data_path, "rb") as f:
-        data = pickle.load(f)
-
-    tokens = data["tokenized"]
-    tokens = tokens.long() if torch.is_tensor(tokens) else torch.tensor(tokens, dtype=torch.long)
-
-    assert tokens.dim() == 2, f"Expected tokens shape (N, T), got {tokens.shape}"
-    assert tokens.size(1) == max_seq_len, f"Expected seq_len {max_seq_len}, got {tokens.size(1)}"
-
-    dataset = TensorDataset(tokens)
-    train_loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        drop_last=True,
-        pin_memory=(device.type == "cuda"),
-    )
-
-    print(f"Loaded dataset: {tokens.size(0)} sequences, seq_len={tokens.size(1)}")
-
-    # Model
     model = DecoderOnlyTransformer(
-        vocab_size=vocab_size,
-        dim=dim,
-        num_layers=num_layers,
-        num_heads=num_heads,
-        ff_hidden_dim=ff_hidden_dim,
-        max_seq_len=max_seq_len,
-        dropout=0.1,
+        vocab_size,
+        dim,
+        num_layers,
+        num_heads,
+        ff_hidden_dim,
+        max_seq_len = max_seq_len,
+        dropout = 0.1,
     ).to(device)
 
-    num_params = sum(p.numel() for p in model.parameters())
-    print(f"Model params: {num_params/1e6:.2f}M")
-    print(f"Audit mode: {mode} (use_causal_mask={use_causal_mask})")
+    # If needed: Load model parameters from checkpoint
+    # model.load_state_dict(torch.load("checkpoints/epoch_40.pt", weights_only=False))
 
-    # Optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # Logs
-    os.makedirs("checkpoints", exist_ok=True)
-    loss_csv_path = os.path.join("checkpoints", f"step_loss_{mode}.csv")
-    log_path = os.path.join("checkpoints", f"train_log_{mode}.csv")
-
-    with open(log_path, "w", newline="") as f:
-        csv.writer(f).writerow(["epoch", "loss"])
-
-    global_step = 0
-    best_loss = float("inf")
-
+    # Train for many epochs
     for epoch in range(num_epochs):
-        train_loss, global_step = train_epoch(
-            model,
-            train_loader,
-            optimizer,
-            device,
-            epoch,
-            ckpt_dir="checkpoints",
-            global_step=global_step,
-            use_causal_mask=use_causal_mask,
-            loss_csv=loss_csv_path,
-            save_every=1000,
-            log_every=100,
-        )
+        model.train()
+        train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
 
-        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+        print(f"Epoch {epoch+1}/{num_epochs} - Training loss: {train_loss:.4f}")
 
-        with open(log_path, "a", newline="") as f:
-            csv.writer(f).writerow([epoch + 1, train_loss])
+        torch.save(model.state_dict(), f"checkpoints/epoch_{epoch+1}.pt")
 
-        if train_loss < best_loss:
-            best_loss = train_loss
-            torch.save(model.state_dict(), os.path.join("checkpoints", f"best_model_{mode}.pt"))
-            print(f"Saved best checkpoint (loss={best_loss:.4f}) -> best_model_{mode}.pt")
+    # Test: Loss and inference time
+    model.eval()
+    test_loss = test_performance(model, test_loader, device)
+    print(f"Testing loss: {test_loss:.4f}")
+    test_time = test_inference_time(model, test_loader, device, use_cache=True)
+    print(f"Inference time: {test_time:.4f}")
 
-    print("Training complete.")
 
 if __name__ == "__main__":
     main()
