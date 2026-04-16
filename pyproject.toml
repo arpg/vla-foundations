@@ -11,6 +11,7 @@ dependencies = [
     "pytest>=7.0.0",
     "pytest-html>=4.0.0",
     "matplotlib>=3.5.0",
+    "pandas>=2.0.0",
 ]
 
 [[tool.uv.index]]

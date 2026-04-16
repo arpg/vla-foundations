@@ -17,6 +17,50 @@ In this course, we do not write "summaries." A summary is a transient document t
 
 As a technical auditor, your job is to pressure-test the paper's claims from a first-principles perspective. You are looking for the "Information Decay"—the points where the model's architectural choices sacrifice physical reality for computational ease. If this paper were a technical proposal at an organization like Zoox or Tesla, would you sign off on it? Why or why not?
 
+## FAQ: The VLA Paper Audit & Presentation
+
+### Scope & Technical Focus
+
+**What is the "Primary Paper" meant to convey?**
+
+Consider this your anchor—the central node in a knowledge graph for your chosen sub-domain. If you choose a work like **VQ-BeT**, your audit is primarily about the *Vector Quantization for Actions* lineage. You then use secondary papers (RT-1, FAST, etc.) to show the evolution, contrast, or failure modes of that technical path.
+
+**Why are "simple" approaches like RT-1's binning included?**
+
+RT-1 isn't included because its "how" is complex—it's included because its "so what" is the punchline. It proved that robotic actions could be treated as language and scaled. Your audit shouldn't spend pages on the mechanics of binning; it should spend pages on its **limitations** (discretization error, loss of multi-modality, scaling bottlenecks) and why newer architectures were forced to innovate.
+
+**What does it mean to "Audit the Interface"?**
+
+Focus on how subcomponents interact. In today's architectures, the "Initial Dissolve" often happens at the boundary between modules.
+
+- **Example:** If a model uses a frozen ViT to output actions via an LLM, the "interface" is the projection between the ViT and the decoder, or the mapping between the decoder and the action tokens.
+- **Avoid:** Spending time on standard Transformer blocks unless they've been specifically modified for the VLA task.
+- **Prioritize:** Input projections, action heads, and the specific objective functions being optimized.
+
+### Format & Objectives
+
+**Should this be a summary or a technical argument?**
+
+**Stop summarizing and start arguing.** Pick a technical thesis (e.g., *"Latent action quantization is the only path to high-precision VLA"*) and use the papers to prove or disprove it. I don't want a "useful summary"; I want a critical autopsy that identifies where these models fail and what the next scaling step is.
+
+**Is the audit an educational tool or a technical document?**
+
+Following the **Amazon Principle**, these are identical. A high-fidelity technical document is, by definition, the best educational tool. We do not create "explanatory" versions for students and "rigorous" versions for the textbook; we do the work once, correctly.
+
+**Is a Technical Recommendation required?**
+
+**No.** A recommendation requires variables we haven't defined (compute budget, hardware constraints, data availability). Your job is to map the **geometry of the technical trade-offs**. Show us where the "load-bearing walls" are, not which house to buy.
+
+### Presentation Logistics
+
+**How does the presentation differ from the audit?**
+
+The **Audit** is your exhaustive "Single Source of Truth." The **Presentation** is your technical brief. Use the presentation to distill the main points, highlight the most critical trade-offs, and register your technical opinion at a higher level.
+
+**What is the time allocation?**
+
+Moving forward, we will target approximately **30 minutes** for the reading/audit discussion and **35 minutes** for the presentation and peer-to-peer technical deep dive.
+
 ## Submission Requirements & Technical Standards
 
 The Paper Audit is not a book report; it is an exhaustive technical autopsy of a specific sub-domain within the VLM-Robotics landscape. You are expected to synthesize the foundational literature and the current SOTA into a single, authoritative dossier.
