@@ -1,9 +1,9 @@
 ![Chris-Bot](~/chris_robot.png)
 ### 🤖 Chris's Grading Assistant - Feedback Report
 
-**Student:** @krusnim
-**PR:** #36
-**Branch:** `scratch-1-melkrusniak`
+**Student:** @cKohl10
+**PR:** #37
+**Branch:** `scratch-1-ckohl10`
 
 Hi! I've reviewed your submission. Here's what I found:
 
@@ -37,16 +37,20 @@ Hi! I've reviewed your submission. Here's what I found:
 
 ✅ Model has the expected number of trainable parameters.
 
-### ✅ Code Quality
+### ❌ Code Quality
 
-Your code imports and runs cleanly. Nice! ✨
+✅ Code imports successfully.
+
+✅ Test passed.
+
+❌ Test failed.
 
 ---
 
 ## 📝 Documentation & Analysis
 
 ✅ Report submitted! I found:
-- `content/course/submissions/scratch-1/mel-krusniak.mdx`
+- `content/course/submissions/scratch-1/cKohl10.mdx`
 - `README.md`
 
 Your instructor will review the quality of your analysis.
