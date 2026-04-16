@@ -1,9 +1,9 @@
 ![Chris-Bot](~/chris_robot.png)
 ### 🤖 Chris's Grading Assistant - Feedback Report
 
-**Student:** @Jdvakil
-**PR:** #49
-**Branch:** `scratch-1-jdvakil`
+**Student:** @krusnim
+**PR:** #36
+**Branch:** `scratch-1-melkrusniak`
 
 Hi! I've reviewed your submission. Here's what I found:
 
@@ -46,7 +46,7 @@ Your code imports and runs cleanly. Nice! ✨
 ## 📝 Documentation & Analysis
 
 ✅ Report submitted! I found:
-- `content/course/submissions/scratch-1/jdvakil.mdx`
+- `content/course/submissions/scratch-1/mel-krusniak.mdx`
 - `README.md`
 
 Your instructor will review the quality of your analysis.

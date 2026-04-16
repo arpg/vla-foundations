@@ -42,7 +42,15 @@ jobs:
 
             ### Common Issues:
 
-            **1. Semantic Line Breaks**
+            **1. Required Frontmatter Fields**
+            - Every audit MDX file must include these fields:
+              - `title`: Paper title
+              - `author`: Paper author(s)
+              - `topic`: Research topic/category
+              - `paper`: Link to paper or citation
+            - All fields must have non-empty values (no placeholders like "TBD" or "TODO")
+
+            **2. Semantic Line Breaks**
             - Each sentence should be on its own line
             - This makes PR commenting and reviewing much easier
             - Example:
@@ -53,7 +61,7 @@ jobs:
               + This makes PR review much easier.
               ```
 
-            **2. Clean Git History**
+            **3. Clean Git History**
             - No "Merge branch 'main'" commits allowed
             - Use `git rebase main` instead of `git merge main`
             - Keep your commit history linear and clean
@@ -144,22 +152,3 @@ jobs:
 
             ---
             *This preview will be removed when the PR is closed.*
-
-  trigger-shadow-tests:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.base_ref == 'staging'
-    needs: audit
-    steps:
-      - name: Trigger Shadow CI in Private Repo
-        uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.PRIVATE_DISPATCH_TOKEN }}
-          repository: crheckman/private-vla-foundations
-          event-type: run-shadow-tests
-          client-payload: |
-            {
-              "pr_number": "${{ github.event.pull_request.number }}",
-              "head_branch": "${{ github.event.pull_request.head.ref }}",
-              "head_sha": "${{ github.event.pull_request.head.sha }}",
-              "repo_url": "${{ github.event.pull_request.head.repo.clone_url }}"
-            }
