@@ -1,0 +1,328 @@
+---
+title: "Evaluating Vector Quantization for VLA Action Tokenization"
+author: "heyangmel"
+paper: "RT-1 (2022), VQ-BeT (ICML 2024), MotionLM (2023)"
+topic: "Action Tokenization"
+---
+# Evaluating Vector Quantization for VLA Action Tokenization
+
+When using vision-language-action (VLA) models for robotics, we typically replace continuous control variables, like the real-valued positions of actuators, with discrete action tokens. This is **action tokenization**. But there is no single, obviously correct way to carry out this tokenization.
+
+In this paper audit, we analyze action tokenization as a systems-level design choice. Our primary focus is the _vector quantized behavior transformer_ ([VQ-BeT](https://arxiv.org/pdf/2403.03181)), which uses a method called _vector quantization_ to tokenize actions. On the way, we'll discuss some popular alternatives - some newer, some older - focusing on their modeling assumptions and potential failure modes. Then, after a deep dive into VQ-BeT, we'll compare all of these options and provide some discussion about ongoing and future action tokenization work.
+
+---
+
+# [1] Understanding action tokenization
+
+*What's the core technical challenge?*
+
+Traditional robot control relies on continuous action spaces that align closely with the underlying physics of robotic systems. Torques, velocities, and end-effector motions are naturally continuous. Classical control theory is built around preserving smoothness, stability, and reactivity under this assumption. But motivated by the success of token-based generative modeling, a growing body of work replaces continuous control with action tokens: latent discrete symbols that are decoded into continuous actions at execution time.
+
+The practice of action discretization is not new. However, in the VLA context, it's substantially more important than in the past, credited with stabilizing training, enabling reuse of language-model architectures, and simplifying long-horizon credit assignment. However, it still comes at the fundamental tradeoff of degrading the mechanical precision of a robot. As such, it's natural to ask:
+
+- What assumptions about dynamics, smoothness, and temporal structure make discrete actions viable?
+- Which failure modes are possible?
+  - ... and how are they masked by offline datasets and scripted evaluation protocols?
+- Under what conditions does tokenization reduce complexity?
+  - ... and when does it merely relocate it into the decoder or execution stack?
+
+---
+
+# [2] The competitors
+
+*How has "initial dissolve" of action tokenization evolved over the last few years?*
+
+Early action tokenizers for VLAs simply quantized actions into discrete bins based on actuator values - a surprisingly effective approach. But since then, there have been some developments.
+
+This section is a combination taxonomy and chronology. We'll start by discussing the early approaches that used **simple binning**, and the marginal improvements made in that direction. Then we'll cover a well-established family of action tokenizers based on **vector quantization** (VQ). We'll cover one particular VQ-based approach, VQ-BeT, in complete detail, as we consider it emblematic of the concerns and lineage of the action quantization literature. Following that, we'll briefly discuss **the cutting edge**, forgoing VQ in favor of other ideas.
+
+While we'll discuss the benefits and drawbacks of these broad categories as we introduce them, you can also skip [straight to our technical analysis](#evaluating-action-tokenizers).
+
+---
+
+## The baseline: Simple binning
+
+This is the most straightforward form of action tokenization: bin the range of continuous actuator commands into discrete values. Typically, actions for each actuator are discretized independently. This was the approach taken by many foundational robotics transformers circa 2022.
+
+Assuming without loss of generality that actuator commands are in $[0, 255)$ (as is often seen), the binning approach is mathematically as simple as can be:
+
+$$
+\text{action\_token} = \lfloor a \rfloor
+$$
+
+Depending on the architecture, these 255 (or so) action tokens might be usable as-is, or (as a hack if available tokens are limited) might overwrite the 255 *least used* tokens in the upstream language model.
+
+There is some nuance in how binning is applied. [RT-1](https://arxiv.org/abs/2212.06817)’s action tokenizer discretized uniformly across the entire action space (based on minimum and maximum values seen in the data) into 256 equal-size bins. This choice was, apparently, good enough: in the corresponding ablation study, they note a -25% success rate delta when this action tokenizer is removed (though no comparison was given with other action tokenization schemes). A near-identical scheme was reused for [RT-2](https://arxiv.org/abs/2307.15818) in 2023.
+
+In later 2023, Waymo's [MotionLM](https://arxiv.org/pdf/2309.16534) introduced some slight modifications, using a "Verlet wrapper" around uniformly binned deltas for each coordinate. In practice, this resulted in a substantial reduction in the number of distinct tokens required, though it was not fully specified how this reduction arose. Later, during work on [OpenVLA](https://arxiv.org/pdf/2406.09246) in early 2024, it was noticed that computing bins based on the minimum and maximum actuator values was vulnerable to outliers - though bins were of equal numerical size, the majority of data fell in a subset of bins, so some precision was wasted. To amend this issue, the authors of OpenVLA opted to use a quantile-based approach instead, such that each bin covered the same amount of training data:
+
+$$
+\text{action\_token} = \lfloor \text{quantile}(a) \cdot 255 \rfloor
+$$
+
+Why did these simple action tokenizers survive for so long, when tokenizers in other components of the VLA stack were more complex? While it's hard to say for certain, we suspect that it was discovered early that performance does not necessarily correlate well with scale in action tokenizers. Binning is good enough in many cases, and choosing a more complex action tokenizer can impact inference times (see [high-frequency performance](#high-frequency-performance)).
+
+However, it was long suspected that poor action tokenization prevented dexterous performance in RT-2. Indeed, in 2025, Physical Intelligence released a performance comparison of a "naive" (binning) tokenizer with a new, bespoke alternative ([FAST](https://arxiv.org/abs/2501.09747)), suggesting serious deterioration of performance specifically with increased sampling rate:
+
+![Performance comparison of naive tokenizer vs FAST](https://hackmd.io/_uploads/B1OfcT0HZe.png)
+
+As such, recent trends seem to lean away from binning tokenizers - although their simplicity remains compelling.
+
+---
+
+## The protagonist: Vector quantization and VQ-BeT
+
+The qualitative shift away from binning-based action tokenizers was a long time coming. By mid-2024, there was work in avoiding binning by instead learning a vector-quantized latent action space and using it as a load-bearing interface for sequence modeling, described as [VQ-BeT](https://arxiv.org/abs/2403.03181).
+
+In this audit, we use VQ-BeT as a particularly interesting case study - not for its optimality (though it performs well in several respects), but because it crystallizes the core design assumptions behind latent action quantization in VLA systems.
+
+### How it works
+
+VQ-BeT decomposes action generation into two explicitly separated stages: (i) offline action tokenization via residual vector quantization, and (ii) online autoregressive prediction of discrete latent codes conditioned on observations (and optionally goals). This separation reflects a deliberate reorganization of the control stack, in which representation learning, sequence modeling, and continuous execution are assigned distinct roles.
+
+#### Stage 1: Chunk tokenization via residual VQ-VAE
+
+Given a continuous action (or short action chunk) $a_{t:t+n}$, VQ-BeT first maps it into a latent embedding using an encoder:
+
+$$
+\phi: x=\phi(a_{t:t+n}).
+$$
+
+This latent is discretized using **Residual Vector Quantization (RVQ)** ([RVQ](https://arxiv.org/abs/2107.03312)), where multiple vector quantizers are applied sequentially. Each quantization layer selects the nearest codebook vector to the remaining residual:
+
+$$
+z_q(x) = \sum_{i=1}^{N_q} z_q^{(i)},
+$$
+
+and
+
+$$
+z_q^{(i)} = \arg\min_{e_j^{(i)}} \left\| r^{(i)} - e_j^{(i)} \right\|_2,
+$$
+
+where $r^{(i)}$ denotes the residual after subtracting the codebook vectors selected by previous layers.
+
+The quantized latent is then decoded back into a continuous action via a decoder:
+
+$$
+\psi:\hat{a}_{t:t+n} = \psi(z_q(x)).
+$$
+
+VQ-BeT uses a small number of residual quantization layers (typically two), interpreting the first as capturing coarse action modes (*primary codes*) and subsequent layers as encoding finer-grained residual structure (*secondary codes*).
+
+#### Stage 2: Autoregressive prediction of latent action codes
+
+After training the tokenizer, it is frozen and used to convert actions into discrete codes. A GPT-style transformer is then trained to predict these codes conditioned on recent observations:
+
+$$
+p\big(\{z_q^{(i)}\} \mid o_{t-h:t}, g \big),
+$$
+
+where $g$ is an optional goal signal.
+
+Rather than predicting a single token per timestep, the model predicts one categorical distribution per quantization layer. Training loss weights errors in primary code prediction more heavily than secondary codes, reflecting the intended coarse-to-fine structure of the latent space.
+
+#### Stage 3: Offset head and continuous correction
+
+To compensate for the loss of precision introduced by discretization, VQ-BeT adds a continuous **offset head** that predicts a residual correction to the decoded action:
+
+$$
+\hat{a}_{t:t+n} = \psi(z_q(x)) + \zeta_{\text{offset}}(o_t).
+$$
+
+This offset is trained with a regression loss and applied at execution time, providing a mechanism for fine-grained adjustment while preserving a discrete decision interface.
+
+---
+
+Taken together, VQ-BeT does not eliminate continuous control, but redistributes it. Discrete latent codes are used to model long-horizon structure and multimodality, while continuous correction is relegated to the decoder and offset pathways. This division of responsibility is central to both the strengths and limitations of vector-quantized action tokenization.
+
+![VQ-BeT overview](https://hackmd.io/_uploads/BJfrvNk8Wx.png)
+
+### Other vector quantization approaches
+
+Vector quantization has appeared in a range of neighboring contexts, from representation compression to skill abstraction, with substantially different system-level roles. In most prior uses—such as [VQ-VAE](https://arxiv.org/abs/1711.00937)-style compression or skill-centric methods like [QueST](https://arxiv.org/abs/2407.15840) —quantized latents serve either efficiency or reuse, rather than acting as a direct interface to token-based sequence models.
+
+VQ-BeT distinguishes itself by adopting vector quantization explicitly as an action tokenization mechanism for autoregressive modeling, positioning discrete latent actions as the primary interface between continuous control and sequence prediction. More recent work, such as [VQ-VLA](https://arxiv.org/abs/2507.01016), extends this design by scaling the tokenizer itself, but preserves the same core abstraction introduced by VQ-BeT: discrete latent actions as the primary interface to sequence models.
+
+This framing allows us to treat VQ-BeT as a representative instance of latent action tokenization, and motivates a broader comparative evaluation of action tokenization strategies at the system level.
+
+### Preliminary evaluations
+
+At a high level, VQ-BeT demonstrates that vector-quantized action representations can support a wide range of behaviors across simulated and real-world robotic tasks. Empirically, the model shows improved multimodal behavior generation and long-horizon stability compared to simple discretization baselines, particularly in offline imitation settings.
+
+![VQ-BeT results figure](https://hackmd.io/_uploads/Sk2snE1Ibe.png)
+
+However, these evaluations are necessarily entangled with other design choices, including backbone architecture, observation encoding, training data composition, and execution-time control strategies. As a result, reported performance gains cannot be attributed to action tokenization in isolation.
+
+Rather than treating these results as definitive evidence for or against vector-quantized action tokenization, we view them as establishing *plausibility*: VQ-BeT demonstrates that learned discrete latent actions are a viable interface for sequence models in robotics. The more consequential questions—regarding scalability, robustness, control fidelity, and engineering complexity—require evaluation at the system level.
+
+---
+
+## The cutting edge: New action tokenizers
+
+Before stepping into that evaluation, we'll first note some very recent developments in the area outside VQ-BeT.
+
+### Frequency-space action tokenization
+
+Earlier, we showed a comparison between a binning tokenizer and a modern "bespoke" tokenizer. That bespoke tokenizer was _frequency-space action sequence tokenization_ ([FAST](https://arxiv.org/pdf/2501.09747)), released in early 2025. FAST is based on the [discrete cosine transform](https://en.wikipedia.org/wiki/Discrete_cosine_transform#Formal_definition) (DCT), a widely used concept in signal processing (e.g. in JPEG compression; see also [IEEE paper](https://ieeexplore.ieee.org/document/125072)). In short, FAST applies the DCT to normalized actions, bins the DCT coefficients, and applies byte-pair encoding:
+
+$$
+\begin{aligned}
+a_{\text{norm}} &= 2 \cdot \text{quantile}(a) - 1 \\
+M &= \text{DCT}(a_{\text{norm}}) \\
+M_{\text{bin}} &= \lfloor \gamma M \rfloor \\
+\text{action\_tokens} &= \text{BPE}(M_{\text{bin}}, \phi)
+\end{aligned}
+$$
+
+![FAST diagram](https://hackmd.io/_uploads/HkobvekU-g.png)
+
+There are two parameters here: $\gamma$, which controls the resolution of the bins for the DCT coefficients, and $\phi$, the BPE codebook, which must be learned. $a$, here, is generally an action chunk rather than a single action.
+
+FAST is a learned tokenizer. The same paper also provides FAST+, an ostensibly universal pretraining of FAST on a wide variety of robot morphologies. VQ-BeT, already discussed, is learned as well. But it remains an open question whether training action tokenizers is always practical or convenient, and work continues on non-trained tokenizers. Late 2025 also saw the release of [BEAST](https://arxiv.org/pdf/2506.06072), a no-learning, B-spline-based action tokenizer.
+
+### Actions in continuous space
+
+Can we avoid having to use discrete actions entirely?
+
+This remains an open question. In late 2024, there was some significant work ([arXiv:2409.12514](https://arxiv.org/abs/2409.12514)) involving the usage of diffusion models to avoid tokenizing actions at all. The approach, taken as part of an optimized fine-tuning regime, also yielded a success rate increase in [OpenVLA-OFT](https://arxiv.org/pdf/2502.19645). Initially, [the $\pi_0$ model used a similar approach](https://arxiv.org/html/2410.24164v1)... but is outperformed in some respects by $\pi_0$-FAST, which uses the FAST action tokenizer.
+
+We won't go into the details of these methods in this audit, but we will provide some general analysis of the pragmatism of using such methods in comparison to traditional action tokenization.
+
+---
+
+<a id="evaluating-action-tokenizers"></a>
+
+# [4] Evaluating action tokenizers
+
+Our evaluation covers three major contexts: action tokenizers as *scalable components*, as *real-world systems*, and as *engineered mechanisms*, focusing respectively on the difficulties of scaling, running, and developing models based on these action tokenizers.
+
+Unfortunately, action tokenizers are not conveniently separated from other components of VLA models - often they are bundled with other iterative improvements. As such, it's misleading to provide strict quantitative comparisons based solely on publicly available data. In a few places, we use a rough ranking system to provide our first-principles expectations, based on the color-coded system sometimes seen in hardware reviews: 🔵 denotes "best in class," 🟢 "good," 🟡 "situational" or "outdated," and 🔴 "best avoided."
+
+Our contenders are as follows:
+
+| Type   | Action tokenization approach | Representative | Release |
+|--------|------------------------------|----------------|---------|
+| Binning | Naive binning               | RT-2          | 2023    |
+| Binning | Quantile binning            | OpenVLA       | 2024    |
+| VQ      | Residual VQ-VAE             | VQ-BeT        | 2024    |
+| DCT     | FAST                        | $\pi_0$-FAST  | 2025    |
+| None    | Diffusion / flow matching   | $\pi_0$       | 2024    |
+
+---
+
+## As real-world systems
+
+From the perspective of technical auditing, we first focus on the role of action tokenization in the deployment of the system in the real world. When deployed on physical robots, action tokenizers define more than a representational interface—they define how control authority, feedback, and error correction are distributed across the VLA stack. Discretizing actions necessarily introduces delay, abstraction, or loss of metric structure, and different tokenization strategies make fundamentally different assumptions about when and where these costs can be absorbed.
+
+In this section, we audit action tokenizers under real-world constraints such as latency, high-frequency control, contact dynamics, and partial observability. Rather than asking whether a tokenizer can generate plausible actions, we ask where precise control is enforced, how feedback is incorporated, and which failures are structurally invisible to the model’s decision-making process. These questions determine whether a tokenization strategy remains viable outside scripted evaluation settings.
+
+### Architectural lock-in and control philosophy
+
+Action tokenization fixes architectural commitments before learning begins: it determines where control authority, precision, and feedback are expected to reside in the VLA stack, and constrains which modeling paradigms are viable downstream.
+
+- **Primitive discretization** places control precision directly on the sequence model.
+- **Latent action tokenization** shifts it to decoders and execution-time correction.
+- **Continuous-action approaches** retain it within the policy itself.
+
+These choices are not interchangeable. Each commits the system to a different distribution of responsibility, shaping which errors can be corrected downstream and which failures are structural rather than incidental.
+
+<a id="high-frequency-performance"></a>
+
+### High-frequency performance
+
+High-frequency control exposes where tokenization delays or abstracts feedback. Discrete action tokens necessarily operate at a coarser temporal granularity than physical dynamics, forcing systems to assume that short-horizon correction can be deferred or handled outside the tokenized decision loop.
+
+Under these conditions, different tokenization strategies fail differently. Primitive discretization degrades precision as update rates increase; latent action tokenization relies on decoders or offset pathways to absorb rapid corrections; continuous-action approaches retain immediate feedback at the cost of heavier computation and tighter coupling. Performance at high frequency therefore reflects not model capacity, but whether the tokenization boundary aligns with the timescale at which control errors must be corrected.
+
+- 🔵 **DCT (FAST):** FAST _should_ be the clear candidate for "best in class," given that it's designed for high-frequency scenarios. And indeed, $\pi_0$-FAST quantitatively outperforms OpenVLA-style binning at high frequencies, but not because FAST is faster at inference. The idea is that action chunks are heavily temporally correlated, which diminishes the effectiveness of the next-token prediction objective (which might lead to simply repeating the tokens). But $\pi_0$-FAST is actually _slower_ at inference than $\pi_0$—apparently due to an overreliance on autoregressive decoding. We ultimately chose to award it the "best in class" anyway based on recent work from Physical Intelligence working around that issue ([Real-time Chunking](https://www.pi.website/research/real_time_chunking)).
+- 🟢 **Residual VQ-VAE:** Vector quantization is surprisingly fast. This is one of the improvements leveraged by [MiniVLA](https://ai.stanford.edu/blog/minivla/) (Dec. 2024) to reach OpenVLA-level performance at 2.5× the speed.
+- 🟢 **Diffusion:** While diffusion methods were once thought to be too slow for high-frequency control, $\pi_0$ reaches appreciable frequencies under continuous actions. Aggressive action chunking seems to play a role.
+- 🟡 **Quantile binning:** OpenVLA can run acceptably with 4-bit precision, and we suspect that this is partially possible because this action quantization makes better use of the available number of action tokens. However, even in 4-bit precision the frequency is fairly slow, and we would expect the tradeoffs with respect to dexterity to be rather severe.
+- 🔴 **Naive binning:** RT-2 is slow, mostly for reasons upstream of action tokenization, but it does play a role. While the action tokenization scheme is simple and therefore nominally fast, one might observe that failing to meaningfully compress actions at the token level implies some amount of unnecessary bloat and slowdown in action representation.
+
+### Semantic-motor gaps and error attribution
+
+Action tokenization mediates the mapping from semantic intent to motor execution, creating a gap in which high-level decisions may be correct while physical outcomes are not. This gap is unavoidable in VLA systems, but different tokenization strategies assign responsibility for resolving it to different components of the stack.
+
+With primitive discretization, the sequence model must implicitly learn motor semantics it is poorly suited to represent. Latent action tokenization shifts this burden to decoders and execution-time correction, assuming that semantic errors can be compensated downstream. Continuous-action approaches keep semantic and motor variables coupled, reducing abstraction but preserving accountability. The key distinction is not whether misalignment occurs, but where the system expects it to be resolved—and which component is blamed when it is not.
+
+### Failure modes
+
+Some failures introduced by action tokenization are structurally invisible to training objectives. When discretization abstracts away timing, contact, or fine-grained feedback, the resulting errors may not appear in token-level losses or imitation metrics, even though they may be obvious at execution time. The following failures are not implementation bugs, but consequences of information that never crosses the action tokenization interface.
+
+- **Dexterous manipulation:** This is the most straightforward and commonly recognized failure mode, caused when there is too little precision in the action token vocabulary to specify very precise motions.
+- **Literal actuator awareness:** Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist were to prompt, in natural language, "set gripper to state 50," there is no guarantee that the instruction would be exactly executed as requested. (In fact, if the fine-tuning dataset used refers primarily to gross actions, as many do, there is no guarantee that the system would associate a "gripper" language token with a gripper action token at all.)
+- **Token conflation:** Few papers discuss in detail how non-action tokens are masked out of the output, if they happen to be generated erroneously.
+  - Inversely, OpenVLA (and potentially other LLaMA-backed VLAs) apply a hack when the number of action tokens (bins) exceeds the number of available extra tokens: they overwrite the *least used* language tokens. They do not specify how the upstream tokenizer is made aware of this. While minor, this choice could potentially result in action tokens being unexpectedly received as input.
+- **Action token stasis:** For trained action tokenizers like VQ-VAE, it's particularly important that the training data are representative of all reasonable action chunks. Introducing a new motion may require restructuring the entire latent space.
+
+### Scaling with respect to data
+
+From a scaling perspective, an action tokenizer should function as a reusable abstraction rather than a task-specific artifact. Scaling stresses the tokenization boundary first: as data diversity, model capacity, and deployment scope increase, weaknesses in how actions are abstracted tend to amplify rather than average out. The question is whether scaling reduces control error, or merely relocates it elsewhere in the system.
+
+- 🔵 **Residual VQ:** The performance of VQ-BeT seems to diminish only marginally with the size of the VQ codebook, according to the VQ-BeT paper, which is an exciting data-scaling result when it is the complexity of the robot data (not necessarily the amount) that is scaled. Training the tokenizer does not appear to be a terrible inconvenience. (It could potentially be done with simulated data, at least for gross quantization in the primary VQ-residual layer.)
+- 🟢 **DCT (FAST):** FAST comes with a fantastic promise: that it (FAST+ specifically) can be applied as an action tokenizer for any VLA, no modifications necessary. Whether it delivers on this promise seems like an open question to us. FAST+ required a tremendous amount of robot data to train (1M trajectories across dozens of embodiments), and it's difficult to imagine acquiring even more should that prove to be insufficient for any particular morphology.
+- 🟡 **Diffusion ($\pi_0$):** It's not possible to separately train an action tokenizer in this setup, leaving one completely at the mercy of training a flow-matching model.
+
+Binning is a trainingless approach, so we consider mostly the ways in which those schemes affect the data efficiency of the entire pipeline.
+
+- 🔴 **Naive binning (RT-2):** While it worked well enough at the time, RT-2's naive action tokenizer is vulnerable to outliers, effectively reducing the richness of the data used for fine-tuning. The individual-actuator tokenization also fails to exploit correlations between actuators, which is a shame, since the authors note that the robot dataset on which RT-2 is fine-tuned is insufficient to allow for acquiring new motion skills.
+- 🟡 **Quantile binning (OpenVLA):** An improvement on the naive approach, but still done per-actuator.
+
+### Scaling with respect to compute and parameters
+
+- 🔵 **Diffusion:** At the core interface level, action discretization is a fundamentally lossy layer. It also hides some embodiment knowledge from the robot during fine-tuning, in that only the action tokens, not the actions themselves, are legible. As such, we find a continuous-output approach to be compelling specifically in the situation where compute is plentiful (where it could otherwise be wasted at this lossy boundary).
+- 🟡 **Residual VQ, DCT:** We don't see any particular distinguishing factors here.
+- 🔴 **Binning:** Has only trivial parameters, and no amount of compute will make better use of them. In theory, if compute resources were to far outweigh any other, a very large number of bins could be used to alleviate some issues here, but it's difficult to imagine a world where compute is so plentiful that it's not even marginally worthwhile to reduce the number of action tokens needed.
+
+---
+
+# [5] Bottom line
+
+Our overall final word on which action tokenizer you should use depends on the context, which we hope will also illuminate the fundamental tradeoffs involved.
+
+- **If you're aiming for small and fast:** Start with a VQ-VAE-based method and alter as needed. It's representative and not too opaque. Don't forget action chunking.
+- **If you're hyperscaling / hypergeneralizing:** Why discretize actions at all? It will only be a bottleneck to dexterity. If you really need a tokenizer and you want something suitably general, try FAST+.
+- **If you need "good enough" right now, and you don't have data to spare:** If FAST(+) works, use that; it'll be much more effective at high frequencies and precisions. Otherwise, binning was good enough for RT-2.
+
+### Truly foundational vs marginal gain
+
+**We think VQ-BeT qualifies as foundational.** In the face of FAST, BEAST, and other new action tokenizers, it might not be strictly the best, but it did mark a turning point in seriously considering how action tokenization affects VLA performance. That said, it's unclear whether VQ itself will persist as a compelling form of action tokenization, or even whether we will continue to discretize actions at all.
+
+## For further discussion
+
+This audit is limited in its scope - you can help by commenting on it (see the repo discussion threads if available). In particular, in potential future versions, we'd like to discuss:
+
+- Action chunking, in its entirety.
+- More details on FAST (particularly on its training).
+- Further discussion on how chosen backbones affect the choice of action tokenization (if at all).
+
+---
+
+# [6] References
+
+## Binning-based action tokenization
+
+1. Brohan, A., et al. (2022). *RT-1: Robotics Transformer for Real-World Control at Scale.* arXiv:2212.06817.
+2. Brohan, A., et al. (2023). *RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control.* arXiv:2307.15818.
+3. Shi, W., Zhao, H., Liu, Y., et al. (2023). *MotionLM: Multi-Agent Motion Forecasting as Language Modeling.* arXiv:2309.16534.
+4. Kim, S., Liu, M., He, T., et al. (2024). *OpenVLA: An Open-Source Vision-Language-Action Model.* arXiv:2406.09246.
+5. Kim, S., Liu, M., He, T., et al. (2025). *OpenVLA-OFT: Efficient Online Fine-Tuning for Vision-Language-Action Models.* arXiv:2502.19645.
+
+## Vector-quantized latent action tokenization
+
+1. Lee, S., Wang, Y., Etukuru, H., Kim, H. J., Shafiullah, N. M. M., & Pinto, L. (2024). *VQ-BeT: Behavior Generation with Latent Actions.* ICML 2024 (Spotlight).
+2. Shafiullah, N. M. M., Pinto, L., et al. (2022). *BeT: Imitation Learning with Latent Actions.* arXiv:2206.11251.
+3. van den Oord, A., Vinyals, O., & Kavukcuoglu, K. (2017). *Neural Discrete Representation Learning.* NeurIPS 2017.
+4. Zeghidour, N., Pueyo, A., Tagliasacchi, M., & Tagliasacchi, M. (2021). *SoundStream: An End-to-End Neural Audio Codec.* IEEE/ACM TASLP (2021).
+5. Wang, Y., Zhu, H., Liu, M., Yang, J., Fang, H.-S., & He, T. (2025). *VQ-VLA: Improving Vision-Language-Action Models via Scaling Vector-Quantized Action Tokenizers.* ICCV 2025.
+6. Mete, S., Saxena, S., Isik, B., Geng, J., Ermon, S., & Shafiullah, N. M. M. (2024). *QueST: Self-Supervised Skill Abstractions for Learning Continuous Control.* NeurIPS 2024.
+7. Wu, J., et al. (2024). *MiniVLA: A Lightweight Vision-Language-Action Model.* Stanford AI Lab Blog.
+8. Li, Y., et al. (2024). *3D-VLA: 3D-Aware Vision-Language-Action Models for Robotic Manipulation.* arXiv:2403.09631.
+
+## Signal-space and continuous-action alternatives
+
+1. Ding, Y., Li, X., Xu, D., et al. (2025). *FAST: Frequency-Space Action Sequence Tokenization for Robotic Control.* arXiv:2501.09747.
+2. Black, K., Brown, N., Xia, F., et al. (2024). *$\pi_0$: A Vision-Language-Action Model with Continuous Control.* arXiv:2410.24164.
+3. Zhang, Y., Liu, Z., Xu, Y., et al. (2025). *BEAST: B-Spline Encoding for Action Sequence Tokenization.* arXiv:2506.06072.
