@@ -13,11 +13,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from typing import Optional, Tuple
-import os
-import matplotlib.pyplot as plt
-import pickle
 import time
+import pickle
+from typing import Optional, Tuple
 
 class RMSNorm(nn.Module):
     """
@@ -34,9 +32,9 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # TODO: Initialize learnable scale parameter 'g' (gamma)
-        # Hint: Use nn.Parameter with torch.ones
+        # Learnable scale parameter 'g' (gamma)
         self.scale = nn.Parameter(torch.ones(dim))
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -45,17 +43,12 @@ class RMSNorm(nn.Module):
         Returns:
             Normalized tensor of same shape
         """
-        # TODO: Implement RMSNorm
-        # Step 1: Compute RMS (root mean square) along the last dimension
-        # Step 2: Normalize by dividing x by RMS
-        # Step 3: Apply learnable scale parameter
+        rms = torch.rsqrt(torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)) # permit broadcasting on last dim
+        x_normed = x * rms
+        x_scaled = x_normed * self.scale
 
-        # HINT: Use torch.mean, torch.rsqrt for efficiency
-        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        norm = x * rms
-        scaled = norm * self.scale
-        # raise NotImplementedError("TODO: Implement RMSNorm forward pass")
-        return scaled
+        return x_scaled
+
 
 class RotaryPositionalEmbedding(nn.Module):
     """
@@ -93,31 +86,33 @@ class RotaryPositionalEmbedding(nn.Module):
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor, pos_offset: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Apply rotary embeddings to query and key tensors
 
         Args:
             q: Query tensor (batch, num_heads, seq_len, head_dim)
             k: Key tensor (batch, num_heads, seq_len, head_dim)
-            pos_offset: Offset so we start at the latest position for RoPE instead of rotating all
         Returns:
             Rotated (q, k) tensors
         """
         seq_len = q.shape[2]
 
         # Get cached cos/sin values
-        # Note: for kv caching, we need to offset by the current position so we know to rotate tokens correctly
-        # i.e. with kv caching we only process latest token so seq_len is always passed in as 1 instead of
-        # whatever full length it would be w/o kv caching
-        cos = self.cos_cached[pos_offset:pos_offset + seq_len, ...]
-        sin = self.sin_cached[pos_offset:pos_offset + seq_len, ...]
+        cos = self.cos_cached[:seq_len, ...]
+        sin = self.sin_cached[:seq_len, ...]
 
         # Apply rotation: q_rot = q * cos + rotate_half(q) * sin
-        q_rot = (q * cos) + (self.rotate_half(q) * sin)
-        k_rot = (k * cos) + (self.rotate_half(k) * sin)
+        q = (q * cos) + (self.rotate_half(q) * sin)
+        k = (k * cos) + (self.rotate_half(k) * sin)
 
-        return q_rot, k_rot
+        # ALTERNATIVE: Absolute sinusoidal
+        # q[::2]  = (q + cos)[::2]
+        # q[1::2] = (q + sin)[1::2]
+        # k[::2]  = (k + cos)[::2]
+        # k[1::2] = (k + sin)[1::2]
+        
+        return q, k
 
 
 class CausalSelfAttention(nn.Module):
@@ -139,106 +134,83 @@ class CausalSelfAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
 
         # Linear projections for Q, K, V
-        self.qkv_proj = nn.Linear(dim, 3 * dim, bias=False)
+        self.q_proj = nn.Linear(dim, dim, bias=False)
+        self.kv_proj = nn.Linear(dim, 2 * dim, bias=False)
         self.out_proj = nn.Linear(dim, dim, bias=False)
 
         # Dropout
         self.attn_dropout = nn.Dropout(dropout)
         self.resid_dropout = nn.Dropout(dropout)
 
+        # KV cache
+        self.kvcache = None
+        self.cache_enabled = False
+
         # Rotary embeddings
         self.rope = RotaryPositionalEmbedding(self.head_dim)
 
-        # Storage ~ add this new variable to store last attn weights for attention map visualization later
-        self.last_attn_weights = None
-
-    # modify input args to allow past_kv, and modify return to pass through kvs
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, past_kv: Optional[Tuple[torch.Tensor, torch.Tensor]] = None) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask (seq_len, seq_len)
-            past_kv: Optional cached kvs from prev step
         Returns:
             Output tensor (batch, seq_len, dim)
-            Tuple of current k and v for caching
         """
         batch_size, seq_len, _ = x.shape
 
-        # TODO: Implement Causal Self-Attention
 
-        # Step 1: Project input to Q, K, V
-        # qkv = self.qkv_proj(x)  # (batch, seq_len, 3*dim)
-        # Split into Q, K, V and reshape for multi-head attention
-        # Hint: Use .view() and .transpose() to get shape (batch, num_heads, seq_len, head_dim)
-        qkv = self.qkv_proj(x)
-        q, k, v = qkv.chunk(3, dim=-1) # split into 3, each are size (batch, seq len, dim)
-        # view to reshape
-        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        k = k.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        v = v.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        # transpose to reorder seq_len and num_heads
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
+        # Project input to q, k, v
+        # Recall that `reshape` does `view` automatically if it's possible.
 
-        # Step 2: Apply RoPE to Q and K
-        pos_offset = 0
-        past_k, past_v = None, None
-        if past_kv  is not None:
-            past_k, past_v = past_kv # we just need to extract 1 to get the current pos offset
-            pos_offset = past_k.shape[2] # the seq len dimension
-        q, k = self.rope(q, k, pos_offset=pos_offset)
 
-        # check if we have any past_kv passed into fxn
-        # if we do, concat it with the current to skip recomputing all previous
-        if past_kv is not None:
-            k = torch.cat([past_k, k], dim=2) # make sure concat along seq_len
-            v = torch.cat([past_v, v], dim=2)
-        # store and pass kv into next iter
-        curr_kv = (k, v)
+        if self.cache_enabled and self.kvcache is not None:
+            q = self.q_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim)).transpose(1, 2)
 
-        # Step 3: Compute attention scores
-        # scores = (Q @ K^T) / sqrt(d_k)
-        # Hint: Use torch.matmul or @ operator
-        # Shape should be (batch, num_heads, seq_len, seq_len)
-        scores = (q @ k.transpose(-2, -1)) * self.scale # only transpose last 2 dims, keep batch and num_heads the same
+            # Get k,v for only most recent token
+            x_recent = x[:, -1:, :]
+            kv_recent = self.kv_proj(x_recent)
+            kv_recent = kv_recent.reshape((batch_size, 1, self.num_heads, self.head_dim, 2)).transpose(1, 2)
 
-        # Step 4: Apply causal mask
-        # The mask should prevent position i from attending to positions > i
-        # Hint: Create a lower-triangular matrix using torch.tril
-        # Set masked positions to -inf BEFORE softmax
-        # Example: scores = scores.masked_fill(mask == 0, float('-inf'))
-        # Edit: for kv caching, we need to change mask size for cached sequence
-        # ^ e.g. previously, k is shape (batch, heads, seq_len=1, dim)
-        # but now its (batch, heads, seq_len=1+cache, dim)
-        cached_seq_len = k.shape[2]
-        mask = torch.tril(torch.ones(cached_seq_len, cached_seq_len, device=x.device))
-        # For kv caching apply mask to the new positions only
-        mask = mask[-seq_len:, :] # positions go down by row, we take the last seq_len out of seq_len+cache
+            # Shorten the cache if necessary
+            # kv is of shape (batch, seq_len, dim, 2)
+            n = x.shape[1]
+            kv = torch.cat((self.kvcache, kv_recent), dim=2)[:, :, :seq_len, :, :]
+        else:
+            q = self.q_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim)).transpose(1, 2)  
+            kv = self.kv_proj(x).reshape((batch_size, seq_len, self.num_heads, self.head_dim, 2)).transpose(1, 2)
+
+        if self.cache_enabled:
+            self.kvcache = kv
+        
+        k = kv[:, :, :, :, 0]
+        v = kv[:, :, :, :, 1]
+        # Now (q, k, v) should all be of shape (batch, num_heads, seq_len, head_dim)
+
+
+        # Apply RoPE to Q and K
+        q, k = self.rope(q, k)
+
+        # Compute attention scores
+        scores = (q @ k.transpose(-1, -2)) / math.sqrt(self.head_dim) # (batch, num_heads, seq_len, seq_len)
+
+        # Apply causal mask
         scores = scores.masked_fill(mask == 0, float('-inf'))
-        # ^ remove the above 2 lines to see results w/o causal mask
 
-        # Step 5: Apply softmax and dropout
-        attn_weights = F.softmax(scores, dim=-1)
+        # print(torch.exp(scores))
+
+        # Softmax
+        attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+
+        # Dropout
         attn_weights = self.attn_dropout(attn_weights)
 
-        # Step 6: Apply attention to values
-        self.last_attn_weights = attn_weights # store so we can make attention map visualization later...
-        out = attn_weights @ v
+        # Apply values
+        out = attn_weights @ v # (batch, num_heads, seq_len, head_dim)
 
-        # Step 7: Reshape and project back
         # Concatenate heads and apply output projection
-        # Hint: Use .transpose() and .contiguous().view() to reshape
-        # ++ Output tensor (batch, seq_len, dim)
-        out = out.transpose(2, 1)
-        out = out.contiguous().view(batch_size, seq_len, -1)
-        out = self.out_proj(out)
-        out = self.resid_dropout(out)
-        return out, curr_kv
-
-        # raise NotImplementedError("TODO: Implement CausalSelfAttention forward pass")
-
+        # Heads may or may not be contiguous - reshape should handle both cases
+        return out.transpose(1, 2).reshape((batch_size, seq_len, self.dim))
 
 class FeedForward(nn.Module):
     """
@@ -284,23 +256,18 @@ class TransformerBlock(nn.Module):
         self.norm1 = RMSNorm(dim)
         self.norm2 = RMSNorm(dim)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None, past_kv: Optional[Tuple] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Args:
             x: Input tensor (batch, seq_len, dim)
             mask: Optional attention mask
-            past_kv: Optional kv from prev step
         Returns:
             Output tensor (batch, seq_len, dim)
-            Current kv cache
         """
         # Pre-norm architecture (norm before attention/FF)
-
-        # KV caching edit: split into two steps so we can extract the curr kv to pass through
-        attn, curr_kv = self.attention(self.norm1(x), mask, past_kv)
-        x = x + attn
+        x = x + self.attention(self.norm1(x), mask)
         x = x + self.feed_forward(self.norm2(x))
-        return x, curr_kv
+        return x
 
 
 class DecoderOnlyTransformer(nn.Module):
@@ -341,9 +308,6 @@ class DecoderOnlyTransformer(nn.Module):
         # Initialize weights
         self.apply(self._init_weights)
 
-        # Storage for kv cache
-        self.kv_cache = None
-
     def _init_weights(self, module):
         """Initialize weights following standard Transformer initialization"""
         if isinstance(module, nn.Linear):
@@ -357,17 +321,14 @@ class DecoderOnlyTransformer(nn.Module):
         self,
         input_ids: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
-        kv_cache: Optional[list] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             input_ids: Input token indices (batch, seq_len)
             targets: Target token indices for training (batch, seq_len)
-            kv_cache: Optional list of all previous KVs
         Returns:
             logits: Output logits (batch, seq_len, vocab_size)
             loss: Cross-entropy loss if targets provided, else None
-            kvs: Updated list of all previous kvs
         """
         batch_size, seq_len = input_ids.shape
 
@@ -377,17 +338,9 @@ class DecoderOnlyTransformer(nn.Module):
         # Create causal mask (lower triangular)
         mask = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
 
-        # storage for kvs
-        kvs = []
-
         # Apply transformer blocks
-        for i, block in enumerate(self.blocks):
-            if kv_cache is not None:
-                past_kv = kv_cache[i]
-            else:
-                past_kv = None
-            x, curr_kv = block(x, mask, past_kv)
-            kvs.append(curr_kv)
+        for block in self.blocks:
+            x = block(x, mask)
 
         # Final norm and projection
         x = self.norm_final(x)
@@ -398,12 +351,12 @@ class DecoderOnlyTransformer(nn.Module):
         if targets is not None:
             # Flatten for cross-entropy
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                logits.reshape(-1, self.vocab_size),
+                targets.reshape(-1),
                 ignore_index=-1,  # Ignore padding tokens
             )
 
-        return logits, loss, kvs
+        return logits, loss
 
     @torch.no_grad()
     def generate(
@@ -412,7 +365,7 @@ class DecoderOnlyTransformer(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
-        use_kv_cache: bool = False,
+        use_cache: bool = False
     ) -> torch.Tensor:
         """
         Autoregressive generation
@@ -425,21 +378,20 @@ class DecoderOnlyTransformer(nn.Module):
         Returns:
             Generated sequence (batch, seq_len + max_new_tokens)
         """
-        # cache past kvs
-        self.kv_cache = None # reset cache for each generate call
-        
+
+        # KV caching: Use only when autoregressively generating (ie, right here)
+        #   Also, clear the cache on every call to `generate`.
+        if use_cache:
+            for block in self.blocks:
+                block.attention.cache_enabled = True
+                block.attention.kvcache = None
+
         for _ in range(max_new_tokens):
             # Crop context if too long
-            # ^ Edit: process entire context for first
-            # then for subsequent since we have the cache we only need to process latest
-            if self.kv_cache is None or not use_kv_cache:
-                input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
-            else:
-                input_context = input_ids[:, -1:] # just process last token since we already have cache
+            input_context = input_ids if input_ids.size(1) <= self.max_seq_len else input_ids[:, -self.max_seq_len:]
 
             # Forward pass
-            # modified forward that takes and returns the kv cache
-            logits, _, self.kv_cache = self.forward(input_context, kv_cache=self.kv_cache if use_kv_cache else None)
+            logits, _ = self.forward(input_context)
             logits = logits[:, -1, :] / temperature  # Get last token logits
 
             # Optional top-k sampling
@@ -454,6 +406,10 @@ class DecoderOnlyTransformer(nn.Module):
             # Append to sequence
             input_ids = torch.cat([input_ids, next_token], dim=1)
 
+        if use_cache:
+            for block in self.blocks:
+                block.attention.cache_enabled = False
+
         return input_ids
 
 
@@ -462,9 +418,8 @@ def train_epoch(
     dataloader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    epoch: int,
-    step_counter: int,
-) -> Tuple[float, int, list]:
+    epoch: int
+) -> float:
     """
     Train for one epoch
 
@@ -480,58 +435,80 @@ def train_epoch(
     model.train()
     total_loss = 0.0
     num_batches = 0
-    batch_losses = [] # save loss per step not epoch!!
 
-    # TODO: Implement training loop
-    # For each batch:
-    #   1. Move data to device
-    #   2. Forward pass (get logits and loss)
-    #   3. Backward pass
-    #   4. Gradient clipping (max_norm=1.0)
-    #   5. Optimizer step
-    #   6. Zero gradients
-    #   7. Accumulate loss
+    for data in dataloader:
+        batch = data[0].to(device)
+        logits, loss = model(batch[:, 0:48], batch[:, 1:49])
 
-    # note: inputs and targets are token inputs and correct token output in sequence
-    for batch_idx, (inputs, targets) in enumerate(dataloader):
-        inputs = inputs.to(device)
-        targets = targets.to(device)
-
-        logits, loss, _ = model(inputs, targets) # forward pass ~ kv cache not used during training, just leave as _ for now
-
-        loss.backward() # backward pass ~ refer to gpt dev for how this works...
-
-        # max_norm is max allowed l2 norm of gradient...use 1.0 as specified
+        loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        optimizer.zero_grad()
 
-        optimizer.step() # step optimizer
+        total_loss += loss
+        num_batches += 1
 
-        optimizer.zero_grad() # zero out grads ~ refer to gpt dev for example again
+    return total_loss / num_batches
 
-        total_loss += loss.item() # add to loss!
-        num_batches += 1 # increment num batches so we can average
 
-        # add new counter so we can track every 1000 save a checkpoint
-        # also add it to fxn signature, and change return to have loss, step counter, and batch loss for plotting later
-        step_counter += 1
-        batch_losses.append(loss.item())
+def test_performance(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device
+) -> float:
+    """
+    Test loss on a test dataset
 
-        # save checkpoint every 1000
-        if step_counter % 1000 == 0:
-            os.makedirs("checkpoints", exist_ok=True)
-            torch.save(model.state_dict(), f"checkpoints/checkpoint_step_{step_counter}.pt")
+    Args:
+        model: The transformer model
+        dataloader: Test data loader
+        device: Device to test on
+    Returns:
+        Average loss for the test data
+    """
 
-        # print progress every 100 batches
-        if batch_idx % 100 == 0:
-            perplexity = math.exp(loss.item())
-            print(f"Epoch {epoch} Batch {batch_idx} | Loss = {loss.item()} Perplexity = {perplexity}")
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
 
-    return total_loss / num_batches, step_counter, batch_losses
+    for data in dataloader:
+        batch = data[0].to(device)
+        logits, loss = model(batch[:, 0:48], batch[:, 1:49])
 
-    # Hint: Use torch.nn.utils.clip_grad_norm_ for gradient clipping
-    # Hint: Print progress every 100 batches
+        total_loss += loss
+        num_batches += 1
+    return total_loss / num_batches
 
-    # raise NotImplementedError("TODO: Implement training loop")
+
+def test_inference_time(
+    model: DecoderOnlyTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    device: torch.device,
+    use_cache: bool = False
+) -> float:
+    """
+    Test inference time on the test dataset
+
+    Args:
+        model: The transformer model
+        dataloader: test data loader
+        device: Device to test on
+    Returns:
+        Average inference time for 10 steps of generation (with batching allowed) 
+    """
+
+    total_time = 0
+    num_samples = 0
+
+    for data in dataloader:
+        batch = data[0].to(device)
+
+        ago = time.perf_counter()
+        model.generate(batch, 100, use_cache=use_cache)
+        total_time += time.perf_counter() - ago
+        num_samples += 10
+
+    return total_time / num_samples
 
 
 def main():
@@ -548,92 +525,55 @@ def main():
     num_heads = 8  # Number of attention heads
     ff_hidden_dim = 1024  # Feed-forward hidden dimension
     max_seq_len = 50  # Maximum sequence length
-    batch_size = 32
+    batch_size = 64 # "if you have enough VRAM"
     learning_rate = 1e-4
-    num_epochs = 10
+    num_epochs = 40
 
-    # Device
+    # Set up device (CUDA used in development).
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # TODO: Load dataset
-    # Use the generate_data.py script to create synthetic trajectories
-    # Load from data/trajectories.pkl
-    with open('data/trajectories.pkl', 'rb') as f:
-        dataset = pickle.load(f)
-    # make a dataloader from dataset, add shuffle so order is randomized in each training iter
-    tokenized = dataset["actions"] # dataset labels are states and actions, not trajectories and tokenized...
-    inputs = tokenized[:, :-1] # inputs is all tokens in sequence except last
-    targets = tokenized[:, 1:] # same but except first ~ i.e. autoregressive, one points to the next, like in gpt from scratch
-    train_dataset = torch.utils.data.TensorDataset(inputs, targets)
+    # Load synthetic data from data/trajectories.pkl
+    with open("data/trajectories.pkl", 'rb') as f:
+        train_dataset = torch.utils.data.TensorDataset(pickle.load(f)['actions'][:9000, :])
+
+    with open("data/trajectories.pkl", 'rb') as f:
+        test_dataset = torch.utils.data.TensorDataset(pickle.load(f)['actions'][9000:, :])
+
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader  = torch.utils.data.DataLoader(test_dataset,  batch_size=batch_size, shuffle=True)
 
-    # TODO: Create model
-    # model = DecoderOnlyTransformer(...)
-    model = DecoderOnlyTransformer(vocab_size=vocab_size, dim=dim, num_layers=num_layers, num_heads=num_heads, ff_hidden_dim=ff_hidden_dim, max_seq_len=max_seq_len)
-    model = model.to(device)
+    model = DecoderOnlyTransformer(
+        vocab_size,
+        dim,
+        num_layers,
+        num_heads,
+        ff_hidden_dim,
+        max_seq_len = max_seq_len,
+        dropout = 0.1,
+    ).to(device)
 
-    # TODO: Create optimizer
+    # If needed: Load model parameters from checkpoint
+    # model.load_state_dict(torch.load("checkpoints/epoch_40.pt", weights_only=False))
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # TODO: Training loop
-    loss_plot = []
-    step_counter = 0
+    # Train for many epochs
     for epoch in range(num_epochs):
-        train_loss, step_counter, batch_losses = train_epoch(model, train_loader, optimizer, device, epoch, step_counter)
-        loss_plot.extend(batch_losses)
-        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {train_loss:.4f}")
+        model.train()
+        train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
 
-    # TODO: Save checkpoint
-    torch.save(model.state_dict(), "checkpoints/best_model.pt")
+        print(f"Epoch {epoch+1}/{num_epochs} - Training loss: {train_loss:.4f}")
 
-    # Plotting stuff
+        torch.save(model.state_dict(), f"checkpoints/epoch_{epoch+1}.pt")
 
-    # plot loss
-    plt.figure()
-    plt.plot(loss_plot)
-    plt.xlabel("Step")
-    plt.ylabel("Loss")
-    plt.title("Training Loss Curve")
-    plt.savefig("loss_curve.png")
-
-    # plot attention map
-    model.eval() # change to eval mode ~ part of nn.module fxn, like model.train()
-    with torch.no_grad():
-        sample_input = inputs[0:1].to(device) # get first traj, move to device
-        model(sample_input) # run model on the trajectory ^
-    # pull out attention weights for first traj
-    fig, axes = plt.subplots(4, 8, figsize=(32, 16))
-    for layer in range(num_layers):
-        for head in range(num_heads):
-            # weights is [batch, num_heads, seq_len, seq_len], so pull out first 2 dims for each
-            # only 1 traj so batch 0, num_heads index = head
-            # move off gpu to cpu, and convert to numpy for plotting
-            attn = model.blocks[layer].attention.last_attn_weights[0, head].cpu().numpy()
-            attn_plot = axes[layer, head].imshow(attn, cmap='viridis')
-            axes[layer, head].set_title(f"L{layer} H{head}")
-            axes[layer, head].set_xlabel("Key")
-            axes[layer, head].set_ylabel("Query")
-    plt.tight_layout()
-    fig.colorbar(attn_plot, ax=axes, label='Attention Weight')
-    plt.savefig("attention_maps.png", bbox_inches='tight') # add tight to crop extra whitespace
-
-    # print("TODO: Complete the main training script")
-
-    # KV-Caching test
-    print("KV-Caching test:")
+    # Test: Loss and inference time
     model.eval()
-    # test generate 100 new tokens w/ no cache
-    start = time.time()
-    _ = model.generate(inputs[0:1].to(device), max_new_tokens=100, use_kv_cache=False)
-    dur_no_cache = time.time() - start
-    # test generate 100 new tokens w/ cache
-    start = time.time()
-    _ = model.generate(inputs[0:1].to(device), max_new_tokens=100, use_kv_cache=True)
-    dur_cache = time.time() - start
-    print(f"Inference speed for 100 tokens without KV-Caching: {dur_no_cache}s")
-    print(f"Inference speed for 100 tokens with KV-Caching: {dur_cache}s")
-    print(f"Improvement: {dur_no_cache/dur_cache}")
+    test_loss = test_performance(model, test_loader, device)
+    print(f"Testing loss: {test_loss:.4f}")
+    test_time = test_inference_time(model, test_loader, device, use_cache=True)
+    print(f"Inference time: {test_time:.4f}")
+
 
 if __name__ == "__main__":
     main()
