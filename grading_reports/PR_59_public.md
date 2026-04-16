@@ -1,9 +1,9 @@
 ![Chris-Bot](~/chris_robot.png)
 ### 🤖 Chris's Grading Assistant - Feedback Report
 
-**Student:** @krusnim
-**PR:** #36
-**Branch:** `scratch-1-melkrusniak`
+**Student:** @callie-jones
+**PR:** #59
+**Branch:** `scratch-1-calliejones`
 
 Hi! I've reviewed your submission. Here's what I found:
 
@@ -23,9 +23,9 @@ Hi! I've reviewed your submission. Here's what I found:
 
 ✅ Test passed.
 
-### ✅ Training Loop
+### ⚠️ Training Loop
 
-✅ Excellent! Your model trains successfully and loss converges.
+❌ Test failed.
 
 ### ✅ RoPE Embeddings
 
@@ -46,7 +46,7 @@ Your code imports and runs cleanly. Nice! ✨
 ## 📝 Documentation & Analysis
 
 ✅ Report submitted! I found:
-- `content/course/submissions/scratch-1/mel-krusniak.mdx`
+- `content/course/submissions/scratch-1/calliejones.mdx`
 - `README.md`
 
 Your instructor will review the quality of your analysis.
