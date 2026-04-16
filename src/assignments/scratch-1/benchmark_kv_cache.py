@@ -1,275 +1,214 @@
-"""
-Benchmark script for comparing inference speed with and without KV-caching.
-
-This script measures the time difference between:
-1. Normal inference: Recomputes full attention for entire sequence each step
-2. KV-cached inference: Caches key-value pairs, only computes attention for new token
-
-Usage:
-    python benchmark_kv_cache.py
-"""
+import argparse
+import time
+from typing import Optional, List
+import pickle
+from generate_data import create_dataloaders
 
 import torch
-import time
-from pathlib import Path
-import matplotlib.pyplot as plt
-from backbone import DecoderOnlyTransformer
+import torch.nn as nn
+import numpy as np
 
+import backbone
 
-def benchmark_generation(
-    model: DecoderOnlyTransformer,
+def reset_all_kv_caches(model: nn.Module):
+    for block in model.blocks:
+        block.attention.reset_cache()
+
+@torch.no_grad()
+def baseline_timing(
+    model: nn.Module,
     input_ids: torch.Tensor,
-    max_new_tokens: int,
-    use_kv_cache: bool,
-    num_runs: int = 5,
-    warmup_runs: int = 2,
+    gen_len: int,
+    temperature: float,
+    top_k: Optional[int],
 ) -> float:
     """
-    Benchmark generation speed.
-
-    Args:
-        model: The transformer model
-        input_ids: Starting tokens (batch, seq_len)
-        max_new_tokens: Number of tokens to generate
-        use_kv_cache: Whether to use KV caching
-        num_runs: Number of timed runs to average
-        warmup_runs: Number of warmup runs before timing
-
-    Returns:
-        Average time per run in seconds
+    Baseline path: full recompute each step.
     """
+    reset_all_kv_caches(model)
     model.eval()
 
-    # Warmup runs
-    for _ in range(warmup_runs):
-        with torch.no_grad():
-            _ = model.generate(
-                input_ids.clone(),
-                max_new_tokens=max_new_tokens,
-                temperature=1.0,
-                use_kv_cache=use_kv_cache,
-            )
+    t0 = time.perf_counter()
 
-    # Synchronize CUDA before timing
-    if input_ids.is_cuda:
-        torch.cuda.synchronize()
+    _ = model.generate(
+        input_ids=input_ids.clone(),
+        max_new_tokens=gen_len,
+        temperature=temperature,
+        top_k=top_k,
+    )
 
-    # Timed runs
-    times = []
-    for _ in range(num_runs):
-        start = time.perf_counter()
+    t1 = time.perf_counter()
+    
+    model_size = model_kv_cache_report(model)
+    return t1 - t0, model_size
 
-        with torch.no_grad():
-            _ = model.generate(
-                input_ids.clone(),
-                max_new_tokens=max_new_tokens,
-                temperature=1.0,
-                use_kv_cache=use_kv_cache,
-            )
+@torch.no_grad()
+def cached_timing(
+    model: nn.Module,
+    prompt: torch.Tensor,
+    gen_len: int,
+    temperature: float,
+    top_k: Optional[int],
+) -> float:
+    """
+    Cached path: KV cached decoding.
+    """
+    reset_all_kv_caches(model)
+    model.eval()
 
-        # Synchronize CUDA after generation
-        if input_ids.is_cuda:
-            torch.cuda.synchronize()
+    t0 = time.perf_counter()
 
-        end = time.perf_counter()
-        times.append(end - start)
+    _ = model.generate_cached(
+        input_ids=prompt.clone(),
+        max_new_tokens=gen_len,
+        temperature=temperature,
+        top_k=top_k,
+    )
 
-    return sum(times) / len(times)
+    t1 = time.perf_counter()
+    
+    model_size = model_kv_cache_report(model)
+    return t1 - t0, model_size
 
 
-def run_benchmark(
-    model: DecoderOnlyTransformer,
+@torch.no_grad()
+def benchmark_kv_cache(
+    model: nn.Module,
     device: torch.device,
-    prompt_lengths: list[int],
-    generation_lengths: list[int],
-    num_runs: int = 5,
+    batch_size: int,
+    input_ids: torch.Tensor,
+    gen_len: int,
+    temperature: float,
+    top_k: Optional[int],
+    iters: int,
 ):
-    """
-    Run comprehensive benchmark comparing KV-cache vs no-cache.
+    model.eval()
 
-    Args:
-        model: The transformer model
-        device: Device to run on
-        prompt_lengths: List of different prompt lengths to test
-        generation_lengths: List of different generation lengths to test
-        num_runs: Number of runs per configuration
+    # Measure
+    t_base = []
+    t_cache = []
+    size_cache = []
+    for _ in range(iters):
+        t, _ = baseline_timing(model, input_ids, gen_len, temperature, top_k)
+        t_base.append(t)
+        t, size = cached_timing(model, input_ids, gen_len, temperature, top_k)
+        t_cache.append(t)
+        size_cache.append(size)
 
-    Returns:
-        Dictionary with benchmark results
-    """
-    results = {
-        'prompt_lengths': prompt_lengths,
-        'generation_lengths': generation_lengths,
-        'with_cache': {},
-        'without_cache': {},
-        'speedup': {},
-    }
+    t_base_t = torch.tensor(t_base)
+    t_cache_t = torch.tensor(t_cache)
 
-    for prompt_len in prompt_lengths:
-        for gen_len in generation_lengths:
-            key = (prompt_len, gen_len)
+    tokens = batch_size * gen_len  # count only generated tokens
+    tps_base = tokens / t_base_t
+    tps_cache = tokens / t_cache_t
 
-            # Create random input prompt
-            input_ids = torch.randint(0, model.vocab_size, (1, prompt_len), device=device)
+    print("============================================================")
+    print(f"Device: {device}")
+    print(f"batch_size={batch_size}, prompt_len={input_ids.shape[1]}, gen_len={gen_len}")
+    print(f"temperature={temperature}, top_k={top_k}")
+    print("")
+    print(f"baseline (no cache)  : {tps_base.mean().item():.2f} tok/s (std {tps_base.std(unbiased=False).item():.2f})")
+    print(f"generate_cached (KV) : {tps_cache.mean().item():.2f} tok/s (std {tps_cache.std(unbiased=False).item():.2f})")
+    print(f"speedup              : {(tps_cache.mean() / tps_base.mean()).item():.2f}x")
+    print(f"cache size           : {np.mean(size_cache)/1024**2:.2f} MiB")
+    print("============================================================\n")
 
-            print(f"\nBenchmarking: prompt_len={prompt_len}, gen_len={gen_len}")
+def kv_cache_size_bytes(attn):
+    k = getattr(attn, "k_cache", None)
+    v = getattr(attn, "v_cache", None)
+    idx = getattr(attn, "index", None)
 
-            # Benchmark with KV-cache
-            time_with_cache = benchmark_generation(
-                model, input_ids, gen_len, use_kv_cache=True, num_runs=num_runs
-            )
-            results['with_cache'][key] = time_with_cache
-            print(f"  With KV-cache:    {time_with_cache*1000:.2f} ms")
+    if k is None or v is None or idx is None:
+        return 0
 
-            # Benchmark without KV-cache
-            time_without_cache = benchmark_generation(
-                model, input_ids, gen_len, use_kv_cache=False, num_runs=num_runs
-            )
-            results['without_cache'][key] = time_without_cache
-            print(f"  Without KV-cache: {time_without_cache*1000:.2f} ms")
+    k_used = k[:, :, :idx]
+    v_used = v[:, :, :idx]
+    return (k_used.numel() * k_used.element_size()) + (v_used.numel() * v_used.element_size())
 
-            # Calculate speedup
-            speedup = time_without_cache / time_with_cache
-            results['speedup'][key] = speedup
-            print(f"  Speedup:          {speedup:.2f}x")
+def kv_cache_size_mib(module):
+    return kv_cache_size_bytes(module) / (1024 ** 2)
 
-    return results
+def model_kv_cache_report(model):
+    total_bytes = 0
 
+    for i, block in enumerate(model.blocks):
+        attn = block.attention
+        b = kv_cache_size_bytes(attn)
+        total_bytes += b
 
-def plot_results(results: dict, save_path: Path = None):
-    """
-    Plot benchmark results.
-    """
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-    prompt_lengths = results['prompt_lengths']
-    generation_lengths = results['generation_lengths']
-
-    # Plot 1: Time comparison for different generation lengths (fixed prompt)
-    ax1 = axes[0]
-    prompt_len = prompt_lengths[0]
-    times_cache = [results['with_cache'][(prompt_len, g)] * 1000 for g in generation_lengths]
-    times_no_cache = [results['without_cache'][(prompt_len, g)] * 1000 for g in generation_lengths]
-
-    ax1.plot(generation_lengths, times_cache, 'o-', label='With KV-cache', color='green')
-    ax1.plot(generation_lengths, times_no_cache, 's-', label='Without KV-cache', color='red')
-    ax1.set_xlabel('Generation Length (tokens)')
-    ax1.set_ylabel('Time (ms)')
-    ax1.set_title(f'Inference Time vs Generation Length\n(prompt_len={prompt_len})')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-
-    # Plot 2: Time comparison for different prompt lengths (fixed generation)
-    ax2 = axes[1]
-    gen_len = generation_lengths[-1]  # Use longest generation
-    times_cache = [results['with_cache'][(p, gen_len)] * 1000 for p in prompt_lengths]
-    times_no_cache = [results['without_cache'][(p, gen_len)] * 1000 for p in prompt_lengths]
-
-    ax2.plot(prompt_lengths, times_cache, 'o-', label='With KV-cache', color='green')
-    ax2.plot(prompt_lengths, times_no_cache, 's-', label='Without KV-cache', color='red')
-    ax2.set_xlabel('Prompt Length (tokens)')
-    ax2.set_ylabel('Time (ms)')
-    ax2.set_title(f'Inference Time vs Prompt Length\n(gen_len={gen_len})')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-
-    # Plot 3: Speedup heatmap
-    ax3 = axes[2]
-    speedup_matrix = [[results['speedup'][(p, g)] for g in generation_lengths] for p in prompt_lengths]
-    im = ax3.imshow(speedup_matrix, cmap='Greens', aspect='auto')
-    ax3.set_xticks(range(len(generation_lengths)))
-    ax3.set_xticklabels(generation_lengths)
-    ax3.set_yticks(range(len(prompt_lengths)))
-    ax3.set_yticklabels(prompt_lengths)
-    ax3.set_xlabel('Generation Length')
-    ax3.set_ylabel('Prompt Length')
-    ax3.set_title('KV-Cache Speedup Factor')
-
-    # Add speedup values as text
-    for i in range(len(prompt_lengths)):
-        for j in range(len(generation_lengths)):
-            text = ax3.text(j, i, f'{speedup_matrix[i][j]:.1f}x',
-                           ha='center', va='center', color='black', fontsize=10)
-
-    plt.colorbar(im, ax=ax3, label='Speedup (x)')
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"\nSaved benchmark plot to {save_path}")
-
-    plt.show()
+    return total_bytes
 
 
 def main():
-    # Model configuration - use larger max_seq_len for extended benchmark
     vocab_size = 256
-    dim = 256
-    num_layers = 4
-    num_heads = 8
-    ff_hidden_dim = 1024
-    max_seq_len = 50  # Increased for longer sequence testing
+    dim = 512
+    layers = 4
+    heads = 8
+    ff_hidden = 1024
+    max_seq_len = 1024
+    dropout = 0.1
 
-    # Device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    batch_size = 8
+    gen_len = 768
+    temperature = 1.0
+    iters = 10
+    device = 'cuda' if torch.cuda.is_available() else "cpu"
+
+    with open("data/trajectories.pkl", 'rb') as f:
+        dataset = pickle.load(f)
+    train_loader, _ = create_dataloaders(dataset, batch_size, 1.0)
+    _, input_ids = next(iter(train_loader))
+    input_ids = input_ids.to(device)
     print(f"Using device: {device}")
 
-    # Create model
-    model = DecoderOnlyTransformer(
+    model = backbone.DecoderOnlyTransformer(
         vocab_size=vocab_size,
         dim=dim,
-        num_layers=num_layers,
-        num_heads=num_heads,
-        ff_hidden_dim=ff_hidden_dim,
+        num_layers=layers,
+        num_heads=heads,
+        ff_hidden_dim=ff_hidden,
         max_seq_len=max_seq_len,
-        dropout=0.0,  # No dropout for inference
-    )
-    model.to(device)
-    model.eval()
+        dropout=dropout,
+    ).to(device)
 
-    # Try to load trained weights if available
-    checkpoint_path = Path("checkpoints/casual_mask_removed_best_model.pt")
-    if checkpoint_path.exists():
-        model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
-        print(f"Loaded trained model from {checkpoint_path}")
-    else:
-        print("No checkpoint found, using randomly initialized model")
+    sd = torch.load("checkpoints/best_model.pt", map_location=device, weights_only=False)
+    model.load_state_dict(sd)
 
-    print(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
-
-    # Benchmark configurations - include longer sequences to show KV-cache benefits
-    prompt_lengths = [5, 10, 25, 50]
-    generation_lengths = [5, 10, 25, 45]
-
-    # Run benchmark
-    print("\n" + "="*60)
-    print("KV-Cache Inference Speed Benchmark")
-    print("="*60)
-
-    results = run_benchmark(
+    benchmark_kv_cache(
         model=model,
         device=device,
-        prompt_lengths=prompt_lengths,
-        generation_lengths=generation_lengths,
-        num_runs=5,
+        batch_size=batch_size,
+        input_ids=input_ids,
+        gen_len=gen_len,
+        temperature=temperature,
+        top_k=None,
+        iters=iters,
     )
+    
+    model = backbone.DecoderOnlyTransformer(
+        vocab_size=vocab_size,
+        dim=dim,
+        num_layers=layers,
+        num_heads=heads,
+        ff_hidden_dim=ff_hidden,
+        max_seq_len=max_seq_len,
+        dropout=dropout,
+        use_mla=True
+    ).to(device)
+    
+    sd = torch.load("checkpoints/best_model_mla.pt", map_location=device, weights_only=True)
+    model.load_state_dict(sd)
 
-    # Summary statistics
-    print("\n" + "="*60)
-    print("Summary")
-    print("="*60)
-
-    speedups = list(results['speedup'].values())
-    print(f"Average speedup: {sum(speedups)/len(speedups):.2f}x")
-    print(f"Min speedup:     {min(speedups):.2f}x")
-    print(f"Max speedup:     {max(speedups):.2f}x")
-
-    # Plot results
-    plots_dir = Path("images")
-    plots_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = plots_dir / "kv_cache_benchmark.png"
-    plot_results(results, save_path=plot_path)
+    benchmark_kv_cache(
+        model=model,
+        device=device,
+        batch_size=batch_size,
+        input_ids=input_ids,
+        gen_len=gen_len,
+        temperature=temperature,
+        top_k=None,
+        iters=iters,
+    )
 
 
 if __name__ == "__main__":
