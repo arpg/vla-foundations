@@ -1,5 +1,5 @@
 ---
-title: Design Review — Demo-Aware Offline Policy Learning on RoboTurk Bread Bin Demonstrations
+title: Design Review - Diffusion vs AR on RoboTurk Bread Bin Demonstrations
 author: Soorej Nair
 date: 2026-04-17
 ---
