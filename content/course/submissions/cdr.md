@@ -1,7 +1,7 @@
 ---
 title: Design Review — Demo-Aware Offline Policy Learning on RoboTurk Bread Bin Demonstrations
 author: Soorej Nair
-date: 2026-04-16
+date: 2026-04-17
 ---
 
 # Critical Design Review: Demo-Aware Offline Policy Learning on RoboTurk Bread Bin Demonstrations
