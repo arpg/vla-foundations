@@ -4,7 +4,7 @@ author: Soorej Nair
 date: 2026-04-17
 ---
 
-# Critical Design Review: Demo-Aware Offline Policy Learning on RoboTurk Bread Bin Demonstrations
+# Critical Design Review: Diffusion vs AR on RoboTurk Bread Bin Demonstrations
 
 ## 1. Project Summary
 
