@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-13T14:41:09.235134+00:00",
+  "generated_at": "2026-04-20T14:40:44.977218+00:00",
   "reviewers": [
     {
       "login": "crheckman",
@@ -37,13 +37,14 @@
       "login": "lorinachey",
       "avatar_url": "https://avatars.githubusercontent.com/u/45807309?v=4",
       "name": "lorinachey",
-      "total_comments": 30,
-      "inline_comments": 30,
+      "total_comments": 31,
+      "inline_comments": 31,
       "discussion_comments": 0,
       "prs_reviewed": [
         23,
         27,
         32,
+        48,
         57,
         61
       ],
@@ -54,12 +55,12 @@
         "This is just a general curiosity about latent code books question. What is to stop a VQ approach from having the same types of issues as discrete binning for action tokens? Does the VQ-BeT paper discu..."
       ],
       "comment_categories": {
-        "technical_depth": 8,
-        "constructive_suggestion": 4,
+        "technical_depth": 9,
+        "constructive_suggestion": 5,
         "clarification_request": 19,
         "praise": 4
       },
-      "quality_score": 5.8,
+      "quality_score": 6.0,
       "quality_tier": "Exemplary"
     },
     {
@@ -202,6 +203,33 @@
         "praise": 0
       },
       "quality_score": 2.9,
+      "quality_tier": "Solid"
+    },
+    {
+      "login": "kalhamilton",
+      "avatar_url": "https://avatars.githubusercontent.com/u/220243599?v=4",
+      "name": "kalhamilton",
+      "total_comments": 17,
+      "inline_comments": 16,
+      "discussion_comments": 1,
+      "prs_reviewed": [
+        23,
+        32,
+        48
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "Good question! Added this in the upcoming new and improved version:   LLaVA's patch calculation (how it processes images through its vision encoder):...",
+        "RQ2: Freeze or fine-tune vision encoder?                                                                                                                       \nFreeze the vision encoder. Full fine-tun...",
+        "In your presentation, you mentioned that the model only had 8 latent actions. I'm curious if there's a constraint here where the number of actions that work for 2D-gaming is inherently not enough to t..."
+      ],
+      "comment_categories": {
+        "technical_depth": 3,
+        "constructive_suggestion": 0,
+        "clarification_request": 4,
+        "praise": 0
+      },
+      "quality_score": 2.8,
       "quality_tier": "Solid"
     },
     {
@@ -366,6 +394,30 @@
       "quality_tier": "Developing"
     },
     {
+      "login": "yuni-wyx",
+      "avatar_url": "https://avatars.githubusercontent.com/u/55570963?v=4",
+      "name": "yuni-wyx",
+      "total_comments": 2,
+      "inline_comments": 2,
+      "discussion_comments": 0,
+      "prs_reviewed": [
+        57
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "Good question. From what I understand, ViNT explicitly aims for robot-agnostic navigation through its use of topological abstractions and subgoal representations. In contrast, NoMaD does not seem to m...",
+        "Thanks \u2014 that\u2019s a great point. My intent was not to suggest that these three components are sufficient for a complete navigation system, but rather that they represent complementary aspects of the pro..."
+      ],
+      "comment_categories": {
+        "technical_depth": 1,
+        "constructive_suggestion": 1,
+        "clarification_request": 0,
+        "praise": 1
+      },
+      "quality_score": 1.5,
+      "quality_tier": "Developing"
+    },
+    {
       "login": "gyanigk",
       "avatar_url": "https://avatars.githubusercontent.com/u/15231699?v=4",
       "name": "gyanigk",
@@ -410,47 +462,20 @@
       },
       "quality_score": 1.4,
       "quality_tier": "Developing"
-    },
-    {
-      "login": "kalhamilton",
-      "avatar_url": "https://avatars.githubusercontent.com/u/220243599?v=4",
-      "name": "kalhamilton",
-      "total_comments": 4,
-      "inline_comments": 3,
-      "discussion_comments": 1,
-      "prs_reviewed": [
-        23,
-        32,
-        48
-      ],
-      "is_instructor": false,
-      "sample_comments": [
-        "In your presentation, you mentioned that the model only had 8 latent actions. I'm curious if there's a constraint here where the number of actions that work for 2D-gaming is inherently not enough to t...",
-        "Are there alternatives to video data for introducing physical learning into the model? It seems like there is a gap between learning the scene and translating into functional motor commands based on y...",
-        "@crheckman I didn't squash commits since this is a work in progress and we won't be merging into staging yet. LMK if you're holding strict to that requirement and I can fix"
-      ],
-      "comment_categories": {
-        "technical_depth": 0,
-        "constructive_suggestion": 0,
-        "clarification_request": 1,
-        "praise": 0
-      },
-      "quality_score": 1.0,
-      "quality_tier": "Developing"
     }
   ],
   "audit_prs": [
     {
       "number": 23,
-      "title": "first pass on mulitmodality draft",
+      "title": "AUDIT: Multimodality \u2014 Kali Hamilton & Gyanig Kumar",
       "authors": [
         "kalhamilton"
       ],
-      "total_comments": 45
+      "total_comments": 58
     },
     {
       "number": 27,
-      "title": "Add audit draft1: Action Tokenization",
+      "title": "AUDIT: Action Tokenization \u2014 Heyang Huang & Mel Krusniak",
       "authors": [
         "Hhy903"
       ],
@@ -458,7 +483,7 @@
     },
     {
       "number": 32,
-      "title": "Audit/soorej scaling and reasoning",
+      "title": "AUDIT: Scaling & Reasoning \u2014 Soorej S Nair & Antony Zhao",
       "authors": [
         "Soorej30"
       ],
@@ -466,11 +491,11 @@
     },
     {
       "number": 48,
-      "title": "Audit: World Models - Lorin Achey and Carson Kohlbrenner",
+      "title": "AUDIT: World Models \u2014 Carson Kohlbrenner & Lorin Achey",
       "authors": [
         "cKohl10"
       ],
-      "total_comments": 46
+      "total_comments": 47
     },
     {
       "number": 54,
@@ -490,15 +515,15 @@
     },
     {
       "number": 57,
-      "title": "Audit: Navigation - Yuni Wu and Jimmy Tran",
+      "title": "AUDIT: Navigation \u2014 Yuni Wu & Jimmy Tran",
       "authors": [
         "jt7347"
       ],
-      "total_comments": 49
+      "total_comments": 51
     },
     {
       "number": 61,
-      "title": "Manipulation audit -- Jay Vakil, Yi-Shiuan Tung",
+      "title": "AUDIT: Manipulation \u2014 Jay Vakil & Yi-Shiuan Tung",
       "authors": [
         "Jdvakil"
       ],
