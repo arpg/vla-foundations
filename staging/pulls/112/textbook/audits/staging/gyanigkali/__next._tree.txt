@@ -2,6 +2,11 @@
 :HL["/staging/pulls/112/_next/static/media/797e433ab948586e-s.p.dbea232f.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["/staging/pulls/112/_next/static/media/caa3a2e1cccd8315-s.p.853070df.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
 :HL["./figures/llava_table1.png","image"]
+:HL["./figures/clip_contrastive.png","image"]
 :HL["./figures/llava_arch.png","image"]
 :HL["./figures/animation_v1.gif","image"]
-0:{"buildId":"G_8Sm8VFaMC8TXGp322DB","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"textbook","paramType":null,"paramKey":"textbook","hasRuntimePrefetch":false,"slots":{"children":{"name":"audits","paramType":null,"paramKey":"audits","hasRuntimePrefetch":false,"slots":{"children":{"name":"slug","paramType":"c","paramKey":"staging/gyanigkali","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+:HL["./figures/mlp_connector.png","image"]
+:HL["./figures/prismatic_fusion.png","image"]
+:HL["./figures/four_axes.png","image"]
+:HL["./figures/mrope_comparison.png","image"]
+0:{"buildId":"9EbhWfJdObPzKnl2dvJ6x","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"textbook","paramType":null,"paramKey":"textbook","hasRuntimePrefetch":false,"slots":{"children":{"name":"audits","paramType":null,"paramKey":"audits","hasRuntimePrefetch":false,"slots":{"children":{"name":"slug","paramType":"c","paramKey":"staging/gyanigkali","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
