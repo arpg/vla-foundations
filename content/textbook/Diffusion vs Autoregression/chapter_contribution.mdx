@@ -1,0 +1,361 @@
+# Offline Behavioral Cloning for Robot Manipulation: Autoregressive Regression versus Denoising Diffusion
+
+**Course:** CSCI 7000 Spring 2026
+**Track:** Offline Policy Learning
+**Primary Paper Audited:** Chi et al., "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion," RSS 2023
+
+---
+
+## 1. The Audit: What Chi et al. Actually Claim and Where the Gaps Are
+
+Chi et al. introduced Diffusion Policy as a visuomotor policy learning framework that models the action distribution using a conditional denoising diffusion probabilistic model (DDPM).
+The core claim is that the multimodal expressiveness of DDPM outperforms unimodal Gaussian regression on contact-rich manipulation tasks.
+This claim is empirically supported in their paper using simulation environments (PushT, Block Pushing, Robomimic) and a physical robot (Franka Panda).
+What is not controlled for in their evaluations is the compute cost of $T = 100$ denoising steps at inference versus a single forward pass for direct regression.
+They also do not test against a Transformer-based Gaussian regression baseline under identical data conditions.
+The proprioception-only setting, which is the cheapest and most deployment-friendly configuration, is largely absent from their ablations.
+
+Their implementation uses two backbone architectures: a CNN-based UNet and a Transformer-based diffusion network.
+For the Transformer variant, they report $T = 100$ DDPM denoising steps at inference, generating a chunk of $T_a = 8$ future actions per call.
+This action chunking strategy amortizes inference cost but introduces a receding-horizon execution loop.
+We do not use action chunking in this work.
+We test single-step prediction throughout, which is a deliberate simplification that isolates whether the denoising process itself adds value over regression when the task is not multimodal.
+
+---
+
+## 2. The Architectural Delta
+
+### 2.1 Identified Bottleneck
+
+The bottleneck in Chi et al. is the following: $T = 100$ denoising steps at inference is a multiplicative cost that scales linearly with model depth and batch size, and there is no empirical lower bound on $T$ reported in their paper for proprioceptive-only inputs.
+Chi et al. justify $T = 100$ based on visual manipulation tasks where action distributions are plausibly multimodal (multiple grasp orientations, multiple approach paths).
+For a bin-sorting task with a fixed target bin and deterministic expert demonstrations, the ground-truth action distribution is approximately unimodal conditioned on state.
+The question becomes: does the denoising process provide any benefit on unimodal data, or does it just add variance and inference cost?
+
+### 2.2 Technical Specification for the Change
+
+**Change Proposed:** Replace $T = 100$ DDPM denoising with $T = 20$ and introduce a direct Gaussian regression baseline (AR Policy) under identical Transformer backbone conditions.
+
+**Why this change is necessary:**
+
+Inference time in robot control is constrained by the control loop frequency.
+RoboTurkPilot demonstrations were collected at approximately 20 Hz.
+At $T = 100$ denoising steps, with a 2-layer Transformer at $d = 256$, a single inference call on CPU takes on the order of 200ms per step, which exceeds the 50ms budget for 20 Hz control.
+At $T = 20$, the same call takes approximately 40ms, which is within budget.
+If $T = 20$ already saturates the quality ceiling imposed by unimodal data, then the additional 80 steps in the original paper are wasted compute on this task type.
+
+**What this spec proves:**
+A Gaussian regression model that outputs $\mu$ and $\sigma$ over the action in a single forward pass has zero denoising overhead.
+If this baseline matches or beats $T = 20$ diffusion on a unimodal dataset, that is evidence the denoising process is contributing noise rather than expressiveness.
+Our results confirm this: the AR policy achieves a test trajectory RMSE of 0.0282 against the diffusion policy's 0.1481 after 50 epochs of training, a 5x gap, under identical Transformer backbone conditions.
+
+---
+
+## 3. State Space and Action Space
+
+### 3.1 Formal Definitions
+
+Let $\mathcal{S} \subset \mathbb{R}^{73}$ be the proprioceptive state space.
+Each state vector $\mathbf{s}_t \in \mathcal{S}$ includes joint positions, joint velocities, end-effector pose (position and orientation), the relative pose of the end-effector to the target object, and a scalar gripper state.
+No visual observations are used.
+This is a deliberate simplification relative to Chi et al., and we discuss its implications in Section 8.
+
+The context window provides the model with a sequence of $W = 16$ recent states:
+
+$$\mathbf{S}_t = [\mathbf{s}_{t-W+1}, \ldots, \mathbf{s}_t] \in \mathbb{R}^{W \times 73}$$
+
+Steps at the beginning of a trajectory where $t < W$ are zero-padded, and a boolean padding mask $\mathbf{m}_t \in \{0, 1\}^W$ is passed to the Transformer to prevent attention over padded positions.
+
+Let $\mathcal{A} \subset \mathbb{R}^8$ be the action space, parameterized as delta end-effector commands:
+
+$$\mathbf{a}_t = [\Delta\mathbf{p}_t, \Delta\mathbf{q}_t, g_t] \in \mathbb{R}^3 \times \mathbb{R}^4 \times \mathbb{R}$$
+
+where $\Delta\mathbf{p}_t \in \mathbb{R}^3$ is the position delta, $\Delta\mathbf{q}_t \in \mathbb{R}^4$ is the quaternion delta, and $g_t \in \mathbb{R}$ is the continuous gripper actuation (whose sign encodes open or closed).
+
+Both $\mathbf{s}_t$ and $\mathbf{a}_t$ are z-score normalized per dimension using statistics computed from the training split only:
+
+$$\tilde{\mathbf{s}}_t = \frac{\mathbf{s}_t - \boldsymbol{\mu}_s}{\boldsymbol{\sigma}_s + \epsilon}, \quad \tilde{\mathbf{a}}_t = \frac{\mathbf{a}_t - \boldsymbol{\mu}_a}{\boldsymbol{\sigma}_a + \epsilon}$$
+
+where $\epsilon = 10^{-6}$ prevents division by zero on constant dimensions.
+
+---
+
+## 4. The Data Mix
+
+### 4.1 Foundational Priors
+
+We use no pre-trained visual encoders in this work.
+There is no SigLIP, DINOv2 or ResNet-18 feature extractor in the pipeline.
+This was done on purpose.
+The goal is to isolate the contribution of the policy architecture from the contribution of the visual representation.
+Including a pre-trained visual backbone would conflate two variables: the encoder expressiveness and the policy learning objective.
+That conflation is present in Chi et al.'s full pipeline and makes it harder to attribute performance differences to the diffusion process itself.
+
+If this work were extended to a visual setting, the encoder of choice would be DINOv2 ViT-B/14 over SigLIP, for one specific reason.
+DINOv2 features trained on DINOv2 are well-suited to 3D spatial reasoning tasks because the self-supervised objective preserves local spatial structure.
+SigLIP is language-image aligned, which is useful for instruction-conditioned policies but adds semantic noise for purely geometric manipulation tasks where no language grounding is needed.
+
+### 4.2 Embodied Data
+
+We use the bins-Bread subset of RoboTurkPilot, which is part of the Open X-Embodiment collection.
+The full dataset contains 1069 demonstrations across a bin-sorting task where the robot moves a bread object into a target bin.
+Trajectory lengths range from approximately 300 to 2000 steps, with a mean of 1065 steps.
+This variance in trajectory length motivated the use of a stratified-length splitting strategy, described in Section 4.4.
+
+We did not sample from DROID or any other dataset.
+DROID contains language-annotated whole-arm trajectories from a Franka robot in diverse real-world settings.
+The sim-to-real gap between RoboTurkPilot (MuJoCo simulation) and DROID (physical hardware with camera observations) makes mixing these datasets non-trivial without domain adaptation.
+We leave cross-dataset training to future work.
+
+### 4.3 Synthetic Multiplication
+
+We did not use MimicGen or RoboGen.
+The 1069 demonstrations provide approximately 1.17 million state-action pairs, which is sufficient for the model capacity we use (approximately 1.08M parameters for AR and 1.35M for diffusion).
+Synthetic data would only matter at a scale that requires a much higher-capacity policy, a more complex task, or fewer than 100 demonstrations. 
+None of those conditions apply here.
+
+### 4.4 Curation Strategy
+
+Demo selection uses stratified sampling by trajectory length.
+Trajectory lengths are binned into 4 quantile buckets.
+Demos are drawn uniformly across buckets until the requested count is reached.
+Random sampling tends to over-represent short demonstrations, which skews the policy toward behaviors that appear early in trajectories. 
+Stratified sampling fixes this.
+
+The train-val-test split is 80-10-10, applied with the same stratification logic (856 train, 108 val, 105 test).
+All normalization statistics are computed from the training split only, then applied to val and test at inference.
+
+---
+
+## 5. Loss Function Derivations
+
+### 5.1 Autoregressive Policy Loss
+
+The AR policy models the action distribution as a diagonal Gaussian conditioned on the state context:
+
+$$\pi_\theta(\mathbf{a}_t \mid \mathbf{S}_t) = \mathcal{N}(\boldsymbol{\mu}_\theta(\mathbf{S}_t),\, \text{diag}(\boldsymbol{\sigma}_\theta(\mathbf{S}_t)^2))$$
+
+The Transformer encoder maps the padded context window $\mathbf{S}_t$ to a hidden representation $\mathbf{h}_t \in \mathbb{R}^{256}$ by extracting the final token after two self-attention layers:
+
+$$\mathbf{h}_t = \text{LayerNorm}(\text{TransformerEncoder}(\mathbf{W}_\text{in}\mathbf{S}_t)_{[\text{last}]})$$
+
+Two linear heads then produce the distribution parameters:
+
+$$\boldsymbol{\mu}_\theta = \mathbf{W}_\mu \mathbf{h}_t + \mathbf{b}_\mu, \quad \log \boldsymbol{\sigma}_\theta = \text{clip}(\mathbf{W}_\sigma \mathbf{h}_t + \mathbf{b}_\sigma,\, -5,\, 2)$$
+
+The model is trained to maximize the likelihood of the ground-truth action under the predicted distribution. The loss is summed across action dimensions and averaged over the batch:
+
+$$\mathcal{L}_\text{AR} = -\mathbb{E}_{(\mathbf{S}_t, \mathbf{a}_t) \sim \mathcal{D}}\left[\sum_{k=1}^{8} \log \mathcal{N}(a_{t,k} \mid \mu_{\theta,k}, \sigma_{\theta,k})\right]$$
+
+Expanding the Gaussian log-likelihood:
+
+$$\mathcal{L}_\text{AR} = \mathbb{E}\left[\sum_{k=1}^{8} \left(\frac{(a_{t,k} - \mu_{\theta,k})^2}{2\sigma_{\theta,k}^2} + \log \sigma_{\theta,k} + \frac{1}{2}\log 2\pi\right)\right]$$
+
+The $\frac{1}{2}\log 2\pi$ term is a constant and does not affect the gradient.
+The clamping on $\log \boldsymbol{\sigma}$ prevents two failure modes: variance collapse ($\log \sigma < -5$ produces near-zero variance and infinite loss spikes) and variance explosion ($\log \sigma > 2$ produces $\sigma > 7$, which effectively shuts off the regression signal by widening the distribution to the point where any action gets near-equal likelihood).
+
+### 5.2 Diffusion Policy Loss
+
+The diffusion policy learns to reverse a Markov forward process that progressively corrupts a clean action $\mathbf{a}_0$ with Gaussian noise.
+The forward process is:
+
+$$q(\mathbf{a}_t \mid \mathbf{a}_0) = \mathcal{N}(\sqrt{\bar{\alpha}_t}\,\mathbf{a}_0,\, (1 - \bar{\alpha}_t)\mathbf{I})$$
+
+where $\bar{\alpha}_t = \prod_{i=1}^{t} \alpha_i$, $\alpha_i = 1 - \beta_i$, and $\beta_i$ follows a linear schedule from $\beta_1 = 10^{-4}$ to $\beta_T = 2 \times 10^{-2}$ over $T = 20$ steps.
+
+In closed form, a noisy sample at step $t$ is:
+
+$$\mathbf{a}_t = \sqrt{\bar{\alpha}_t}\,\mathbf{a}_0 + \sqrt{1 - \bar{\alpha}_t}\,\boldsymbol{\epsilon}, \quad \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$$
+
+The model $\boldsymbol{\epsilon}_\theta$ is trained to predict the noise $\boldsymbol{\epsilon}$ given the noisy action, the diffusion timestep, and the state context.
+The state context is encoded by the same Transformer backbone used in the AR policy:
+
+$$\mathbf{c}_t = \text{StateEncoder}(\mathbf{S}_t) \in \mathbb{R}^{256}$$
+
+The noisy action and timestep are projected and concatenated:
+
+$$\mathbf{z} = [\mathbf{c}_t \;\|\; \mathbf{W}_a \mathbf{a}_t \;\|\; \mathbf{E}(t)] \in \mathbb{R}^{768}$$
+
+where $\mathbf{W}_a \in \mathbb{R}^{256 \times 8}$ and $\mathbf{E}(t) \in \mathbb{R}^{256}$ is a learned timestep embedding.
+A three-layer MLP with GELU activations maps $\mathbf{z}$ to the predicted noise:
+
+$$\boldsymbol{\epsilon}_\theta(\mathbf{S}_t, \mathbf{a}_t, t) = \mathbf{W}_3\,\text{GELU}(\mathbf{W}_2\,\text{GELU}(\mathbf{W}_1 \mathbf{z}))$$
+
+The training loss is the mean squared error between the predicted and actual noise, with $t$ sampled uniformly at each step:
+
+$$\mathcal{L}_\text{Diff} = \mathbb{E}_{(\mathbf{S}_t, \mathbf{a}_0) \sim \mathcal{D},\, t \sim \mathcal{U}[0, T-1],\, \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0},\mathbf{I})}\left[\left\|\boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{S}_t,\, \mathbf{a}_t,\, t)\right\|^2\right]$$
+
+### 5.3 Combined Training Objective
+
+In this work both models are trained independently on the same dataset using their respective losses.
+There is no joint loss or shared optimization.
+For completeness, the total loss across both policies (if trained jointly) would be:
+
+$$\mathcal{L}_\text{total} = \lambda_\text{AR}\,\mathcal{L}_\text{AR} + \lambda_\text{Diff}\,\mathcal{L}_\text{Diff}$$
+
+with $\lambda_\text{AR} = \lambda_\text{Diff} = 1$ in our setup (independent training, separate optimizers, same Adam configuration with $\text{lr} = 3 \times 10^{-4}$).
+
+---
+
+## 6. Intuitive Derivations
+
+### 6.1 Why NLL for AR
+
+The NLL loss does two things simultaneously that MSE cannot do alone.
+First, it penalizes prediction error scaled by the model's own confidence: an incorrect prediction with high $\sigma$ is penalized less than an equally incorrect prediction with low $\sigma$.
+Second, it forces the model to be honest about its uncertainty.
+If the model sets $\sigma$ very large everywhere to avoid NLL penalties, the $\log \sigma$ term in the loss grows and punishes that strategy.
+The result is that $\sigma$ converges to an estimate of the per-dimension prediction residual at the training set.
+
+In contrast, MSE treats all dimensions and all timesteps equally.
+For robot manipulation, the action dimensions have very different scales and variability.
+The gripper dimension (dim 7) switches between approximately $-1$ and $+1$ at infrequent contact events.
+The translational dimensions (dims 0-2) stay small throughout training, usually somewhere between 0.001 and 0.01. MSE on the raw normalized actions would technically work, but the Gaussian head gives better-calibrated outputs because it learns the variance separately for each dimension.
+
+### 6.2 Why Noise Prediction over Score Matching for Diffusion
+
+Ho et al. (DDPM, 2020) showed that predicting $\boldsymbol{\epsilon}$ (the added noise) produces better samples than predicting $\mathbf{a}_0$ (the clean action) or the score $\nabla \log p(\mathbf{a}_t)$ directly.
+The reason is that predicting $\mathbf{a}_0$ from heavily noised inputs at high $t$ is an ill-conditioned problem: the signal-to-noise ratio is low and the gradient signal to the network is weak.
+Predicting $\boldsymbol{\epsilon}$ keeps the regression target in a fixed $\mathcal{N}(0, I)$ distribution regardless of $t$, which stabilizes training.
+
+For $T = 20$, the beta schedule from $10^{-4}$ to $2 \times 10^{-2}$ is compressed relative to Chi et al.'s $T = 100$ schedule.
+At $t = 20$ (the final noise level), $\bar{\alpha}_{20} = \prod_{i=1}^{20}(1 - \beta_i) \approx 0.73$, meaning roughly 27% of the clean signal is destroyed.
+This is much less noise than Chi et al.'s final noise level where $\bar{\alpha}_{100} \approx 0.01$.
+The consequence is that our diffusion model operates in a low-noise regime even at maximum $t$, which reduces the expressiveness of the prior and may explain part of the performance gap.
+
+---
+
+## 7. Implementation Gotchas
+
+**Padding mask semantics in PyTorch TransformerEncoder.**
+PyTorch's `src_key_padding_mask` uses the convention that `True` means "ignore this position."
+This is the opposite of the convention used in many papers where a mask value of 1 means "attend here."
+In our `SequenceDataset`, the padding mask is initialized to all `True` and then set to `False` for the valid (non-padded) positions.
+Flipping this convention silently produces incorrect attention over padded zeros, which inflates performance on early-trajectory steps where most positions are padded.
+
+**Quaternion normalization drift.**
+The action space includes a quaternion delta $\Delta\mathbf{q}_t \in \mathbb{R}^4$, but this delta is not constrained to unit norm during training or inference.
+The model predicts an arbitrary $\mathbb{R}^4$ vector.
+When accumulating deltas over a long trajectory, the quaternion representation drifts off the unit sphere.
+In an online rollout, this would require periodic renormalization, which is not implemented in the current codebase because evaluation is offline (comparing predicted actions to ground-truth step-by-step, not accumulating state).
+
+**Normalization statistics must come from training split only.**
+`compute_normalization_stats` is called on `splits["train"]` before the val and test sets are used.
+Calling it on the full dataset (a common mistake when iterating quickly) leaks information about the val and test distributions into the normalization, which artificially reduces the normalized residual.
+The effect is small (roughly 0.001 RMSE on this dataset) but it violates the train/val/test assumption.
+
+**Content-addressed NPZ cache.**
+The embedding cache is content-addressed using SHA-256. `compute_embeddings` hashes the cache spec. 
+HDF5 path, file size, mtime, max_demos, selection strategy, seed, and stratify_bins, and uses the first 12 hex characters of that hash in the cache filename. Change any of those fields and you get a new cache file; the old one stays. 
+After a few runs with different `--max-demos` values, `data/processed/` will start accumulating multiple large NPZ files.
+This is not a bug but it will silently fill disk.
+
+**Diffusion val RMSE degrades after epoch 1 and never recovers.**
+The best diffusion val RMSE is 0.1440 at epoch 1.
+Over 50 epochs it rises monotonically to 0.1776, despite the noise prediction training loss continuing to decrease from 0.581 to 0.397 over the same period.
+The AR training NLL tells the opposite story: it drops from 4.44 at epoch 1 to 0.17 at epoch 49, and the AR val RMSE tracks this improvement, reaching its best value of 0.0261 at epoch 50.
+This is not overfitting in the classical sense for the diffusion model.
+The noise prediction loss ($\mathcal{L}_\text{Diff}$) decreasing while val RMSE increases means the model is learning to predict noise more accurately in the training distribution, but this does not translate to better action reconstruction at $T = 20$ denoising steps.
+The offline val RMSE is computed from the full denoising chain and the errors in each step compound.
+As the model fits the noise distribution more tightly, the error compounding under the truncated schedule worsens rather than improves.
+
+---
+
+## 8. Lineage of Failure
+
+### 8.1 Why $T = 20$ Was Not Enough
+
+The choice of $T = 20$ was motivated by inference-time constraints (Section 2.2).
+It turns out that $T = 20$ with a linear beta schedule is too compressed for the denoising chain to fully recover action structure.
+At $T = 20$, the cumulative noise product $\bar{\alpha}_{20} \approx 0.73$ means the forward process never achieves near-isotropic Gaussian corruption.
+The diffusion model is learning to denoise from a relatively mild noise level, which reduces the diversity of the sampling distribution and limits what the denoising process can express.
+
+Chi et al. use $T = 100$ with a cosine noise schedule (following Nichol and Dhariwal, 2021), which reaches near-isotropic noise at $t = 100$.
+We use a linear schedule, which has heavier tails at high $t$ and is known to produce suboptimal samples in image generation tasks.
+Neither of these differences is controlled for.
+The fair comparison would require matching $T$, schedule type, and backbone.
+
+### 8.2 Why Proprioception Only Was a Limiting Choice
+
+RoboTurkPilot demonstrations were collected with visual feedback from the operator.
+The 73-dimensional state vector is derived from simulation ground-truth and contains information (exact object pose, relative EE-to-object distance) that would not be available in a physical deployment without a separate pose estimator.
+This makes the benchmark easier than it appears.
+A policy trained on this state representation cannot be directly transferred to hardware.
+
+At the same time, using ground-truth state removes the visual encoder as a confound, which is what we wanted.
+The tradeoff is that the results are not directly comparable to visuomotor policies.
+
+### 8.3 What the Offline Metric Does Not Tell Us
+
+The offline action prediction RMSE measures how well the model clones the expert's actions given ground-truth states.
+It does not measure task completion.
+A policy with RMSE 0.026 is not guaranteed to complete the bin-sorting task at a higher rate than a policy with RMSE 0.144.
+Compounding errors in closed-loop rollout can turn a small per-step error into a complete trajectory failure.
+Diffusion policies, by virtue of generating diverse samples, can in principle recover from perturbations that a point-estimate regression policy cannot.
+This advantage is invisible in offline evaluation.
+
+---
+
+## 9. Results
+
+### 9.1 Test Set Numbers
+
+All results are on 105 held-out test demonstrations totaling 111,817 timesteps.
+Best checkpoints are selected by minimum validation trajectory RMSE.
+Results are shown for two training budgets: 5 epochs (early stopping) and 50 epochs (full run, `full_train_50_epochs`).
+The diffusion best checkpoint is the epoch-1 checkpoint in both cases because val RMSE never improves past that point.
+The AR best checkpoint is epoch 4 at 5 epochs and epoch 50 at 50 epochs.
+
+| Metric | AR (5 ep) | AR (50 ep) | Diffusion (5 ep) | Diffusion (50 ep) |
+|---|---|---|---|---|
+| Trajectory RMSE (mean) | 0.0298 | 0.0282 | 0.1474 | 0.1481 |
+| Trajectory RMSE (std) | 0.0126 | 0.0139 | 0.0208 | 0.0203 |
+| Step RMSE | 0.0339 | 0.0334 | 0.1483 | 0.1487 |
+| Step MAE | 0.0121 | 0.0094 | 0.0367 | 0.0368 |
+| Mean step L2 | 0.0545 | 0.0439 | 0.2168 | 0.2176 |
+| Cosine similarity | 0.9968 | 0.9970 | 0.9551 | 0.9547 |
+| Gripper sign accuracy | 71.5% | 71.5% | 70.3% | 70.3% |
+| Success at $\|\mathbf{e}\|_2 \leq 0.05$ | 67.4% | 77.0% | 35.4% | 35.1% |
+| Success at $\|\mathbf{e}\|_2 \leq 0.10$ | 90.6% | 92.0% | 61.2% | 61.1% |
+| Best val RMSE (epoch) | 0.0280 (ep 4) | 0.0261 (ep 50) | 0.1440 (ep 1) | 0.1440 (ep 1) |
+
+**AR parameters:** 1,077,776 (all trainable).
+**Diffusion parameters:** 1,345,800 trainable + 60 buffer floats ($\boldsymbol{\beta}$, $\boldsymbol{\alpha}$, $\bar{\boldsymbol{\alpha}}$, which are fixed schedule values).
+
+### 9.2 What These Numbers Mean
+
+The 5x RMSE gap persists regardless of training duration.
+Extending training from 5 to 50 epochs improved the AR test trajectory RMSE from 0.0298 to 0.0282, a 5.4% improvement, and pushed success at $\|\mathbf{e}\|_2 \leq 0.05$ from 67.4% to 77.0%.
+The diffusion policy moved by less than 0.001 RMSE across the same training budget.
+Its best checkpoint is still epoch 1 in both the 5-epoch and 50-epoch runs.
+The 50-epoch diffusion training loss of 0.397 is meaningfully lower than the 5-epoch value of 0.460, which confirms the model is learning something, but that learning does not improve action reconstruction quality under the $T = 20$ denoising chain.
+
+The cosine similarity numbers (0.997 vs 0.955) tell you the two models are not qualitatively different in their understanding of which direction to move.
+Both models get the direction mostly right.
+The diffusion model fails on magnitude, not direction.
+The results line up with the compounding error hypothesis. Each denoising step introduces a small error, and after 20 steps those errors add up across all 8 action dimensions. 
+
+Gripper accuracy is basically the same between the two (71.5% vs 70.3%) and doesn't improve with more training.
+The gripper is a low-frequency binary signal that switches at contact events.
+Both models learn the gross switching pattern with similar accuracy.
+Neither model is particularly good at gripper accuracy in absolute terms, which suggests the contact moments are genuinely hard to predict from proprioception alone.
+
+---
+
+## 10. What Would Actually Fix This
+
+**Increase training set data:** Increase the number of demos. Currently the model is trained on 128 demos. This is small for Denoising diffusion probablistic models (DDPMs) to generalize from.
+
+**For the diffusion model:** increase $T$ to at least 100, switch to a cosine noise schedule, and verify that $\bar{\alpha}_T$ is close to 0 (indicating full noise corruption at the end of the forward process).
+The current $T = 20$ linear schedule leaves $\bar{\alpha}_{20} \approx 0.73$, which means the model never learns to generate from near-isotropic noise and the reverse process has limited range.
+
+**For fair comparison:** use action chunking ($T_a = 8$ or 16 future actions per call) for the diffusion model, which is how Chi et al. actually deploy it.
+Single-step diffusion prediction is not the intended use case in their paper.
+
+**For deployment:** add online rollout evaluation in RoboSuite with task success rate as the primary metric.
+Offline RMSE is a necessary but not sufficient condition for a usable policy.
+
+**For visual inputs:** attach a frozen DINOv2 ViT-B/14 encoder to the state pipeline and add patch token cross-attention in the Transformer backbone.
+This would replace the ground-truth object pose fields in the 73-dim state with learned visual features, making the pipeline deployable on hardware without a pose estimator.
+
+Link to repo - https://github.com/Soorej30/Diffusion-vs-Autoregression
