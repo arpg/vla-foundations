@@ -322,3 +322,5 @@ trajectory modeling benchmark rather than as a deployment-ready robotics stack.
 - Evaluate sensitivity to context window size, diffusion schedule design, and model depth
 - Run repeated experiments across multiple random seeds and report confidence intervals
 - Add a formal automated test suite for preprocessing, caching, splitting, checkpoint loading, and evaluation
+
+Github repo - https://github.com/Soorej30/Diffusion-vs-Autoregression
