@@ -1,0 +1,92 @@
+
+# AI Infrastructure Resource Ledger: The Reality Check
+
+**Engineer(s):** Himanshu  
+**Date:** March 27, 2026  
+**Project Title:** Vision-Language-Belief-Action Model for POMDPs
+
+
+## Phase 1: The Calendar (Working Backward)
+
+If you are still writing your training loop on your Drop-Dead Date, your project will fail.
+
+**Final Demo / Presentation Date:** April 30, 2026  
+**Days required for Evaluation & Report:** 3 days  
+**Estimated Training Run Duration:** 1 day  
+**DROP-DEAD TRAINING START DATE:** April 26, 2026
+
+## Phase 2: The Stack & Compute Target
+
+**Base architecture backbone, include encoders etc.:**  
+`openai/clip-vit-base-patch32` visual encoder + CLIP text encoder, Set Transformer belief encoder (`particle_dim=5`, `num_outputs=1`), and a decoder-only Transformer action head (`decoder_dim=512`, `4` layers, `8` heads, `ff_hidden_dim=2048`, autoregressive over `8` Light-Dark action tokens).
+
+**Param Count:**  
+`0.165` Billion total parameters (`165,019,009`)  
+`0.0137` Billion trainable parameters (`13,741,696`) because CLIP is frozen
+
+**Target Compute Hardware:**  
+- [x] Local / Lab Node  
+- [ ] Cloud Rental (e.g., Lambda/AWS)
+
+**Specific GPU(s):**  
+Single local CUDA GPU targeted as `cuda:1` in training config; budgeted for a `>=24 GB` card
+
+**Total VRAM Available:**  
+`24` GB
+
+## Phase 3: The Memory Math (The VRAM Ledger)
+
+Reference: `1B Parameters ~= 2GB (Weights) + 2GB (Gradients) + 12GB (AdamW Optimizer States)`
+
+Because the CLIP backbone is frozen, the optimizer and gradient costs are dominated by the non-CLIP modules.
+
+**Model Weights (BF16):** `~0.33 GB`  
+**Gradients (BF16):** `~0.03 GB`  
+**Optimizer States:** `~0.16 GB`  
+**KV Cache & Activations Reserve:** `~6.5 GB`  
+**TOTAL REQUIRED VRAM:** `~7.0 GB`
+
+**The Strategy: Is your Total Required VRAM > Total Available VRAM?**  
+- [ ] Yes  
+- [x] No
+
+**If Yes, what is your exact mitigation strategy?**  
+- [ ] FSDP / ZeRO-3 (Sharding across multiple GPUs)  
+- [ ] LoRA / QLoRA (Freezing base weights, avoiding optimizer state explosion)  
+- [ ] I am shrinking my model selection.  
+- [x] Something else (explain): We already mitigate memory pressure by freezing CLIP and only training the projection layers, Set Transformer belief encoder, and decoder head.
+
+## Phase 4: The Data Ingress (The I/O Bottleneck)
+
+**Dataset Size:** `~2.79 GB` / `52,803` total frame-action samples  
+Supporting repo counts: `434` episodes total, `257` successful episodes used under the current `successful_only=True` setting, and `15,660` sliding windows of length `8`
+
+**Format:**  
+- [x] Raw JPEGs/PNGs/trajectories/etc. in a folder (High I/O Risk)  
+- [ ] WebDataset / Sharded `.tar`  
+- [x] Something else: per-episode `episode_data.npz` metadata alongside image folders
+
+**Storage Location:**  
+- [ ] Local NVMe SSD  
+- [ ] Network Drive  
+- [ ] S3/GCS Bucket  
+- [x] Something else: local workspace disk inside the project tree
+
+**If using raw images or other large data quantities over a network or standard SSD, how will you prevent your dataloader from starving your GPUs?**  
+Keep the dataset local, increase `DataLoader` workers, enable pinned memory and persistent workers, pre-resize images once instead of on every epoch, and preferably cache CLIP-ready tensors or precomputed CLIP embeddings for each frame window so training stops paying repeated JPEG decode and vision-encoder preprocessing costs.
+
+## Phase 5: Red Team Audit (Partner Review)
+
+**Reviewing Engineer:** Peer reviewer
+
+**The Fatal Flaw / Biggest Risk:**  
+The main risk is not VRAM; it is **generalization collapse from a narrow training set**.  If we keep scaling epochs without broadening the data distribution or adding stronger validation discipline, the demo may look good on memorized trajectories and fail on held-out rollouts.
+
+## Phase 6: The 72-Hour Contract
+
+**What exact, granular engineering task will you complete in the next 72 hours to unblock these risks?**  
+Precompute and save CLIP vision/text embeddings for the Light-Dark dataset, then run a controlled `5`-epoch ablation comparing `successful_only=True` vs. `successful_only=False` while logging validation accuracy, dataloader throughput, and peak CUDA memory.
+
+**Deliverable by Monday:**  
+A short experiment report with two training curves, one throughput benchmark, one peak-VRAM measurement, and a recommendation on whether to keep the frozen-CLIP setup and successful-only filtering.
+
