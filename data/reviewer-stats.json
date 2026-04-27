@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-20T14:40:44.977218+00:00",
+  "generated_at": "2026-04-27T14:47:04.389589+00:00",
   "reviewers": [
     {
       "login": "crheckman",
@@ -120,6 +120,34 @@
       "quality_tier": "Strong"
     },
     {
+      "login": "jt7347",
+      "avatar_url": "https://avatars.githubusercontent.com/u/124174685?v=4",
+      "name": "jt7347",
+      "total_comments": 15,
+      "inline_comments": 13,
+      "discussion_comments": 2,
+      "prs_reviewed": [
+        27,
+        32,
+        57,
+        61
+      ],
+      "is_instructor": false,
+      "sample_comments": [
+        "Yes! Real-time control, I think, is inherently and causally linked to the specifications of the robot itself. Your decision-making process has to consider how the robot can or will move, as well as ho...",
+        "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
+        "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist..."
+      ],
+      "comment_categories": {
+        "technical_depth": 2,
+        "constructive_suggestion": 4,
+        "clarification_request": 4,
+        "praise": 2
+      },
+      "quality_score": 3.2,
+      "quality_tier": "Solid"
+    },
+    {
       "login": "aritrach",
       "avatar_url": "https://avatars.githubusercontent.com/u/17310630?v=4",
       "name": "aritrach",
@@ -150,31 +178,30 @@
       "quality_tier": "Solid"
     },
     {
-      "login": "jt7347",
-      "avatar_url": "https://avatars.githubusercontent.com/u/124174685?v=4",
-      "name": "jt7347",
-      "total_comments": 11,
-      "inline_comments": 10,
+      "login": "kalhamilton",
+      "avatar_url": "https://avatars.githubusercontent.com/u/220243599?v=4",
+      "name": "kalhamilton",
+      "total_comments": 22,
+      "inline_comments": 21,
       "discussion_comments": 1,
       "prs_reviewed": [
-        27,
+        23,
         32,
-        57,
-        61
+        48
       ],
       "is_instructor": false,
       "sample_comments": [
-        "I think the bottleneck is that there is a still a gap of learning between general navigation and robot / scene context and how robot + scene needs to be learned together. By this I mean is that based...",
-        "\"Literal actuator awareness: Most of the time, natural language is substantially vaguer than motion, so action tokens are sufficient to represent most desired motions. But if a (byzantine) roboticist...",
-        "It currently does not do so explicitly - there's emergent behaviors that they talk of, but this is largely learned from the datasets training itself - for example, modelling trajectory behavior around..."
+        "added more specific hard numbers: **Why it\u2019s hard (first principles):**\n\n* **Long context** amplifies compute cost and attention memory quadratically.\nStandard self-attention scales as $O(n^2)$: at 8K...",
+        "Good question! Added this in the upcoming new and improved version:   LLaVA's patch calculation (how it processes images through its vision encoder):...",
+        "RQ2: Freeze or fine-tune vision encoder?                                                                                                                       \nFreeze the vision encoder. Full fine-tun..."
       ],
       "comment_categories": {
-        "technical_depth": 2,
-        "constructive_suggestion": 3,
-        "clarification_request": 3,
-        "praise": 2
+        "technical_depth": 4,
+        "constructive_suggestion": 0,
+        "clarification_request": 4,
+        "praise": 0
       },
-      "quality_score": 2.9,
+      "quality_score": 3.1,
       "quality_tier": "Solid"
     },
     {
@@ -203,33 +230,6 @@
         "praise": 0
       },
       "quality_score": 2.9,
-      "quality_tier": "Solid"
-    },
-    {
-      "login": "kalhamilton",
-      "avatar_url": "https://avatars.githubusercontent.com/u/220243599?v=4",
-      "name": "kalhamilton",
-      "total_comments": 17,
-      "inline_comments": 16,
-      "discussion_comments": 1,
-      "prs_reviewed": [
-        23,
-        32,
-        48
-      ],
-      "is_instructor": false,
-      "sample_comments": [
-        "Good question! Added this in the upcoming new and improved version:   LLaVA's patch calculation (how it processes images through its vision encoder):...",
-        "RQ2: Freeze or fine-tune vision encoder?                                                                                                                       \nFreeze the vision encoder. Full fine-tun...",
-        "In your presentation, you mentioned that the model only had 8 latent actions. I'm curious if there's a constraint here where the number of actions that work for 2D-gaming is inherently not enough to t..."
-      ],
-      "comment_categories": {
-        "technical_depth": 3,
-        "constructive_suggestion": 0,
-        "clarification_request": 4,
-        "praise": 0
-      },
-      "quality_score": 2.8,
       "quality_tier": "Solid"
     },
     {
@@ -471,7 +471,7 @@
       "authors": [
         "kalhamilton"
       ],
-      "total_comments": 58
+      "total_comments": 63
     },
     {
       "number": 27,
@@ -519,7 +519,7 @@
       "authors": [
         "jt7347"
       ],
-      "total_comments": 51
+      "total_comments": 55
     },
     {
       "number": 61,
