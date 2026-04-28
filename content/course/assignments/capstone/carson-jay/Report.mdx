@@ -1,0 +1,108 @@
+---
+title: "Carson Kohlbrenner & Jay Vakil (cKohl10 + jdvakil): Contact Dreaming — Capstone Running Log"
+github: "cKohl10"
+group: "A"
+lab: "Multi-Modal Sensing Lab"
+status: "in-progress"
+---
+
+# Carson Kohlbrenner & Jay Vakil: Contact Dreaming — Capstone Running Log
+
+**GitHub:** [@cKohl10](https://github.com/cKohl10), [@jdvakil](https://github.com/jdvakil)
+**Group:** A — Multi-Modal Sensing Lab
+**Collaboration:** Pair ($2\times$ scope)
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Latent proximal space for high-resolution contact dreaming.
+Distal camera-based VLA policies cannot model near-body contact geometry, leaving manipulation systems blind to the fine-grained spatial information needed for reliable contact-rich tasks.
+
+### Group Justification ($2\times$ Scope)
+
+Carson will focus on training a world model conditioned on proximity sensing.
+Jay will build the action policy conditioned on the world model's latent predictions.
+These are two separate fundamental components integrated into a single project pipeline.
+
+### Base Model
+
+A novel vision-action model (no language) built from a mix of Cosmos, Genie, and RT-1 architectures.
+The model is conditioned on proximity sensing rather than a distal camera.
+
+### The Delta
+
+A novel tokenizer for distributed proximity sensors replaces the standard camera-based vision token stream.
+The project analyzes the compute and inference speeds required compared to camera-based methods.
+
+### Data Mix Strategy
+
+A synthetic proximity sensor dataset generated using Isaac Sim (already completed).
+Open X-Embodiment data used for comparison against camera-based methods.
+No new internet-scale pretraining.
+
+### Compute Requirements
+
+Inference target: RTX 4090.
+Training compute requirements currently uncertain; the approach is data-constrained.
+
+### Success Metric
+
+Prediction of future proximity error for the proximity world model.
+Task success rate in simulation for the action model.
+
+### Evaluation Scale
+
+Minimum 1,000 trajectories; data collection will continue as time and storage allow.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#56](https://github.com/arpg/vla-foundations/pull/56) (jdvakil). Scribed during the Multi-Modal Sensing Lab session.*
+
+### Gyanig — Rough Notes
+
+Lots of datasets available; the challenge is finding ways to organize and structure the gaze data.
+Cut off at the chain of thought to verify whether gaze information is meaningful as a supervisory signal.
+
+### Kali — Radar-VLA Notes
+
+Radar data from Korean group K-Radar (high frequency) and View-of-Delft to implement and fine-tune VLA models.
+Radical ResNet encoder trained on driving scenes provides vision features.
+Millimeter-wave and radar sensors bridge to action prediction.
+Possible extension: learning capabilities analogous to a driver's situational awareness.
+Synthetic data generated with CARLA.
+Core issue: not much millimeter-level labeled data available; the system relies on millimeter wave when camera data fails.
+Bridge from radar observations to the action head is the key interface.
+Recommendation: stick to multi-modality — do not work on standalone radar vs camera systems.
+Target inference hardware: NVIDIA Orin.
+TX cascaded radar with 4 receivers and 48 small elements generating data cubes; after processing, produces a point cloud dependent on area of coverage (sparse; large data volume).
+
+### Jay/Carson — Proximity Sensor Notes
+
+Proximity sensors to train a VLA policy.
+Edge computing constraints with synthetic datasets for data generation.
+Edge compute target: 8×8 image resolution may be feasible; encoder must be significantly downsized.
+Open question: how to upscale from 8×8 representations to higher-resolution features, and how to tokenize proximity readings.
+Reconstruct features from sparse proximity inputs.
+Open question: point cloud tokenization and point-cloud-based reasoning for feature extraction.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Carson Kohlbrenner | @cKohl10 | — | — | — | — | — |
+| Jay Vakil | @jdvakil | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

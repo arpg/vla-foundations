@@ -1,0 +1,124 @@
+---
+title: "Gyanig (gyanigk): Gaze-Conditioned VLA for Intent Alignment — Capstone Running Log"
+github: "gyanigk"
+group: "A"
+lab: "Multi-Modal Sensing Lab"
+status: "in-progress"
+---
+
+# Gyanig: Gaze-Conditioned VLA for Intent Alignment — Capstone Running Log
+
+**GitHub:** [@gyanigk](https://github.com/gyanigk)
+**Group:** A — Multi-Modal Sensing Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Cross-modal latent space misalignment under human intent uncertainty.
+Current VLA models infer task intent and action plans from static visual observations and language goals, but lack an explicit representation of how humans attend to and interpret a scene over time.
+This leads to: ambiguous intent inference when multiple plausible task goals exist; poor grounding of visual saliency for manipulation planning; and weak generalization to novel layouts where affordances are visually similar.
+The core question: how can visual perception and action planning be aligned with human cognitive attention patterns, using eye-gaze scanpaths as an explicit supervisory signal?
+
+### Base Model
+
+A Transformer-based VLA policy in the spirit of OpenVLA (7B-parameter generalist manipulation policy), extended for multimodal conditioning including eye-gaze inputs.
+
+### The Delta
+
+**Scanpath-Action Transformer (SAT):** A dedicated Gaze Encoder operating in parallel with the standard vision tower.
+The encoder processes the eye-gaze scanpath — a time-series of fixation coordinates $(x, y)$ and dwell durations $(\Delta t)$ — using a Transformer architecture inspired by SpFormer.
+
+**Fixation-Centric Tokenization:** High-resolution patches extracted from regions centered on gaze fixations; coarse downsampled tokens represent the periphery.
+This foveated scheme reduces total visual tokens by up to 94%, mimicking human retinal photoreceptor density.
+
+**Spatio-Temporal Integration:** Gaze tokens augmented with sinusoidal temporal encodings and 2D positional embeddings to preserve fixation order and duration.
+Fused with linguistic and proprioceptive tokens in the Llama backbone via a Gaze-Regularized Attention mechanism.
+
+**Latent Spatio-Temporal Chain-of-Thought (CoT):** A module inserted between vision-language fusion and the action head.
+Uses the gaze sequence to predict future visual dynamics, planning the visual exploration trajectory before generating motor commands.
+
+**Gaze-Integrated Data (data-centric modification):**
+1. MPIIEgoFixation and other gaze datasets for scanpath patterns in daily scenarios.
+2. Semantic Scanpath Representation: raw gaze points converted to a tokenized representation relating fixations to Areas-of-Interest (AOIs) and object categories.
+3. Gaze-Language Alignment Decomposition (GLAD): contrastive learning aligning gaze embeddings with LLM-generated search descriptions to improve zero-shot generalization.
+
+### Data Mix Strategy
+
+40% embodied data (OXE/DROID) for manipulation.
+40% internet-scale priors (inherited via frozen backbones).
+20% specialized gaze-augmented data (GIAVA/MimicGen) to train the SAT gaze encoder.
+
+### Compute Requirements
+
+**Practical target:** 8× H100 80 GB (or 8× A100 80 GB).
+Teacher training: 8–16 hours on 8× H100.
+Distillation + student fine-tune: 10–20 hours on 8× H100.
+Total: approximately 18–36 hours on 8× H100 80 GB.
+
+**Minimal viable run:** 1× H100 80 GB; teacher + student: approximately 2–5 days.
+
+### Success Metric
+
+Task success rate and efficiency (primary).
+Intent disambiguation accuracy in deliberately ambiguous scenes.
+Mechanistic attention alignment via saliency/scanpath agreement and representation alignment.
+Ablations isolating each component of the SAT architecture.
+
+### Evaluation Scale
+
+200–500 real embodied robot episodes across 10–20 task templates with IID/OOD splits.
+Synthetic augmentations for layout diversity.
+Gaze supervision collected via a small real eye-tracking set and/or scalable pseudo-gaze generation.
+Gaze-free inference policy distilled from the gaze-conditioned teacher.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#56](https://github.com/arpg/vla-foundations/pull/56) (jdvakil). Scribed during the Multi-Modal Sensing Lab session.*
+
+### Gyanig — Rough Notes
+
+Lots of datasets available; the challenge is finding ways to organize and structure the gaze data.
+Cut off at the chain of thought to verify whether gaze information is meaningful as a supervisory signal.
+
+### Kali — Radar-VLA Notes
+
+Radar data from Korean group K-Radar (high frequency) and View-of-Delft to implement and fine-tune VLA models.
+Radical ResNet encoder trained on driving scenes provides vision features.
+Millimeter-wave and radar sensors bridge to action prediction.
+Possible extension: learning capabilities analogous to a driver's situational awareness.
+Synthetic data generated with CARLA.
+Core issue: not much millimeter-level labeled data available; the system relies on millimeter wave when camera data fails.
+Bridge from radar observations to the action head is the key interface.
+Recommendation: stick to multi-modality — do not work on standalone radar vs camera systems.
+Target inference hardware: NVIDIA Orin.
+TX cascaded radar with 4 receivers and 48 small elements generating data cubes; after processing, produces a point cloud dependent on area of coverage (sparse; large data volume).
+
+### Jay/Carson — Proximity Sensor Notes
+
+Proximity sensors to train a VLA policy.
+Edge computing constraints with synthetic datasets for data generation.
+Edge compute target: 8×8 image resolution may be feasible; encoder must be significantly downsized.
+Open question: how to upscale from 8×8 representations to higher-resolution features, and how to tokenize proximity readings.
+Reconstruct features from sparse proximity inputs.
+Open question: point cloud tokenization and point-cloud-based reasoning for feature extraction.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Gyanig | @gyanigk | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

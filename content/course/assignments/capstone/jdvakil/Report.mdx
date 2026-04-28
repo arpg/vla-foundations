@@ -1,0 +1,98 @@
+---
+title: "Jay Vakil (jdvakil): Proximity Sensing for VLAs — Capstone Running Log"
+github: "jdvakil"
+group: "A"
+lab: "Multi-Modal Sensing Lab"
+status: "in-progress"
+---
+
+# Jay Vakil: Proximity Sensing for VLAs — Capstone Running Log
+
+**GitHub:** [@jdvakil](https://github.com/jdvakil)
+**Group:** A — Multi-Modal Sensing Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Whole-body egocentric proximity as a tokenized modality for VLAs in cluttered manipulation.
+Current VLA policies reason about scenes primarily through distal cameras, leaving near-body geometry unrepresented.
+In cluttered manipulation tasks, the action decoder has no signal about objects within the robot's proximal workspace, leading to collisions and failures in low-visibility conditions.
+
+### Base Model
+
+$\pi_0$.6 with a frozen VC-1 (small) vision encoder.
+
+### The Delta
+
+Adding a proximity sensing modality complementary to language and vision enables the policy to reason about near-body geometry in cluttered scenes.
+Proximity sensor readings are tokenized and fused into the VLA's input stream alongside visual and language tokens.
+
+### Data Mix Strategy
+
+Internet priors with synthetic data generation; no new internet-scale pretraining.
+Expert data and evaluation scenes are generated programmatically rather than collected from the web.
+
+### Compute Requirements
+
+Approximately 30 hours (fine-tuning + ablations) on a local RTX 4090 GPU.
+
+### Success Metric
+
+Collision rate and task success rate in low-visibility and cluttered task spaces.
+
+### Evaluation Scale
+
+Isaac Sim with CuRobo for expert data generation.
+Evaluation conducted in randomly generated cluttered scenes to test generalization.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#56](https://github.com/arpg/vla-foundations/pull/56) (jdvakil). Scribed during the Multi-Modal Sensing Lab session.*
+
+### Gyanig — Rough Notes
+
+Lots of datasets available; the challenge is finding ways to organize and structure the gaze data.
+Cut off at the chain of thought to verify whether gaze information is meaningful as a supervisory signal.
+
+### Kali — Radar-VLA Notes
+
+Radar data from Korean group K-Radar (high frequency) and View-of-Delft to implement and fine-tune VLA models.
+Radical ResNet encoder trained on driving scenes provides vision features.
+Millimeter-wave and radar sensors bridge to action prediction.
+Possible extension: learning capabilities analogous to a driver's situational awareness.
+Synthetic data generated with CARLA.
+Core issue: not much millimeter-level labeled data available; the system relies on millimeter wave when camera data fails.
+Bridge from radar observations to the action head is the key interface.
+Recommendation: stick to multi-modality — do not work on standalone radar vs camera systems.
+Target inference hardware: NVIDIA Orin.
+TX cascaded radar with 4 receivers and 48 small elements generating data cubes; after processing, produces a point cloud dependent on area of coverage (sparse; large data volume).
+
+### Jay/Carson — Proximity Sensor Notes
+
+Proximity sensors to train a VLA policy.
+Edge computing constraints with synthetic datasets for data generation.
+Edge compute target: 8×8 image resolution may be feasible; encoder must be significantly downsized.
+Open question: how to upscale from 8×8 representations to higher-resolution features, and how to tokenize proximity readings.
+Reconstruct features from sparse proximity inputs.
+Open question: point cloud tokenization and point-cloud-based reasoning for feature extraction.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Jay Vakil | @jdvakil | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

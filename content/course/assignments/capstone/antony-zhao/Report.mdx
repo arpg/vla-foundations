@@ -1,0 +1,213 @@
+---
+title: "Antony Zhao (antony-zhao): Cross-Modal Latent Alignment — Capstone Running Log"
+github: "antony-zhao"
+group: "A"
+lab: "Multi-Modal Sensing Lab"
+status: "in-progress"
+---
+
+# Antony Zhao: Cross-Modal Latent Alignment — Capstone Running Log
+
+**GitHub:** [@antony-zhao](https://github.com/antony-zhao)
+**Group:** A — Multi-Modal Sensing Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Latent space alignment between text, image, and robot state goals.
+VLA models that operate on heterogeneous modalities (language, vision, proprioception) encode each in separate representation spaces, leading to misaligned goal representations and poor transfer across modality combinations.
+
+### Base Model
+
+PaLM-E or a comparable small pre-trained VLM as the starting backbone.
+Open to pivoting to an engineering implementation-style project if the latent alignment framing proves too underspecified.
+
+### The Delta
+
+Contrastive learning to align the latent representations of different modalities.
+Either using an existing dataset or sampled data from Gymnasium-Robotics.
+This is an initial direction; further refinement pending a literature review.
+
+### Data Mix Strategy
+
+Mix of Open X-Embodiment data and generated data from Gymnasium-Robotics (which provides goal-conditioned environments).
+Pre-existing LLM/VLM/VLA weights incorporated to leverage internet-scale pretraining and reduce required training compute.
+
+### Compute Requirements
+
+Training on a local RTX 3090 for several days; final training estimated at 10–20 hours on a cloud GPU.
+
+### Success Metric
+
+Semantic alignment or cosine similarity on goal latents between different modalities.
+
+### Evaluation Scale
+
+Approximately 1K–10K samples, source and collection method to be finalized.
+
+## Part I.5 — Critical Design Review Update
+ 
+### Pivot from Proposal
+ 
+The original proposal was underspecified in several ways: the model choice (PaLM-E) was too large, the data strategy (Gymnasium-Robotics) lacked language annotations, and the alignment objective was vague. After a literature review, the project was refined into a concrete two-phase pipeline with a clear evaluation protocol.
+ 
+**Key changes from proposal:**
+- **Dropped the VLM backbone entirely.** A fused VLM pre-solves the alignment problem — the whole point is to study whether explicit contrastive alignment between *separate* encoders enables cross-modal transfer. Using a VLM would make the contribution unmeasurable.
+- **Switched to frozen DINOv2 + SigLIP** as separate vision and language encoders.
+- **Switched from Gymnasium-Robotics to LIBERO** (via LeRobot). LIBERO provides 1,693 episodes of tabletop manipulation with paired images, proprioception, and language annotations.
+- **Replaced vague "cosine similarity" metric** with a concrete cross-modal transfer evaluation: train a policy with one goal modality per task, evaluate with a different modality, measure the transfer gap.
+ 
+### Architectural Delta
+ 
+**Bottleneck:** Goal-conditioned policies trained with a single modality (e.g., language) cannot transfer to a different modality (e.g., goal image) at evaluation time, because each modality's encoder maps to a disjoint region of the latent space.
+ 
+**Our approach:** Learn a shared 512-dim goal embedding space across four modalities via contrastive alignment (Phase 1), then train a policy transformer conditioned on modality-agnostic goal embeddings (Phase 2). At evaluation, the policy should perform comparably regardless of which modality specifies the goal — including modalities it never saw for that specific task during training.
+ 
+### Architecture
+ 
+**Frozen encoders (not trained):**
+ 
+| Encoder | Checkpoint | Output |
+|---------|-----------|--------|
+| Vision | `facebook/dinov2-large` (300M) | CLS token, 1024-dim |
+| Language | `google/siglip-so400m-patch14-384` text tower (150M) | Pooled output, 1152-dim |
+ 
+DINOv2 was chosen over CLIP/SigLIP vision because its features are purely visual, mainly no language pretraining bias.
+ 
+**Trainable projection heads (~5M params):** Four 2-layer MLPs, each mapping a different goal specification into the shared space:
+ 
+1. **`proj_vision`**: DINOv2 CLS [1024] → [512] — goal image only
+2. **`proj_lang`**: SigLIP pooled [1152] → [512] — language instruction only
+3. **`proj_fused`**: concat(SigLIP [1152], DINOv2 CLS of current obs [1024]) → [512] — language grounded in current observation
+4. **`proj_img_proprio`**: concat(DINOv2 CLS [1024], proprio [8]) → [512] — goal image + proprioceptive state
+ 
+**Policy transformer (~20M params):** 4-layer encoder-only transformer (512 hidden dim, 8 heads). Input is `[goal_token, obs_image_CLS, obs_proprio]` with learned token type and temporal embeddings. Action readout from the goal token position. Predicts 7-DoF continuous actions.
+ 
+### Data Mix
+ 
+**LIBERO** (`lerobot/libero`): 1,693 episodes, 273K frames, 40 unique tasks, 10 FPS. Each frame provides a 256×256 image, 8-dim proprioceptive state, and 7-dim action. Each task has a single language instruction.
+ 
+**Language augmentation:** 5 paraphrases per task (200 total), written with structural variation: object reordering, clause flipping, passive/imperative mixing. This prevents the text encoder from overfitting to the exact phrases (though likely not enough data diversity to completely prevent overfitting).
+ 
+**Temporal goal sampling:** Goal frames are sampled from an exponential distribution over future frames within each episode (base=1.02, ~20× bias toward final frame), with 50% chance of forcing the final frame. This gives training signal at multiple temporal horizons rather than only task-completion frames.
+ 
+**Precomputation:** All DINOv2 and SigLIP embeddings are cached to disk after a single pass, as the models are kept frozen. Training indexes into cached tensors with zero encoder forward passes, giving ~10-50× speedup.
+ 
+### Loss Formulation
+ 
+**State and action spaces.** Observations $o_t = (I_t, s_t)$ where $I_t$ is a 256×256 RGB image and $s_t \in \mathbb{R}^8$ is proprioceptive state. Actions $a_t \in \mathbb{R}^7$. Each episode has a language instruction $\ell$ and a goal frame $(I_G, s_G)$.
+ 
+**Goal embeddings.** Four projection functions map goal specifications into a shared space $\mathcal{Z} \subset \mathbb{R}^{512}$ (all $\ell_2$-normalized):
+ 
+$$z_{\text{img}} = f_V\big(\text{DINOv2}(I_G)\big)$$
+$$z_{\text{lang}} = f_L\big(\text{SigLIP}(\ell)\big)$$
+$$z_{\text{fused}} = f_F\big([\text{SigLIP}(\ell)\;;\;\text{DINOv2}(I_t)]\big)$$
+$$z_{\text{ip}} = f_{IP}\big([\text{DINOv2}(I_G)\;;\;s_G]\big)$$
+ 
+**Phase 1 — Contrastive alignment.** Symmetric InfoNCE with task-aware collision masking. For a batch of $B$ paired embeddings:
+ 
+$$\mathcal{L}_{\text{NCE}}(z^a, z^b) = -\frac{1}{2B}\sum_{i=1}^{B}\left[\log\frac{e^{z^a_i \cdot z^b_i / \tau}}{\sum_{j \notin C_i} e^{z^a_i \cdot z^b_j / \tau}} + \log\frac{e^{z^b_i \cdot z^a_i / \tau}}{\sum_{j \notin C_i} e^{z^b_i \cdot z^a_j / \tau}}\right]$$
+ 
+where $C_i = \{j \neq i : \text{task}(j) = \text{task}(i)\}$ masks same-task off-diagonal pairs as false negatives, and $\tau = 0.1$. All modalities are anchored against the goal image embedding:
+ 
+$$\mathcal{L}_{\text{align}} = \mathcal{L}_{\text{NCE}}(z_{\text{lang}}, z_{\text{img}}) + 0.5 \cdot \mathcal{L}_{\text{NCE}}(z_{\text{fused}}, z_{\text{img}}) + 0.5 \cdot \mathcal{L}_{\text{NCE}}(z_{\text{ip}}, z_{\text{img}})$$
+ 
+**Phase 2 — Policy learning.** Per-sample modality dropout: each sample's goal modality is sampled from $\{$lang: 0.3, image: 0.3, fused: 0.2, img\_proprio: 0.2$\}$. Loss is MSE on predicted vs. ground-truth actions:
+ 
+$$\mathcal{L}_{\text{policy}} = \frac{1}{B}\sum_{i=1}^{B} \left\| a_i - \pi(z_{\text{goal}_i}, o_i) \right\|^2$$
+ 
+Both phases use linear warmup (500 steps) + cosine LR decay.
+ 
+### Training Results
+ 
+**Phase 1 (alignment):** 3,000 steps, batch 128, LR 1e-4. Loss converged to ~0.05. Sample-level retrieval accuracy plateaus at ~30% due to within-batch task collisions (batch 128 / 40 tasks ≈ 3.2 samples per task), but task-level retrieval accuracy (does the nearest image belong to the correct task?) is >95%. The `img_proprio` head trivially reaches ~99% since image features dominate the concatenated input.
+ 
+### Implementation Status
+ 
+| Component | Status |
+|-----------|--------|
+| Dataset wrapper + temporal goal sampling | ✅ |
+| Frozen encoders (DINOv2 + SigLIP) | ✅ |
+| Precomputed embedding cache | ✅ |
+| Language paraphrases (40 × 5) | ✅ |
+| Projection heads + InfoNCE w/ collision masking | ✅ |
+| Phase 1 training (alignment) | ✅ Converged |
+| Policy transformer (4-layer, type+temporal embed) | ✅ |
+| Phase 2 training (policy) | 🔲 Next |
+| Cross-modal holdout evaluation | 🔲 Next |
+| Unaligned baseline comparison | 🔲 Next |
+ 
+### Evaluation Plan
+ 
+**Cross-modal holdout:** Train Phase 1 on all 40 tasks with all modalities. Train Phase 2 with modality restrictions — 7 tasks get language only, 7 get image only, 20 get all modalities. Evaluate with the held-out modality on restricted tasks. The aligned model should transfer; the unaligned baseline should fail.
+ 
+**Unaligned baseline:** Same architecture, skip Phase 1. Projection heads train jointly with the policy via action loss only. No contrastive alignment. Expect cross-modal transfer to break.
+ 
+**Metrics:** Per-modality action MSE, cross-modal transfer gap, task-level retrieval accuracy.
+
+ 
+---
+ 
+## References
+ 
+- Ma et al. "VIP: Towards Universal Visual Reward and Representation via Value-Implicit Pre-Training." ICLR 2023.
+- Ma et al. "LIV: Language-Image Representations and Rewards for Robotic Control." ICML 2023.
+- Nair et al. "R3M: A Universal Visual Representation for Robot Manipulation." CoRL 2022.
+- Eysenbach et al. "Contrastive Learning as Goal-Conditioned Reinforcement Learning." NeurIPS 2022.
+- Kim et al. "OpenVLA: An Open-Source Vision-Language-Action Model." CoRL 2024.
+- Liu et al. "LIBERO: Benchmarking Knowledge Transfer in Lifelong Robot Learning." NeurIPS 2023.
+- Walke et al. "BridgeData V2: A Dataset for Robot Learning at Scale." CoRL 2023.
+- Oquab et al. "DINOv2: Learning Robust Visual Features without Supervision." TMLR 2024.
+- Zhai et al. "Sigmoid Loss for Language Image Pre-Training." ICCV 2023.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#56](https://github.com/arpg/vla-foundations/pull/56) (jdvakil). Scribed during the Multi-Modal Sensing Lab session.*
+
+### Gyanig — Rough Notes
+
+Lots of datasets available; the challenge is finding ways to organize and structure the gaze data.
+Cut off at the chain of thought to verify whether gaze information is meaningful as a supervisory signal.
+
+### Kali — Radar-VLA Notes
+
+Radar data from Korean group K-Radar (high frequency) and View-of-Delft to implement and fine-tune VLA models.
+Radical ResNet encoder trained on driving scenes provides vision features.
+Millimeter-wave and radar sensors bridge to action prediction.
+Possible extension: learning capabilities analogous to a driver's situational awareness.
+Synthetic data generated with CARLA.
+Core issue: not much millimeter-level labeled data available; the system relies on millimeter wave when camera data fails.
+Bridge from radar observations to the action head is the key interface.
+Recommendation: stick to multi-modality — do not work on standalone radar vs camera systems.
+Target inference hardware: NVIDIA Orin.
+TX cascaded radar with 4 receivers and 48 small elements generating data cubes; after processing, produces a point cloud dependent on area of coverage (sparse; large data volume).
+
+### Jay/Carson — Proximity Sensor Notes
+
+Proximity sensors to train a VLA policy.
+Edge computing constraints with synthetic datasets for data generation.
+Edge compute target: 8×8 image resolution may be feasible; encoder must be significantly downsized.
+Open question: how to upscale from 8×8 representations to higher-resolution features, and how to tokenize proximity readings.
+Reconstruct features from sparse proximity inputs.
+Open question: point cloud tokenization and point-cloud-based reasoning for feature extraction.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Antony Zhao | @antony-zhao | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*
