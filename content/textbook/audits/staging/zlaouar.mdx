@@ -1,0 +1,402 @@
+---
+title: "Long Horizon Planning with VLAs: A Technical Audit"
+author: "Zakariya Laouar"
+papers: "SayCan, Reflective Planning, VLAPS, Internal RL"
+topic: "Long Horizon Planning with VLAs"
+---
+
+# Long-Horizon Planning with VLAs: A Technical Audit
+
+**Zakariya Laouar**
+
+---
+
+## Introduction
+
+Long-horizon planning can fail for a variety of reasons. 
+This audit focuses on three common failure modes that are particularly relevant to long-horizon tasks with vision-language-action (VLA) models.
+First, models compound errors over extended rollouts — small per-step inaccuracies accumulate until predictions diverge from physical reality.
+Second, sparse rewards make credit assignment intractable — when a reward only arrives at task completion, the agent cannot identify which early decisions were responsible, and the longer the horizon the worse this becomes.
+Third, planning search spaces grow exponentially with horizon depth — without principled abstraction, the space of possible action sequences is too large to reason over.
+The four papers surveyed here each attack one or more of these failure modes.
+
+- **SayCan** - Ahn et al., 2022. "Do As I Can, Not As I Say: Grounding Language in Robotic Affordances."
+- **Reflective Planning** - Feng et al., 2025. "Reflective Planning: Vision-Language Models for Multi-Stage Long-Horizon Robotic Manipulation."
+- **VLAPS** - Neary et al., 2025. "Improving Pre-Trained Vision-Language-Action Policies with Model-Based Search."
+- **Internal RL** - Kobayashi et al., 2025. "Emergent temporal abstractions in autoregressive models enable hierarchical reinforcement learning."
+
+Theme 1 papers — **SayCan** and **Reflective Planning** — address compounding errors from questionable model proposals.
+Both intercept the base model's output before execution using an external grounding mechanism that validates proposals against the physical world.
+Theme 2 papers — **VLAPS** and **Internal RL** — address intractable search spaces and sparse rewards.
+Both argue that the base model's native action space is too large and unstructured to plan or learn over effectively for long-horizon tasks, and both impose structure on that action space — VLAPS externally at inference time through search over VLA-guided action chunks, Internal RL internally at training time by discovering a compressed latent code space within a pretrained autoregressive model's residual stream.
+Internal RL is not itself a VLA paper, but it belongs in this audit as a methodological comparison point: 
+it tackles long-horizon credit assignment through internal temporal abstraction rather than robot-specific test-time search.
+Internal RL presents by far the most unorthodox approach, and its inclusion is meant to broaden the scope of the audit beyond the VLA paradigm and to highlight the diversity of possible interventions on long-horizon failure modes.
+
+---
+
+## Theme 1: Pre-Commitment Correction
+
+### Overview
+
+The papers discussed in this section share a common premise: 
+the base language or vision-language model may produce proposals that are semantically coherent but physically wrong, and an external grounding mechanism must intercept those proposals before they become motor commands.
+The failure mode being addressed is compounding errors — a wrong proposal that executes without correction puts the robot in a state that makes subsequent proposals harder to correct, and errors accumulate over the horizon.
+
+Both papers employ temporal abstraction — SayCan over discrete skills, Reflective Planning over multi-step VLM proposals — and both maintain an auxiliary grounding model that enables pre-commitment validation.
+The internal progression between them is significant: SayCan uses a fixed pre-trained affordance model at inference time, while Reflective Planning performs explicit imagination and reflection at inference time.
+This moves the grounding mechanism from implicit and fixed to explicit and queryable, at the cost of requiring a learned dynamics model that is itself brittle outside its training distribution.
+
+Both papers include an error interception mechanism at each planning step.
+SayCan re-scores skills at every decision point after observing the new state.
+Reflective Planning revises its proposal after imagining a future state through the diffusion model.
+Both methods therefore include a per-step revision mechanism before execution.
+
+Both approaches possess their own unique limitations, but they share a structural oversight. At every abstraction boundary these papers draw — between skills, between reflection steps — the state representation passed forward discards critical state information.
+That information is precisely what makes the planning process Markov: without it, a policy cannot be expected to solve for the optimal action from a given state.
+The affordance function and diffusion model respectively in both papers implicitly assume the Markov property holds at their abstraction boundaries.
+
+
+| Paper | Error correction mechanism | When correction runs | Non-Markov failure point |
+|---|---|---|---|
+| SayCan | Affordance product re-scored per step | Inference time using a fixed affordance model | Visual observation cannot distinguish gripper configurations |
+| Reflective Planning | Single imagine-reflect loop over an imagined horizon | Inference time (diffusion rollout + VLM re-query) | Imagined visual outcome drops trajectory geometry |
+
+---
+
+### 1.1 SayCan
+
+**Ahn et al., 2022. "Do As I Can, Not As I Say: Grounding Language in Robotic Affordances."**
+
+#### Architecture
+ 
+SayCan is a hierarchical planner over a fixed skill library $\mathcal{L}$, not a direct language-to-action policy.
+Each skill $\ell_\pi \in \mathcal{L}$ has three aligned components: a natural-language description $i$, a low-level policy $\pi$ that executes it, and an affordance $p(c_\pi \mid s, \ell_\pi)$ — the probability the skill succeeds from state $s$.
+ 
+Planning decomposes into two questions answered by two separate models.
+ 
+The first is task-grounding: given instruction $i$ and the skills selected so far $\ell_{0:n-1}$, which available skill is the most useful next step?
+SayCan answers this by treating the LLM as a scoring model, not a generator.
+The prompt is structured as a user-robot dialog with an explicit step-by-step plan format, constraining the LLM to rank elements of $\mathcal{L}$ rather than produce arbitrary text.
+This yields $p(\ell_\pi \mid i)$: the probability that $\ell_\pi$ is the right next step given the instruction and partial plan.
+ 
+The second is world-grounding: which skills can the robot actually execute from current state $s$?
+SayCan answers this with language-conditioned value functions trained via RL, where the sparse-reward signal — 1 for success, 0 for failure — makes the value function exactly an affordance.
+In the paper's implementation, low-level policies come from a mix of behavioral cloning (BC-Z) and RL (MT-Opt), but all expose the same affordance interface $p(c_\pi \mid s, \ell_\pi)$ back to the planner.
+Both the policies and value functions are conditioned on pretrained sentence embeddings of $\ell_\pi$, so the same language descriptions that the LLM scores during planning also condition the low-level execution modules.
+ 
+The planner multiplies both scores and selects:
+ 
+$$
+\pi = \arg\max_{\pi \in \Pi} \; \underbrace{p(\ell_\pi \mid i)}_{\text{LLM score}} \cdot \underbrace{p(c_\pi \mid s, \ell_\pi)}_{\text{affordance score}}
+$$
+ 
+This product follows from a deliberate factorization of the quantity the planner actually wants: the probability that skill $\ell_\pi$ successfully makes progress toward completing instruction $i$ from state $s$, written $p(c_\pi \mid i, s, \ell_\pi)$.
+The paper derives $p(c_\pi \mid i, s, \ell_\pi) \propto p(c_{\pi} \mid s, \ell_\pi) \cdot p(\ell_\pi \mid i)$ under the assumption that a successful skill makes progress on the instruction with probability $p(\ell_\pi \mid i)$ and a failed skill contributes zero.
+
+Policy $\pi$ executes, the robot observes the next state $s_{n+1}$, appends $\ell_\pi$ to the plan context, and the loop restarts.
+Termination occurs when the LLM assigns highest probability to a "done" token.
+
+#### Load-Bearing Walls
+**The factored objective's hidden assumptions.**
+The factorization derived in the architecture section breaks down in at least three concrete ways:
+ 
+
+1. **Skill success $\neq$ task progress.** A low-level skill can succeed exactly as specified while still failing to advance the real task.
+The problem is that the affordance term only answers: *can the robot execute this skill successfully from the current state?*
+It does not answer: *if that skill succeeds, does it move the overall task toward completion in the right way?* 
+For example, "pick up cup" may be a perfectly successful low-level behavior, but the instruction may have implicitly required "pick up the blue cup," "pick up the clean cup," or "pick up the cup closest to the sink."
+
+2. **Skill failure $\neq$ task failure.** 
+The paper’s factorization also treats failed execution as contributing zero progress.
+That is convenient mathematically, but it is often wrong operationally.
+A skill can fail its binary completion test and still leave the robot in a better state for eventual success.
+A failed grasp may still rotate the object into an easier pose; a failed "find sponge" step may still reveal that the sponge is not on the table; a failed drawer-opening attempt may still clear occlusion or improve alignment for the next try.
+In other words, binary skill success is a coarse label for what is often a graded state transition.
+
+
+3. **State-dependent usefulness.** 
+The LLM score term is supposed to capture whether a skill is the right next step for the instruction, but in the paper it is scored primarily from the instruction and partial text plan, not from the full physical state.
+That creates a mismatch: the usefulness of a skill is often state-dependent, not instruction-only.
+If the user says "clean the kitchen," then "find sponge" and "pick up sponge" may both be linguistically plausible next steps.
+But if the sponge is already directly in front of the robot, those two options are not equally useful anymore.
+
+
+**The non-Markov abstraction boundary.**
+SayCan's abstraction boundary falls between discrete skills.
+At each step, only the current visual observation $s$ is passed forward — the motor trajectory used to execute the previous skill is discarded.
+The affordance function $p(c_\pi = 1 \mid s, \ell_\pi)$ is therefore being asked to satisfy the Markov property over an observation space that is not rich enough to make the process Markov.
+Two visually identical states can correspond to different gripper configurations, contact states, and approach trajectories, each making a different subsequent set of skills feasible.
+The information needed to assess skill $j$'s motor feasibility was generated during skill $i$'s execution and is lost at the skill boundary.
+
+Richer state representation — adding proprioception, joint angles, and contact state — would reduce this problem.
+More training data alone, without richer state, hits a ceiling defined by what the observation space can represent.
+This is an architectural constraint, not just a data problem.
+
+**Fixed skill library.**
+The discrete skill library $\mathcal{L}$ is a closed-world assumption.
+SayCan cannot invent new primitives or handle behaviors outside the library.
+Its adaptation happens only at skill boundaries rather than within a skill execution.
+The correction mechanism is only as expressive as the predefined primitives.
+
+**Prompting brittleness.**
+The LLM score is sensitive to prompt formatting — number of examples, numbering, newline placement.
+The "usefulness" signal is brittle with respect to surface form, not just content.
+
+---
+
+### 1.2 Reflective Planning
+
+**Feng et al., 2025. "Reflective Planning: Vision-Language Models for Multi-Stage Long-Horizon Robotic Manipulation."**
+
+#### Architecture
+ 
+Reflective Planning is a test-time computation framework built on two components: a diffusion-based dynamics model (DDM) that generates visual predictions of future states, and an interactive post-training procedure that teaches the VLM to use those predictions for plan revision.
+ 
+The problem is formulated as a POMDP $(\mathcal{S}, \mathcal{A}, \mathcal{T}, \mathcal{O}, \mathcal{Z})$ over interlocking-piece assembly tasks.
+The action space $\mathcal{A}$ consists of high-level manipulation primitives — pick up, insert, reorient, put down — applied to named objects.
+The VLM policy $\pi_\text{VLM}$ takes the current image observation $I_t$ and goal image $I_g$ as input and generates action primitives as text.
+ 
+**Diffusion dynamics model.**
+The DDM is built by fine-tuning a pretrained InstructPix2Pix backbone on task-specific rollout data, reformulating dynamics prediction as an image-to-image translation task.
+Given current observation $I_t$ and a proposed action sequence $a_{t:t+H-1}$, the DDM generates a predicted future observation $\hat{I}_{t+H}$:
+ 
+$$
+\hat{I}_{t+H} = \text{DDM}(I_t, a_{t:t+H-1})
+$$
+ 
+This imagined future image serves as the grounding signal for reflection — the VLM sees where its proposed actions are predicted to lead before committing to them.
+ 
+**Interactive post-training.**
+The VLM is post-trained with two prompt templates over the same trajectory data.
+The first trains a proposal policy $\pi_\text{VLM}^\text{propose}$: given the goal image $I_g$, current observation $I_t$, and action history $a_{t-h:t-1}$, predict the expert action $a_t^{\ast}$.
+The second trains a reflection policy $\pi_\text{VLM}^\text{reflect}$: given the same inputs plus the imagined future image $\hat{I}\_{t+H}$ and imagined action sequence $a_{t:t+H-1}$, also predict $a_t^{\ast}$.
+Both objectives are optimized jointly with cross-entropy loss:
+ 
+$$
+\min_{\pi_{\text{VLM}}} \mathbb{E}_\mathcal{D} \left[ \mathcal{L}_\text{CE}\!\left(\pi_{{\text{VLM}}^{\text{propose}}}(a_t \mid I_g, I_t),\, a_t^{\ast}\right) + \mathcal{L}_\text{CE}\!\left(\pi_{{\text{VLM}}^{\text{reflect}}}(a_t \mid I_g, I_t, \hat{I}_{t+H}, a_{t:t+H-1}),\, a_t^{\ast}\right) \right]
+$$
+ 
+Training data for the reflection branch is generated by relabeling rollouts: for each timestep, the imagined future $\hat{I}_{t+H}$ is produced by running the DDM on the action sequence that follows, then added to the reflection context.
+This means the VLM learns to correct its proposals by conditioning on concrete visual evidence of where those proposals lead.
+ 
+**Inference loop.**
+At each decision step $t$, the system first runs the proposal policy to generate an initial action sequence $\tilde{a}\_{t:t+H-1}$.
+The DDM then rolls out $H$ imagined steps, alternating VLM action proposals with diffusion predictions, to produce $\hat{I}\_{t+H}$.
+The reflection policy is then queried with $(I_g, I_t, \hat{I}\_{t+H}, \tilde{a}\_{t:t+H-1})$ and outputs the final action $a_t^*$ to execute.
+After execution, the robot observes $I_{t+1}$ and the loop restarts.
+This is a single-path correction loop: one imagined rollout, one reflection step, no branching over alternative futures.
+
+#### Load-Bearing Walls
+
+**Accuracy of the diffusion dynamics model.**
+The performance of Reflective Planning is contingent on the quality of the diffusion dynamics model.
+When that model is wrong, the VLM reflects on a hallucinated future state.
+The paper itself shows that replacing simulator-based reflection with diffusion-based reflection causes a small performance drop, and attributes that gap to the difficulty current generative models still have with nuanced physics and temporal dynamics in these assembly tasks.
+The paper does not describe any explicit mechanism for detecting when the diffusion model is out of distribution.
+
+**Single-path imagination is not search.**
+The correction budget is fixed at one imagined rollout plus one VLM reflection pass per decision step.
+If the imagined future is misleading, there is no alternative branch to compare against.
+The method cannot distinguish between "the plan is good and the imagined future confirms it" and "the imagined future is wrong and the plan is actually bad" unless the grounding model itself is reliable.
+
+**The non-Markov abstraction boundary.**
+Reflective Planning's abstraction boundary falls between multi-step proposals.
+The imagined future is still a visual prediction: it can show what the scene is expected to look like, but not the full motor-configuration legacy of how that scene was reached.
+The VLM reflects on images and language, not on a representation that explicitly carries trajectory-level contact geometry forward.
+This is the same non-Markov failure as SayCan, raised one level of abstraction: the boundary is now between proposals rather than skills, but the state passed across that boundary is still insufficient to preserve all downstream motor-feasibility information.
+
+---
+
+## Theme 2: Action Space Structuring
+
+### Overview
+
+Theme 2 papers share a diagnosis that Theme 1 does not address: the base model's native action space is too large and unstructured to plan or learn over effectively for long-horizon tasks.
+Theme 2 argues that the action space itself is the problem — token-by-token actions for Internal RL, raw continuous actions for VLAPS — and that imposing structure on that space is a prerequisite for long-horizon capability.
+
+The two papers respond to different primary failure modes within this shared diagnosis.
+VLAPS targets intractable search: the continuous action space makes exhaustive planning infeasible, and generic search without guidance is computationally hopeless at long horizons.
+Internal RL targets sparse rewards and credit assignment in autoregressive models: token-level RL cannot propagate a single terminal reward back through long action sequences, and standard RL fine-tuning fails in the paper's sparse-reward compositional tasks.
+
+The mechanism in both cases is to construct a structured action representation that makes the planning or learning problem tractable.
+VLAPS constructs it externally at inference time by using the VLA to define a finite, contextually relevant candidate chunk library and searching over it with simulator rollouts.
+Internal RL constructs it internally at training time by discovering a compressed latent code space within the autoregressive model's residual stream, then doing RL in that space rather than in raw action space.
+
+The deepest distinction between the two papers is the nature of the intervention.
+VLAPS is model-based planning: it uses an explicit world model — the simulator — to evaluate candidate action chunks and search for sequences that reach the goal.
+Internal RL is hierarchical RL over an internal latent action space: it uses a pretrained autoregressive model and fixed controller machinery as part of the environment in which a policy over latent codes acts.
+The two papers are therefore comparable at the level of long-horizon abstraction, but they intervene at different stages and in different domains.
+
+| Paper | Approach | Action space structure |
+|---|---|---|
+| VLAPS | Model-based planning | VLA-derived chunk library (external, inference-time) |
+| Internal RL | Model-free learning over latent codes | Latent subgoal codes in autoregressive-model residual stream (internal, training-time) |
+
+---
+
+### 2.1 VLAPS
+
+**Neary et al., 2025. "Improving Pre-Trained Vision-Language-Action Policies with Model-Based Search."**
+
+#### Architecture
+
+VLAPS's core claim is that a VLA policy deployed without search cannot reason over the consequences of its actions.
+The response is to embed the VLA inside an MCTS-inspired planning procedure that searches over temporally abstract action chunks, using the VLA both to define a tractable search space and to bias search toward contextually relevant trajectories.
+
+The temporal abstraction operates over action chunks — short continuous trajectories of horizon $H=4$ timesteps.
+The world model is a high-fidelity simulator assumed to accurately model the deployment environment.
+
+The task is formalized as an MDP $\mathcal{M} = (S, A, T, R)$ with sparse reward $R_\mathcal{T}(s) = \mathbf{1}[s \in S_\mathcal{T}]$.
+A finite candidate library $\Phi \subset \mathbb{R}^{H \times n}$ is precomputed via K-Medoids clustering over successful VLA rollouts.
+This is the action-space structuring step: instead of searching over all possible continuous trajectories, VLAPS restricts planning to a finite set of behaviorally representative chunks derived from the VLA's own outputs.
+
+At each decision point, VLAPS instantiates a search tree and iterates four phases.
+
+**Expansion.** At each leaf node $v$, $k$ candidate chunks are sampled from a VLA-biased distribution:
+
+$$
+\beta_\Phi(u^i \mid I_t, \mathcal{L}_\mathcal{T}) \propto (1-\epsilon) \cdot \frac{\exp(-\alpha \cdot \rho(u^i, u^\text{vla}))}{\sum_j \exp(-\alpha \cdot \rho(u^j, u^\text{vla}))} + \frac{\epsilon}{|\Phi|}
+$$
+
+where $u^\text{vla} \sim \pi_\text{VLA}(I_t, \mathcal{L}_\mathcal{T})$ is the VLA's nominal output and $\rho$ is Euclidean distance in flattened action space.
+
+**Selection.** Tree traversal uses a prior-weighted selection rule with no value term:
+
+$$
+\text{SCORE}(v, u^i) = \psi_{\Phi_v}(u^i \mid I_t, \mathcal{L}_\mathcal{T}) \cdot \frac{\sqrt{N(v, u^i)}}{1 + N(v, u^i)}.
+$$
+
+This is not standard PUCT with learned or rollout-based value estimates; the paper explicitly sets $Q \equiv 0$ to isolate the effect of the VLA prior.
+
+**Simulation.** From each expanded child node, the VLA is rolled out in the simulator until task completion or horizon exhaustion.
+
+**Termination and action choice.** Search stops when a simulated successful trajectory is found or when the compute budget is exhausted.
+If no successful trajectory is found, the method returns the most frequently selected root action sequence and replans from the next true observation.
+
+#### Load-Bearing Walls
+
+**Simulator-matched planning and evaluation.**
+VLAPS achieves large gains on LIBERO by planning inside the LIBERO simulator and then evaluating in that same simulator.
+That makes the results valid evidence of simulator performance, but not direct evidence of real-world performance under model mismatch.
+The paper is explicit that it assumes access to an accurate simulator and leaves imperfect or learned world models to future work.
+
+**The VLA prior propagates failures.**
+The search space is not arbitrary: it is built from the VLA's own behavior and further biased toward the VLA's current output.
+That is the source of tractability, but also a limit on recoverability.
+At the weakest checkpoint, VLAPS remains near-zero on some suites and low on others, showing that search cannot fully compensate when the base VLA prior is too poor.
+The method can improve weak policies substantially, but only within the behavioral support of the chunk library and the VLA-centered sampling rule.
+
+**Inference latency.**
+The paper allows up to 600 seconds per task on an A100 GPU, and failed evaluations typically hit that timeout.
+Successful runs are often much faster, but the compute budget is still large and far from a real-time deployment regime.
+VLAPS trades inference efficiency for search power.
+
+---
+
+### 2.2 Internal RL
+
+**Kobayashi et al., 2025. "Emergent temporal abstractions in autoregressive models enable hierarchical reinforcement learning."**
+
+#### Architecture
+
+Internal RL's core claim is that standard RL fine-tuning on autoregressive sequence models fails for sparse-reward long-horizon tasks because token-by-token exploration is the wrong granularity.
+The paper demonstrates this directly in its own domains: standard RL baselines fail to learn the sparse-reward compositional tasks within the reported training budget.
+The diagnosis is that raw-action exploration cannot reliably discover the long successful sequences before the sparse reward signal becomes useful.
+
+The response is not to change the base model's predictions directly, but to change the level at which RL operates.
+By freezing the pretrained autoregressive model and doing RL in a compressed latent code space discovered within its residual stream, the effective decision horizon collapses from $T$ token steps to $M$ switch events where $M \ll T$.
+The RL policy therefore acts over abstract controller codes rather than raw actions.
+
+**Stage 1 — Latent structure.**
+A base autoregressive model $p_\theta$ is pretrained by minimizing
+
+$$
+\mathcal{L}(\theta) = \sum_{(o_{1:T+1}, a_{1:T}) \sim \mathcal{D}} \sum_{t=1}^{T} \left[-\ln p_\theta(a_t \mid o_{1:t}) - \lambda \ln p_\theta(o_{t+1} \mid o_{1:t})\right].
+$$
+
+Despite being trained only on next-step prediction, linear probes on the residual stream activations $e_{t,l} \in \mathbb{R}^{n_e}$ at layer $l$ decode latent subgoal structure, with the clearest signal near mid-depth.
+Temporal structure is not injected explicitly; it emerges from pretraining.
+
+**Stage 2 — The metacontroller.**
+A metacontroller $c_\phi$ inserted at mid-depth of the frozen base model steers the residual stream via a linear controller:
+
+$$
+\hat{e}_{t,l} = e_{t,l} + U_t e_{t,l},
+$$
+
+where $U_t \in \mathbb{R}^{n_e \times n_e}$ is a low-rank controller generated from a latent code $z_t$.
+
+The metacontroller encoder is non-causal during training — it receives the full sequence embedding $s(e_{1:T,l})$ — and produces a distribution over controller codes:
+
+$$
+\tilde{z}_t \sim \mathcal{N}(\mu_t, \Sigma_t), \quad \mu_t, \Sigma_t = f_\text{enc}(e_{t,l}, h_{t-1}, s(e_{1:T,l})).
+$$
+
+Temporal abstraction is achieved via a switching gate:
+
+$$
+z_t = \beta_t \odot \tilde{z}_t + (1 - \beta_t) \odot z_{t-1}.
+$$
+
+When $\beta_t \approx 0$, the same controller persists; when $\beta_t \approx 1$, the metacontroller switches subgoals.
+The gate learns quasi-binary behavior without explicit supervision.
+
+**The metacontroller objective** is a variational ELBO:
+
+$$
+\mathcal{L}(\phi) = \sum_{t=1}^{T} \left[-\ln p_{\theta,\phi}(a_t \mid o_{1:t}, z_{1:t}) + \alpha \, D_\text{KL}\left(\mathcal{N}(\mu_t, \Sigma_t) \,\|\, \mathcal{N}(0, I)\right)\right].
+$$
+
+The KL term regularizes the latent code distribution toward a sampleable prior and encourages sparse, reusable controller codes.
+
+**Internal RL.**
+After self-supervised metacontroller training, the non-causal encoder is replaced by a causal policy $\pi(z_t \mid e_{1:t})$ trained through RL in controller-code space.
+The pretrained autoregressive model and the previously learned controller machinery remain fixed, while the causal policy over latent codes is optimized.
+Conceptually, this treats the pretrained autoregressive model together with part of the controller mechanism as part of the environment in which the latent-code policy acts.
+The paper argues that this reduces gradient variance relative to raw-action RL by lowering both action-space dimension and effective temporal horizon.
+
+#### Load-Bearing Walls
+
+**The non-causal encoder at training vs. causal policy at deployment.**
+The metacontroller's abstract-action discovery depends on a non-causal encoder with access to the full future sequence embedding $s(e_{1:T,l})$.
+At deployment, that encoder is replaced by a causal policy operating from history alone.
+The paper shows that internal RL succeeds, but it does not isolate how much performance is lost in the transition from future-conditioned latent discovery to causal latent selection.
+How much abstract structure the causal policy can exploit without privileged future context is therefore uncharacterized.
+
+**The frozen-base-model assumption.**
+The rate-distortion analysis shows that co-training the base model and metacontroller collapses relative to the frozen-base-model regime.
+The method therefore relies on a pretrained model whose internal dynamics already contain useful behavioral structure.
+That is a strong assumption even within the paper's own setting.
+A broader open question is whether equally useful latent structure would still emerge under narrower or more specialized pretraining regimes.
+
+**Evaluation environment alignment.**
+The evaluation domains are structured navigation and control tasks with clean compositional subgoals.
+Subgoal boundaries are comparatively crisp, abstract actions are well separated, and switching behavior in the data is interpretable.
+Whether the same metacontroller mechanism would discover equally useful abstractions in continuous, contact-rich manipulation remains open.
+
+---
+
+### External vs. Internal Action Space Structuring
+
+Both VLAPS and Internal RL impose structure on a large action space to make long-horizon reasoning tractable.
+The comparison is between doing this externally at inference time versus internally at training time.
+
+**Where the structure comes from.**
+VLAPS derives its structured action space from the VLA's own outputs — K-Medoids clustering over successful rollouts produces a finite library of behaviorally representative chunks.
+Internal RL derives its structured action space from the autoregressive model's residual stream — the metacontroller discovers latent codes that correspond to reusable behavioral substructures.
+In both cases the structure is borrowed from the base model's training distribution rather than engineered from first principles.
+That makes both approaches dependent on the quality and coverage of pretraining.
+
+**When the structure is built.**
+VLAPS builds the chunk library offline and then performs fresh search online at every decision point.
+Internal RL builds the latent code space through metacontroller training and then freezes that structure for downstream RL.
+This makes Internal RL cheaper at inference, but less able to adapt its action abstraction at deployment.
+
+**The world-model dependency.**
+VLAPS requires an accurate simulator.
+Internal RL requires a pretrained autoregressive model rich enough to contain temporally abstract behavioral structure.
+Both are demanding assumptions.
+VLAPS states its simulator dependence explicitly.
+Internal RL's dependence is more implicit, and becomes visible only when one asks what must already be present in the pretrained model for the metacontroller to work.
+
