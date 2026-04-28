@@ -1,0 +1,374 @@
+---
+title: "CDR: Vision-Grounded Distance Estimation"
+author: "Callie Jones"
+---
+
+# Vision-Grounded Distance Estimation
+
+## Motivation
+
+- Monocular RGB perception does not preserve absolute metric scale.
+- A tennis ball that is small in the image may be far away, or it may be close with different camera intrinsics.
+- In robotic interaction tasks, this ambiguity can create real failure modes.
+- A robot that misestimates distance can stop too late, overshoot a target, or take unstable approach actions.
+
+This project treats distance estimation as a core perception problem that needs to work before downstream robot decisions can be reliable.
+The focus in this phase is robustly mapping visual observations to metric distance in meters.
+The main idea is that box-size rules alone break under viewpoint and calibration shifts, and that multi-modal fusion can reduce those failures.
+In this project, multi-modal means combining camera-based cues with an independent range signal instead of relying on image geometry alone.
+The camera side contributes RGB context, object localization, and depth-prior features from MiDaS.
+The LiDAR side contributes a direct metric range value from Isaac Sim (`lidar_range_m`) for each frame.
+That LiDAR value is added as an extra input feature in the fusion MLP, so the model can combine appearance, projection cues, and range information when estimating distance.
+The goal is not to replace vision with LiDAR, but to use LiDAR as an anchor for scale when visual cues are ambiguous.
+
+---
+
+## Objective
+
+- Build a multi-modal distance estimator that predicts tennis-ball distance in meters.
+- Use simulation as the primary data source to generate paired labels and sensor signals.
+- Compare simple geometry rules and learned baselines under controlled shifts in viewpoint and camera parameters.
+
+Given an RGB frame and object localization, the model predicts a scalar distance.
+The system should be accurate in nominal conditions and degrade gracefully in harder conditions such as partial occlusion and intrinsics shift.
+The target output is a physically meaningful measurement that can later serve as a stable upstream signal for robot decision modules.
+
+---
+
+## System Design
+
+### Input
+
+- RGB image from a forward-facing camera.
+- Tennis-ball bounding box from detector or ground-truth labels.
+- Optional LiDAR scalar range from simulation logs.
+
+### Model Components
+
+- YOLOv8n for tennis-ball detection at inference time.
+- Frozen MiDaS encoder for relative depth features from object crops.
+- Fusion MLP that combines box geometry, depth embedding, and optional LiDAR scalar.
+
+### Output
+
+- Scalar distance prediction in meters.
+
+### Execution Modes
+
+- **Vision-only mode:** MiDaS depth features + box geometry.
+- **Vision + LiDAR mode:** MiDaS depth features + box geometry + `lidar_range_m`.
+
+The same training and evaluation framework supports both modes, which allows direct comparison between them.
+
+---
+
+## Core Idea
+
+Monocular distance estimation is treated as a sensor-fusion problem, with clear comparisons across model versions.
+The bbox baseline is convenient but brittle because it conflates projection with metric depth.
+The proposed method adds depth priors and LiDAR cues so metric inference is informed by richer geometry than 2D box extent alone.
+The trainable component stays small so improvements can be attributed to modality choices rather than brute-force end-to-end fitting.
+
+---
+
+## Architectural Delta
+
+Existing monocular methods for this problem often rely on one of two patterns.
+The first pattern is simple box-geometry rules.
+The second pattern is a learned regressor over image cues that still lacks explicit metric supervision from an independent sensing channel.
+
+Both patterns can perform adequately in narrow conditions, but both struggle when camera intrinsics or perspective shift outside the training assumption.
+
+This project introduces two architectural changes.
+
+1. **Depth-prior integration.**
+   - Use MiDaS features from the object crop to inject relative scene structure.
+   - Keep MiDaS frozen to reduce compute cost and stabilize training.
+
+2. **LiDAR scalar fusion from simulation.**
+   - Export `lidar_range_m` from Isaac Sim for each frame.
+   - Fuse that scalar with depth and geometry features in the MLP head.
+
+The resulting pipeline is easy to inspect, easy to explain, and easy to ablate.
+The expected result is lower error and improved robustness versus bbox-only baselines, especially in out-of-distribution camera settings.
+
+---
+
+## What I Have Done
+
+- Implemented a full PyTorch training and inference pipeline.
+- Added a CSV-based dataset contract: `path,x1,y1,x2,y2,distance_m` with optional `lidar_range_m`.
+- Added LiDAR-aware fusion logic so the model can run with or without LiDAR features.
+- Added synthetic test data generation to validate the pipeline.
+- Added unit tests validating fusion forward paths, including the LiDAR branch.
+
+---
+
+## Interaction Data Collection in Isaac Sim
+
+I use Isaac Sim to generate controlled, labeled, multi-modal data without requiring physical hardware.
+Each sample corresponds to one rendered frame with synchronized metadata.
+
+### Scenarios
+
+- Ball centered and unobstructed.
+- Ball near image edges with perspective distortion.
+- Ball partially occluded by foreground objects.
+- Lighting and texture variations across court and background.
+- Camera height and pitch perturbations.
+- Intrinsics variation across defined ranges.
+
+### Per-Sample Fields
+
+- RGB frame path.
+- Bounding-box coordinates in pixel space.
+- `distance_m` ground-truth metric target.
+- `lidar_range_m` simulated range feature.
+
+### Label Definition
+
+- `distance_m` is defined as Euclidean distance from camera optical center to ball center.
+- `lidar_range_m` is computed using one fixed sensor-association rule across all splits.
+
+The most important procedural rule is consistency.
+If the `lidar_range_m` definition changes mid-experiment, comparisons become invalid.
+
+---
+
+## Data Mix
+
+- **Foundational priors:** YOLOv8n detector weights and MiDaS pretrained depth weights.
+- **Embodied data:** Isaac Sim generated data is the primary source in this phase.
+- **Synthetic multiplication:** domain randomization in simulation is the scaling mechanism.
+
+This phase does not fine-tune on OXE or DROID subsets.
+That decision is intentional because the target question is perception grounding under metric supervision, not policy imitation.
+The data strategy is to keep RGB, geometry, metric labels, and LiDAR signals aligned in the same coordinate frame.
+The goal is 10k to 20k samples with seed-based splits to prevent leakage.
+
+---
+
+## Proposed Method
+
+The full model is:
+
+- Detect or read object bounding box.
+- Crop object region from RGB image.
+- Extract depth embedding with frozen MiDaS.
+- Compute normalized bbox geometry features.
+- Optionally append normalized LiDAR scalar.
+- Regress metric distance with a fusion MLP.
+
+Training uses ground-truth boxes for controlled learning.
+Inference uses YOLO for realistic deployment behavior.
+This separation keeps learning signals clean while still evaluating detector-coupled performance at test time.
+
+Comparison is organized as four test runs.
+
+- **Test Run A:** bbox-only baseline.
+- **Test Run B:** vision + depth + bbox.
+- **Test Run C:** vision + depth + bbox + LiDAR.
+- **Test Run D:** LiDAR-only baseline (range scalar to distance mapping).
+
+If Test Run C outperforms all single-modality baselines on both aggregate and stress-condition metrics, then the fusion approach is validated as the strongest overall configuration for this task.
+At minimum, Test Run C must improve average MAE relative to Test Runs A, B, and D on the same split.
+It must also improve worst-bucket MAE under intrinsics shift and partial occlusion, where monocular signals are least reliable.
+To verify that gains are not due to over-reliance on LiDAR, Test Run C is further compared against Test Run D under simulated LiDAR noise and dropout.
+A strong result is one where Test Run C remains more stable than Test Run D under LiDAR corruption while still outperforming vision-only settings in nominal conditions.
+
+---
+
+## Loss Formulation
+
+### State Space
+
+Let:
+
+$$
+s_i = \left[\phi(I^{(i)}_{\text{crop}}),\ g(b_i),\ \rho(r_i)\right].
+$$
+
+$\phi(\cdot)$ is a frozen depth embedding from MiDaS.
+$g(\cdot)$ is normalized bbox geometry.
+$\rho(\cdot)$ is optional normalized LiDAR scalar.
+
+### Action Space
+
+$$
+\mathcal{A} = \{\hat{d}_i \in \mathbb{R}_{>0}\}.
+$$
+
+### Prediction
+
+$$
+\hat{d}_i = f_{\theta}(s_i).
+$$
+
+### Training Objective
+
+Main objective:
+
+$$
+\mathcal{L}_{\text{total}} = \frac{1}{N}\sum_{i=1}^{N}\left|\hat{d}_i-d_i\right|.
+$$
+
+Optional robust objective (comparison run):
+
+$$
+\mathcal{L}_{\delta}(e)=
+\begin{cases}
+\frac{1}{2}e^2,& |e|\le\delta\\
+\delta\left(|e|-\frac{1}{2}\delta\right),& |e|>\delta
+\end{cases}
+$$
+
+with $e=\hat{d}_i-d_i$.
+
+### Evaluation Metrics
+
+- MAE in meters.
+- RMSE in meters.
+- Bucketed MAE by distance range.
+- Robustness slices by camera intrinsics and occlusion level.
+
+---
+
+## Evaluation
+
+All models are trained and tested on the same partition strategy.
+Splits are seed-based at scene generation time, not random frame-level shuffles.
+
+Reported results include:
+
+- Global MAE and RMSE.
+- Per-condition metrics for intrinsics shift.
+- Per-condition metrics for occlusion.
+- Worst-case bucket error.
+
+Sensor corruption checks are also included.
+In fusion mode, lidar_range_m is intentionally varied at test time to measure modality dependence and failure behavior.
+
+Detailed success criteria are:
+
+- Test Run C beats Test Run A in global MAE, RMSE, and worst-bucket MAE.
+- Test Run C beats Test Run B under camera-shift and occlusion slices.
+- Test Run C is competitive with or better than Test Run D in clean settings.
+- Under LiDAR variation at test time, Test Run C is expected to degrade more gradually than Test Run D.
+
+---
+
+## Implementation Status
+
+### Completed
+
+- Dataset schema and loader with conditional LiDAR support.
+- Fusion model with optional LiDAR feature channel.
+- Training loop with MAE optimization and RMSE reporting.
+- Inference script with YOLO-based box detection.
+- Unit tests for key model pathways.
+
+### In Progress
+
+- Isaac Sim export automation for large-scale sample generation.
+  - Build a repeatable batch script that exports RGB, bbox, `distance_m`, `lidar_range_m`, and scene metadata in one run.
+  - Scale generation from a 2k pilot to 10k to 20k samples with fixed random seeds for reproducibility.
+  - Add automatic data quality checks (missing labels, invalid boxes, or mismatched CSV/image paths).
+- Stress-test split generation across intrinsics and occlusion factors.
+  - Create a held-out intrinsics split with unseen FOV and camera-height ranges.
+  - Create an occlusion split with examples where the ball is partly blocked by other objects.
+  - Include edge-of-frame and cluttered-background samples to test robustness outside nominal conditions.
+
+### Critical Blocker
+
+- Freezing and validating the LiDAR target-association rule for `lidar_range_m` across all scenes.
+
+Why this is the blocker.
+If `lidar_range_m` is not defined the same way in every scene, the model will see contradictory targets for similar images.
+For example, one export might log nearest LiDAR hit on the ball surface while another logs median range in a wider cone.
+Those two numbers are both reasonable, but they are not the same supervision target.
+That inconsistency can make model comparisons look noisy or misleading, and it can invalidate cross-run comparisons.
+This means test runs may appear better or worse due to label definition drift, not real model quality differences.
+Because of that, the LiDAR association rule must be fixed before large-scale data export.
+
+### Mitigation Plan
+
+- Lock a single LiDAR extraction rule before full data export.
+- Add schema validation checks and spot visualizations for random samples.
+- Run a 2k-sample pilot first, then scale once consistency is confirmed.
+
+---
+
+## Compute and Simulation Plan (Google Cloud)
+
+### Cloud Setup
+
+- Platform: Google Cloud Compute Engine.
+- Preferred machine: `g2-standard-8` with 1x NVIDIA L4 (24 GB VRAM).
+- Alternate machine for heavier batch sizes: A100 40 GB if quota and budget allow.
+- Boot disk: 200 GB SSD minimum for Isaac exports, checkpoints, and logs.
+
+### Why this machine choice
+
+The trainable model is small, but MiDaS feature extraction and data throughput still benefit from a modern GPU.
+An L4 is usually enough for this project scale and is easier to schedule than A100 in many regions.
+A100 is reserved for faster turnaround when iterating multiple stress-test runs back-to-back.
+
+### Simulation Execution
+
+Isaac Sim runs as batch scene generation jobs that export RGB + metadata CSV rows.
+Each generation job uses fixed seeds for reproducibility and logs camera intrinsics, occlusion settings, and LiDAR config.
+Initial simulation target is 2k samples for pipeline validation, then 10k to 20k for final training and evaluation.
+Each export job writes `path,x1,y1,x2,y2,distance_m,lidar_range_m` so training can run immediately.
+
+### Training Execution
+
+- Pilot training: 20 epochs on 2k samples to validate data contract and loss behavior.
+- Main training: 30 to 50 epochs on 10k to 20k samples with early stopping by validation MAE.
+- Batch size: start at 8, increase to 16 if VRAM remains stable.
+- Run count: at least 3 seeds per test run (A/B/C/D) to report mean and variance.
+
+### Runtime Expectations
+
+- 2k-sample pilot run: about 1 to 2 hours including evaluation.
+- 10k to 20k full run: about 6 to 18 hours depending on GPU type and dataloader throughput.
+- Full comparison matrix with 4 test runs and 3 seeds each: approximately 1 to 3 days wall-clock.
+
+### Evaluation (Pilot Run)
+
+- Compute MAE and RMSE on a held-out split to verify that training learns a usable mapping.
+- Check train and validation curves for instability, divergence, or overfitting in early epochs.
+- Review bucketed MAE by distance range (near, mid, far) to catch bias toward one region.
+- Compare at least one baseline pair (for example, Test Run B vs Test Run C) to confirm the LiDAR path is functioning correctly.
+- Look at a small sample of high-error predictions to see data or labeling issues.
+
+### Notes
+
+Training runs are launched inside `tmux` sessions to prevent interruption from SSH disconnects.
+Datasets are stored on local VM SSD for consistent dataloader throughput.
+After each run, checkpoints and metrics are copied to Cloud Storage for backup and comparison notebooks.
+
+---
+
+## The Hard Question
+
+**Question:**  
+If LiDAR is available in simulation, how do you prove the model is not just copying LiDAR and ignoring vision?
+
+**Answer:**  
+Modality contribution is tested directly with controlled model comparisons and corruption experiments.
+LiDAR-off, vision-off, and full-fusion settings are compared under identical splits.
+Controlled LiDAR noise is injected at inference and degradation is measured.
+If fusion is meaningful, full-fusion should outperform single modalities in nominal settings and remain more stable than LiDAR-only when LiDAR is degraded.
+
+---
+
+## Expected Contribution
+
+- A reproducible, simulation-first benchmark for tennis-ball metric distance estimation.
+- An implemented multi-modal fusion baseline with LiDAR and depth priors.
+- A comparison showing how each modality affects performance and robustness.
+
+## Next Steps
+
+- Add temporal smoothing or short-window recurrent fusion to reduce frame-to-frame jitter.
+- Add uncertainty estimation for distance outputs so downstream planners can reason about confidence.
