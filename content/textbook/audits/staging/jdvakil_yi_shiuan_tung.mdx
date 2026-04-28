@@ -1,0 +1,374 @@
+
+---
+Title: "Manipulation: A Technical Audit"
+Author: "Jay Vakil, Yi-Shiuan Tung"
+Papers: "Octo, OpenVLA, Pi0.5"
+Topic: "Manipulation"
+---
+
+## 1. Introduction
+Robotic manipulation is the ability to purposefully change the state of the physical world through contact. While locomotion allows a robot to move through its environment and perception allows it to observe, manipulation enables a robot to act on its environment (e.g., picking up a cup, loading dishwashers, folding clothes, or preparing a meal).
+
+### 1.1 Taxonomy for Manipulation 
+
+Manipulation tasks are often presented as a list of named categories:
+* Prehensile
+* Non-prehensile
+* Dexterous
+* Contact-rich
+
+They name different aspects of a task that frequently co-occur, and the term contact-rich in particular is often used loosely to mean "harder than pick-and-place." This framing can be divided in two categories:
+
+* **Grasp state**: Whether the object is acquired and held by the gripper, forming a rigid compound with the end-effector, or remains free in the environment. 
+    * **Prehensile**: Tasks that involve grasping and transporting the object. The object then becomes a part of the end-effector for the duration of the manipulation. The defining challenge is grasp planning: selecting a grasp pose that is kinematically reachable, stable under the object's mass distribution, and achievable with the gripper's geometry. Examples: pick-and-place, bin picking, tabletop rearrangement.
+    * **Non-prehensile**: Tasks that move objects without grasping. The object remains in the environment and is controlled via contact forces from the manipulator or surrounding surfaces. The physics are dominated by friction, inertia, and contact geometry, and control is typically open-loop or quasi-static. Examples: pushing a box across a table, toppling a bottle, sweeping debris.
+
+* **Contact configuration.** Whether the contact pattern between the manipulator and the object/environment is fixed throughout the task or changes during execution.
+    
+    * **Contact-rich**: tasks succeed only if the robot actively regulates contact forces or compliance with the environment. Small pose errors during sustained contact must be absorbed by force regulation rather than fought against, or the task either fails or damages something. The strict reduction of "complex contact": the gradient of task success with respect to contact force is non-negligible. Examples: peg-in-hole insertion (regulate insertion force; comply when wedged), polishing (maintain normal force against a curved surface), threaded assembly (regulate torque during screwing), wiping (maintain surface contact while translating).
+
+    * **Dexterous**: Dexterity in this strict sense is defined by multi-contact dynamics with multi-fingered hands and a *time-varying* grasp; coordinated control of many degrees of freedom is a consequence, not the definition
+
+
+Dexterity is therefore not a disjoint category from prehensile manipulation; it is a refinement of it. A simple pick-and-place is prehensile + static-contact; in-hand cube reorientation is prehensile + dexterous.
+
+
+### 1.2 Why manipulation has lagged
+While computer vision and natural language processing have scaled to billions of parameters, manipulation remains bottlenecked. This discrepancy illustrates Moravec’s Paradox. Foundational vision models achieve zero-shot semantic understanding [10, 11, 14], and VLMs exhibit advanced logical reasoning. However, translating this reasoning into physical action is difficult because manipulation requires sub-millimeter geometric perception, multi-step causal reasoning, and the management of continuous contact dynamics (forces, compliance, constraints).
+
+## 2. Embodiment Gap and Data Scaling
+The primary barrier to generalized manipulation is the Embodiment Gap. LLMs are trained on passive, internet-scale datasets exceeding $15 \times 10^{12}$ tokens, and vision models on pixel datasets exceeding $10 \times 10^9$ image-text pairs. Conversely, robot action data must be physically generated through methods like kinesthetic teaching or teleoperation, yielding dataset sizes closer to $2 \times 10^6$ trajectories.
+
+To overcome this, research has shifted toward scalable data aggregation. The Open X-Embodiment initiative aggregated 1 million episodes across 22 different robot embodiments to train cross-embodiment policies.
+
+### 2.1 Open X-Embodiment and RT-X: Cross-Embodiment Pooling
+The Open X-Embodiment project[2] addresses the data limitation through aggregation. The resulting dataset comprises approximately 2 million episodes from 22 distinct robot embodiments, collected across 21 institutions. The embodiments span tabletop arms (Franka, UR5, xArm, Google Robot), mobile manipulators (Stretch, TIAGo), and bimanual systems. Tasks range from simple pick-and-place to multi-step kitchen manipulation.
+
+Two models were trained on this aggregated data: RT-1-X (the RT-1 architecture trained on the pooled dataset) and RT-2-X (RT-2 fine-tuned on the pooled dataset). Positive transfer exists across embodiments; both models outperformed their single-embodiment counterparts, with RT-2-X showing a 3x improvement on emergent skill evaluations compared to RT-2 trained on Google Robot data alone.
+
+The pooled training does not explicitly model embodiment differences; there is no embodiment embedding or dynamics adapter. The model must implicitly learn to factor its representations into embodiment-invariant (task semantics, object properties) and embodiment-specific (workspace geometry, joint limits, gripper type) components.
+
+## 3. Technical Paper Audit: Octo
+**Title:** Octo: An Open-Source Generalist Robot Policy  
+**Authors:** Dibya Ghosh et al.  
+
+### 3.1 Summary
+Octo[3] is an open-source generalist robot policy: a transformer-based diffusion policy pretrained on 800k robot trajectories from 25 Open X-Embodiment (Open X-Embodiment) datasets. It targets a key friction point for real deployments: downstream robotics setups rarely match a single standard interface, as sensor suites, camera layouts, and action spaces differ. The model is designed to swap in and out observation channels and action heads while retaining pretrained weights.
+
+#### 3.1.1 Key Results
+* **Zero-shot:** On environments from its pretraining distribution, Octo achieves ~33% higher average success than RT-1-X and performs similarly to RT-2-X on tested WidowX tasks.
+* **Finetuning:** With ~100 demos per domain, Octo finetunes across real-robot domains, including new observation inputs (force-torque) and new action spaces (joint position control), reaching 72% average success compared to 20% for ResNet+Transformers and 15% for VC-1.
+* **Accessibility:** Pretraining (Octo-Base / ViT-B-sized backbone) takes 300k steps at batch size 2048 on a TPU v4-128 pod (~14 hours); finetuning on a single 24GB NVIDIA A5000 takes ~5 hours.
+* **Tokenization:** Language instructions are embedded via a pre-trained T5-base model (111M parameters), and images (wrist and 3rd-person cameras) are processed through a shallow CNN into patches.
+* **Action Generation:** Octo predicts continuous actions using a multi-step denoising process. The action sampling is defined as:
+
+$$
+x_{k-1} = \alpha(x^k - \gamma\epsilon_\theta(x^k, e, k) + \mathcal{N}(0, \sigma^2I))
+$$
+
+where $x_k$ is the noisy action at step $k$, $e$ is the transformer readout embedding, $\epsilon_\theta$ is the predicted noise, and $\alpha, \gamma, \sigma$ follow a cosine noise schedule.
+
+The accessibility figure is only consistent with the architecture once one recognizes that the 111M-parameter T5 language encoder is frozen and excluded from trainable parameter counts. This distinction is the key to understanding why a system that nominally contains a 111M language encoder, a vision encoder, a transformer trunk, and a diffusion head fits on a single 24GB consumer GPU. Section 3.3 makes the trainable/frozen partition explicit.
+
+### 3.2 Problem Domain & Taxonomy
+Octo operates in generalist robotic manipulation across multiple robot embodiments, multiple camera configurations, language or goal-image conditioning, and varying action spaces, with support for observation histories and multimodal action distributions.
+
+**Taxonomy Positioning:**
+* **Policy type:** Generalist robot policy (vision + optional language/goal)
+* **Training paradigm:** Large-scale imitation learning (Open X-Embodiment mixture)
+* **Action representation:** Continuous actions via diffusion decoding
+* **Adaptation strategy:** Composable token interface + lightweight adapters/heads; finetune with small in-domain data
+* **Scaling approach:** Dataset mixture + transformer scaling + modular IO
+
+Unlike RT-X or OpenVLA’s action token prediction, Octo uses a diffusion action head to model continuous, multi-modal action distributions.
+
+### 3.3 Architecture Overview
+
+#### 3.3.1 Backbone: Tokenizers, Transformer, Readouts, and Heads
+
+Octo is a transformer-based diffusion policy ($\pi$) with three parts:
+
+1. **Task & observation tokenizers** that map language instruction ($\ell$), goal image ($g$), and observation history ($o_{1:H}$) into token sequences $(T_\ell, T_g, T_o)$.
+2. A **transformer backbone** $T(\cdot)$ that processes the tokens into embeddings: $(e_\ell, e_g, e_o) = T(T_\ell, T_g, T_o)$.
+3. **Readout heads** $R(e)$ that produce outputs (actions) from readout token embeddings.
+
+What's not visible from this decomposition is which of these components are actually trained. Octo's nominal parameter count is above 200M once you include T5, but the practical compute footprint is small enough that a 24GB A5000 can fine-tune it in five hours. That gap is explained entirely by the frozen-versus-trainable split, which is worth walking through.
+
+**Tokenization details:**
+
+* **Language (T5-base [11], 111M params, frozen).** The instruction text goes through pretrained T5-base once per forward pass to produce 16 conditioning tokens, and that's it. No T5 gradients during training, no optimizer state, no master copy in mixed precision. The cost of doing it this way is that the language pathway is stuck with whatever T5 already encodes; the trunk can't pull T5's features toward manipulation-specific semantics during training.
+* **Images (shallow CNN, trained from scratch).** Octo doesn't use a pretrained ViT for image tokenization, which is the more interesting choice. Instead it uses a shallow CNN that splits each image into 16x16 patches. Third-person cameras give 256 tokens, wrist cameras give 64. Tokens get learned positional embeddings and feed into the transformer.
+
+* **Trunk (Octo-Base 93M / Octo-Small 27M, fully trained).** This is where most of the trainable parameters live. The phrase "ViT-B-sized backbone" sometimes used for Octo-Base just means the parameter count is similar to ViT-B (around 86M); structurally it's a generic transformer, not a vision transformer.
+* **Readout heads (a few M params each, fully trained).** Small modules that read from readout token embeddings to produce actions. Multiple heads can coexist for different action spaces, and new ones can attach at fine-tune time without disturbing the trunk.
+
+So the trainable total for Octo-Base is roughly 100M (trunk plus CNN plus diffusion head), not the 200M-plus you'd get by counting T5. Mixed-precision training on this fits in 24GB with parameters, gradients, optimizer state, and activations all together using 8 to 12 GB at typical fine-tuning batch sizes. The frozen T5 is what makes the headline "five hours on an A5000" claim possible.
+
+#### 3.3.2 Block-wise Masked Attention + Readout Tokens
+
+The transformer uses block-wise causal masking:
+
+* Observation tokens at time $t$ attend only to task tokens and observation tokens up to $t$ ($T_{o, 0:t}$), plus language instructions ($T_\ell$).
+* Missing modalities are fully masked.
+
+Learned readout tokens $T_{R,t}$ that attend to preceding task and observation tokens but aren't attended, is on top of Octo's actual contribution. The asymmetric mask is doing real work, and without it Octo is just a multimodal transformer with a fixed I/O contract.
+
+The problem the readouts solve is practical. Every environment will have a different usecase and some have force-torque sensors, some only have a wrist cam, some control joint positions, not end-effector poses. If you want a pretrained policy that any of them can pick up and use, you have to deal with this. Retraining the trunk every time someone shows up with a new sensor isn't a real option. Just gluing new tokens onto the input isn't either, because once a token participates in attention, every other token's representation shifts to account for it. You'd be subtly breaking the trunk every time you added something. What you want is a way to plug new things in without disturbing what the trunk already does.
+
+Readouts give you that. Nothing in the sequence attends back to them, so adding or removing readouts can't change what the trunk computes for the task and observation tokens. The trunk stays put.
+
+That's the whole basis for the modularity claim. A new action head reads from $e_{R,t}$, which has the same distribution it had during pretraining, so the head only learns its own job. It doesn't have to push the trunk anywhere. New input modalities are a slightly weaker case (those tokens do get attended to, so they're a real distribution shift), but Octo pretrains with modality dropout, so the trunk has already seen what it's like to lose or gain inputs.
+
+It also explains why "100 trajectories is enough" isn't a wild claim. The head is reading from an already-organized embedding space. It's only learning the projection from that space to actions, not reorganizing the space itself.
+
+#### 3.3.3 Diffusion Action Head
+
+The action head is a small MLP (3 layers, hidden dimension 256) conditioned on a readout embedding $e$ from the trunk. Inference proceeds in two stages: a single transformer pass produces $e$, then $K=20$ denoising steps inside the MLP produce the action chunk. Training uses the standard DDPM objective [13]. The action sampling step is:
+
+$$
+x^{k-1} = \alpha\!\left( x^k - \gamma\,\epsilon_\theta(x^k, e, k) \right) + \mathcal{N}(0, \sigma^2 I)
+$$
+
+with $\alpha, \gamma, \sigma$ following a cosine noise schedule.
+
+Why diffusion instead of discrete tokens? Per-dimension binning, the choice in RT-1 and OpenVLA, has two costs that the diffusion approach sidesteps. The first is correlation loss. Under independent binning the gripper token doesn't see the translation token, even though demonstration data routinely shows strong coupling between translation and gripper state during a grasp. The second is multimodality. Robot demonstrations frequently have multiple valid actions for the same observation (a left-hand grasp and a right-hand grasp can both be correct, but the average between them is invalid), and a softmax over bins forces a unimodal prediction that smears these modes together. Diffusion handles both: actions are predicted jointly across all dimensions, and the iterative denoising procedure can represent multimodal distributions in continuous space [17].
+
+The cost is inference latency. Each action prediction needs 20 forward passes through the MLP head, which puts a hard floor on control frequency that scales linearly with $K$. The MLP itself is tiny so the absolute cost is small (the trunk pass dominates), but $K=20$ isn't a free parameter you can drop at inference time without retraining. DDIM-style step reduction is possible but degrades the action quality you spent the diffusion compute to get in the first place.
+
+### 3.4 Scaling
+
+#### 3.4.1 Data Scaling
+
+The pretraining set is 800k trajectories from 25 Open X-Embodiment datasets, filtered to those with at least one third-person RGB camera and end-effector control. Mixture weights use softmax-tempered square-root weighting on dataset size, with manual reweighting so the largest datasets don't dominate the gradient signal.
+
+Anything that uses joint-position control, force-torque-only sensing, or non-RGB observations gets dropped from pretraining and has to come back later through new tokenizers at fine-tune time. So Octo is trading volume for uniformity. You get an end-effector-control prior baked into the trunk, but you throw out a lot of data to get there. The action-space normalization point from earlier comes back in full force here: Octo gets cross-embodiment pooling to work by inheriting the same constraint that makes pooling tractable in the first place, which means it inherits the limits too. If a task needs a force-conditioned action prior, you're not going to recover that at fine-tune time.
+
+Fine-tuning uses around 100 trajectories per target domain. The composable token interface means you can add new modalities (force-torque proprioception) and new action spaces (joint position control) at fine-tune time without reinitializing the trunk. There's no co-training with internet-scale text or image data during fine-tuning, and there's no internet data of any kind in pretraining either. Octo is pure robot data end to end.
+
+The empirical justification for splitting pretrain and fine-tune is direct. The 100-trajectory fine-tuned model gets 72% success against 20% for a from-scratch ResNet+Transformer of similar parameter count. The pretrained trunk has learned cross-task visuomotor priors that the 100 trajectories alone won't supply. The composable interface itself works best when the trunk has already learned to use readout tokens as a generic readout abstraction; a from-scratch model would have to learn that abstraction on top of learning the task, which doesn't fit in 100 trajectories.
+
+#### 3.4.2 Model Scaling
+
+Two released sizes:
+
+* **Octo-Small:** 12 layers, hidden size 384, 6 heads, 27M params.
+* **Octo-Base:** 12 layers, hidden size 768, 12 heads, 93M params.
+
+The diffusion head is a 3-layer MLP with hidden dimension 256, with $K=20$ diffusion steps in both training and inference.
+
+These sizes are conspicuously small for 2024. Octo-Base is about the parameter count of BERT-base, two orders of magnitude smaller than OpenVLA's 7B. This isn't a limitation, it's a positioning bet. The hypothesis is that the data-scarce regime of robot learning makes large-model scaling laws inverted. A 7B model fine-tuning on 100 trajectories would severely overfit, and the additional capacity provides no headroom that 800k pretraining trajectories can fill. The released sizes are roughly the largest the Open X-Embodiment corpus can support without immediate diminishing returns, not the largest the authors could afford to train.
+
+There's no published scaling-law analysis between 27M and 93M, and no released variant beyond 93M. That's a real gap in the empirical case. The 33% improvement over RT-1-X is reported at one model size on one data scale, which leaves the question of whether the gains come from architecture, data, or model size formally unresolved. A clean ablation grid (three model sizes by three data scales) would settle it, and not having one is one of the harder weaknesses to defend.
+
+#### 3.4.3 Compute Scaling & Practicality
+
+* **Pretraining:** 300k steps, batch 2048 on a TPU v4-128 in ~14 hours.
+* **Fine-tuning:** ~100 trajectories, 50k steps (cosine LR decay + warmup) takes ~5 hours on a single 24GB A5000.
+
+The five-hour A5000 fine-tuning claim is the accessibility number, it's only mechanically possible because the T5-base is frozen. With T5-base trainable, the model wouldn't fit in 24GB at any practical batch size; the optimizer state for a 200M parameter model in mixed precision is already over 8GB before activations. So the frozen-encoder choice is doing two things at once. It constrains the language pathway (the cost) and it makes single-consumer-GPU fine-tuning feasible (the benefit). They aren't separable.
+
+The pretraining cost (TPU v4-128 for 14 hours, around 1,800 TPU-chip-hours, comparable to a few A100-days) is moderate in absolute terms. This asymmetry between pretraining cost (industry-scale) and fine-tuning cost (single-GPU) is the deliberate point. Octo is a pretrained checkpoint released for downstream adaptation, not a recipe meant to be reproduced from scratch. The value extracted at fine-tune time rests on trust that the pretraining was done correctly, since most users can't verify it independently. Releasing pretrained weights, training code, and the full data mixture is what converts the pretraining cost from a per-user tax into a one-time community cost, and it's what makes the rest of the system useful.
+
+### 3.5 Experiments
+* **Zero-shot generalization:** Compared against RT-1-X; Octo achieves ~29% higher average success across evaluated setups. On WidowX tasks, Octo performs similarly to RT-2-X. Goal-image conditioning outperforms language conditioning on WidowX by ~25%.
+* **Data-efficient finetuning:** Finetuning results report a 72% average success for Octo, compared to 20% for Scratch (ResNet+Transformer) and 15% for VC-1.
+* **Interface generalization:** Octo maintains finetuning performance when introducing new observation inputs (force-torque proprioception) and new action spaces (joint position control).
+
+## 4. Technical Paper Audit: OpenVLA
+
+**Title:** OpenVLA: An Open-Source Vision-Language-Action Model
+**Authors:** Moo Jin Kim et al. [4]
+
+### 4.1 Summary
+
+OpenVLA [4] is a 7B-parameter open-source VLA trained on 970k robot episodes from the Open X-Embodiment dataset. RT-2-X [1] showed that fine-tuning a large VLM on robot data could beat smaller specialist policies, but RT-2-X's weights are closed and the model is 55B parameters. OpenVLA's pitch is that you can do most of what RT-2-X does with a model but with an order of magnitude smaller, with open-source weights, and with fine-tuning capabilities that doesn't require a research cluster. The base architecture is Prismatic-7B [7]: a dual visual encoder (SigLIP [10] for semantic alignment, DINOv2 [9] for geometric features), a 2-layer MLP projector, and a LLaMA 2 7B [8] decoder.
+
+#### 4.1.1 Key Results
+
+* Beats RT-2-X (55B) by 16.5% on absolute task success across 29 tasks, despite being roughly an eighth the size.
+* Beats Diffusion Policy [17] by 20.4% in multi-task multi-object settings.
+* Fine-tunes on consumer GPUs via LoRA [15] (8 A100 for 10-15 hours).
+* Runs at ~6 Hz on a 4090 in bfloat16 (15GB), and 4-bit quantization keeps it at ~3 Hz on an A5000.
+
+The headline result, beating a 55B model with 7B parameters, is what gives OpenVLA most of its pull. It's also worth noting that this comparison is a bit awkward, since RT-2-X is closed-weights and the comparison runs against the published numbers rather than a reproduced run. It's the best number available, but it's not an apples-to-apples ablation of model size with everything else held fixed.
+
+### 4.2 Problem Domain and Taxonomy
+
+OpenVLA targets generalist manipulation across multiple embodiments, diverse scenes, and multi-task settings, with end-effector control as the action space. The OXE pretraining mixture is filtered to single-arm setups with at least one third-person camera.
+
+**Taxonomy positioning:**
+
+* **Policy type:** Vision-Language-Action
+* **Training paradigm:** Large-scale imitation learning, autoregressive
+* **Action representation:** Discrete token prediction (256-bin quantile)
+* **Adaptation strategy:** Parameter-efficient fine-tuning via LoRA
+* **Scaling approach:** Bigger backbone, more data, smarter adaptation
+
+The interesting axis to flag against Octo is the action representation. Octo bets on continuous diffusion to handle multimodality and dimension correlations natively. OpenVLA bets on discrete tokens to keep the autoregressive LLM machinery intact. Both are defensible, both have costs, and the costs are different in kind. §6 will lay them out side by side.
+
+### 4.3 Architecture Overview
+
+#### 4.3.1 Backbone: Prismatic-7B
+
+OpenVLA fine-tunes a pretrained VLM with three pieces:
+
+* **Visual encoder (600M params, fine-tuned during VLA training).** This is two pretrained encoders concatenated. DINOv2 [9] contributes geometric and spatial features (it was self-supervised on geometric augmentations, so its representations carry shape and depth cues). SigLIP [10] contributes semantic alignment features (contrastive image-text training, so its representations are tied to language).
+
+The choice to fine-tune the visual encoder during VLA training rather than freeze it, is one of the more important design decisions in OpenVLA. The authors argue that DINOv2 and SigLIP features pretrained on internet images don't pick up the fine-grained spatial details that robot control needs. Things like exact gripper-object alignment, contact regions, and small spatial relationships between objects on a table. Internet pretraining doesn't have a strong reason to learn those, since most of the supervision comes from objects centered in well-lit scenes. So OpenVLA pays the cost of fine-tuning a 600M encoder during a 14-day training run, in exchange for letting the encoder shift toward features that matter for manipulation. Octo went the other way, dropping pretrained vision entirely in favor of a shallow CNN trained from scratch on robot data. Two different bets about whether internet-pretrained vision is worth keeping.
+
+* **2-layer MLP projector.** Maps the concatenated visual features into the LLM's token embedding space. This is the interface between vision and language, and it's small relative to the rest of the model. It's also fully trained during VLA training.
+
+
+#### 4.3.2 Action Tokenization
+
+Actions are 7-dimensional (3D translation, 3D rotation, 1D gripper). Each dimension is discretized independently into 256 bins, with quantile boundaries to handle outliers:
+
+1. Compute the 1st and 99th quantile of training-data actions per dimension: $q_{0.01}$, $q_{0.99}$.
+2. Uniformly divide that range into 256 bins:
+
+$$
+\Delta_d = \frac{q_{0.99} - q_{0.01}}{256}
+$$
+
+3. Map a continuous action to its bin index:
+
+$$
+\hat{a}_d = \left\lfloor \frac{a_d - q_{0.01}}{\Delta_d} \right\rfloor
+$$
+
+OpenVLA overwrites the 256 least-used tokens in LLaMA 2's existing vocabulary with these action tokens. There's no architectural addition for actions. Predicting an action is just predicting the next token in the same vocabulary the model already knows how to predict over.
+
+You don't need a separate action head, you don't need new training infrastructure, and you can use whatever decoding tricks LLM inference already supports (sampling, KV caching, etc) without modification. But this design has a few costs that the original paper doesn't dwell on.
+
+The first is the per-dimension independence assumption. Quantile bins are computed per dimension, and the autoregressive factorization predicts each dimension conditioned on the previous ones, but the bin boundaries themselves don't know about correlations between dimensions. In demonstration data, gripper closure is strongly correlated with translation (the gripper closes when the end-effector reaches the object), but that coupling has to be learned through the LLM's hidden state rather than encoded in the action representation itself. Octo's diffusion head sidesteps this by predicting all dimensions jointly.
+
+The second is multimodality. A softmax over 256 bins per dimension forces a unimodal prediction at decode time. If the demonstration data has two valid grasps (left-hand and right-hand approach to the same object), the model is going to spread probability mass across both modes during training and then either pick one mode at decode time (greedy or low-temperature sampling) or sample inconsistently between modes (high-temperature sampling). Neither is great. Diffusion handles this natively because it represents the action distribution implicitly through iterative denoising.
+
+The third is the outlier behavior. Anything outside the [$q_{0.01}$, $q_{0.99}$] range gets clipped to the nearest extreme bin. For most tasks this is fine because demonstration data doesn't have a long tail of legitimately extreme actions, but it does mean OpenVLA can't extrapolate beyond the action ranges seen at quantile-fitting time. If your fine-tuning task involves slightly larger reaches than anything in OXE, the model literally can't represent them.
+
+#### 4.3.3 Training Objective
+
+OpenVLA's loss is standard next-token cross-entropy, but with one detail from the paper that's easy to miss: the loss is applied to the action tokens *only* [4]. Image patch tokens and instruction tokens get masked out and contribute zero gradient. So the training signal across all 970k episodes is exclusively "predict the next action token given everything before it".
+
+### 4.4 Scaling and Efficiency
+
+* **Pretraining.** 970k episodes from filtered Open X-Embodiment, 64 A100s for 14 days, batch size 2048. Roughly 21,500 A100-hours.
+* **LoRA fine-tuning [15].** A single A100 for 10-15 hours per task. The exact memory footprint depends on rank and which modules you target, but the rule of thumb is that LoRA fine-tuning runs in a fraction of the memory full fine-tuning would need, since gradients only flow through the low-rank adapters.
+* **Quantization for inference.** 8-bit quantization drops control frequency to 1.2 Hz on an A5000, which is too slow for most closed-loop tasks. 4-bit gets to ~3 Hz with rollout performance comparable to bfloat16. On a 4090 in bfloat16, you can get ~6 Hz at 15GB. 
+
+### 4.5 Experiments
+
+OpenVLA (7B) outperforms RT-2-X (55B) and Diffusion Policy [17] baselines across 29 tasks on BridgeData V2. The headline 16.5-point improvement over RT-2-X is the strongest piece of evidence for the bigger-model-isn't-always-better story in current VLA work.
+
+LoRA fine-tuning achieves performance close to full fine-tuning at substantially lower memory and compute cost. This is the practical story that gets OpenVLA adopted: you can pull the released checkpoint, add a LoRA adapter, fine-tune on 100-500 trajectories of your own task, and have a working policy. The 4-bit quantization story extends this to inference too, so the full pipeline (download checkpoint, LoRA fine-tune on a single A100, deploy on a 4090 with quantization) fits into something a small lab can actually do.
+
+## 5. Technical Paper Audit: $\pi_{0.5}$
+
+**Title:** $\pi_{0.5}$: a Vision-Language-Action Model with Open-World Generalization
+**Authors:** Physical Intelligence et al. [6]
+
+### 5.1 Summary
+
+$\pi_{0.5}$ [6] is the follow-up to $\pi_0$ [5], aimed at one specific question that "can a generalist policy actually generalize to homes the robot has never been in?" Most VLA evaluations are run in environments that closely match training, which makes the generalization claims hard to interpret. The $\pi_{0.5}$ model did the harder thing and tested in three real homes that weren't part of the training set, with mobile manipulators told to clean kitchens and bedrooms from a single high-level prompt. The model produced 10-to-15-minute autonomous behaviors in those new homes.
+
+The bet $\pi_{0.5}$ is making is that you can't get there by scaling in-domain robot data alone. There aren't enough kitchens, you can't collect enough hours, and even if you could, the long tail of real-world variation outpaces what brute-force data collection can cover. So the recipe is co-training across heterogeneous data sources: mobile manipulation data, other manipulation data, data from other robot platforms, semantic subtask predictions, web VQA and captioning, and verbal instructions from human supervisors. The data composition is the contribution. The architecture is mostly inherited from $\pi_0$.
+
+#### 5.1.1 Key Results
+
+* About 400 hours of mobile manipulator data collected across roughly 100 homes [6].
+* In the pretraining mixture, only 2.4% of examples are mobile manipulation. The other 97.6% is everything else: other-robot data, web data, semantic subtasks, verbal instructions [6].
+* 10-to-15-minute long-horizon behaviors (cleaning a kitchen or bedroom) executed in three real homes that were never seen in training [6].
+* Performance scales with environment diversity: training on data from 3 homes works substantially worse than training on data from 104 homes, even at the same trajectory count.
+
+### 5.2 Problem Domain and Taxonomy
+
+$\pi_{0.5}$ targets household mobile manipulation in unseen homes. The robot must perform multi-stage tasks ("clean the bedroom"), do high-level reasoning about what those tasks decompose into, and ground that reasoning in motor commands that work on a moving platform with a manipulator. So the policy has to span semantic planning and low-level control simultaneously, which is what motivates the hierarchical setup.
+
+**Taxonomy positioning:**
+
+* **Policy type:** Hierarchical VLA (high-level subtask prediction plus low-level control)
+* **Training paradigm:** Co-training on heterogeneous robot, web, and semantic data
+* **Action representation:** Hybrid. Discrete FAST tokens during pretraining, flow matching during post-training
+* **Adaptation strategy:** Two-stage training. Pretrain broad, post-train specialize and bolt on a continuous action expert
+* **Scaling approach:** Knowledge scaling through diverse supervision sources rather than brute-force robot-data scaling
+
+The interesting axis here is the third one. Octo bets on continuous diffusion. OpenVLA bets on discrete autoregressive tokens. $\pi_{0.5}$ uses both, in sequence, at different stages of training. The reason has to do with what each representation is good for.
+
+### 5.3 Architecture Overview
+
+The base architecture is inherited from $\pi_0$ [5]: a 2.6B PaliGemma [12] VLM backbone plus a 300M action expert. PaliGemma is a vision-language model that's already been pretrained on internet-scale image-text data, so the VLM backbone shows up at training time already knowing how to caption images, answer visual questions, and ground language in scenes. That's what $\pi_{0.5}$ then layers robot supervision onto.
+
+#### 5.3.1 Hierarchical Inference
+
+At runtime, $\pi_{0.5}$ runs inference in two steps:
+
+1. The model takes the current observation and a high-level prompt ("clean the kitchen"), and predicts a semantic subtask in natural language ("pick up the plate").
+2. Conditioned on that subtask, the model predicts a low-level continuous action chunk via flow matching.
+
+This is an explicit acknowledgement that one network doing both jobs at once is hard. By splitting the inference pass, the high-level reasoner gets to operate in language (where the VLM backbone is most capable) and the low-level controller gets to operate in continuous action space (where the action expert is specialized). The two pieces are the same model running twice with different conditioning, not two separate networks.
+
+Two forward passes per action means inference latency at minimum doubles relative to a single-pass policy. The trade is that the hierarchical decomposition gives you something pure end-to-end models don't: an interpretable intermediate. You can see what subtask the robot thinks it's doing, which makes failures much easier to debug.
+
+#### 5.3.2 Two-Stage Training
+
+The training has two stages, and they're doing genuinely different things.
+
+**Stage 1: pretraining with discrete tokens (FAST).** Everything in the input sequence is a discrete token, including the actions, which get tokenized with FAST [16]. FAST is a frequency-domain tokenizer that uses a DCT-like transform to squash action chunks into short discrete sequences. Once actions are tokens, the whole pretraining run becomes standard next-token prediction. One loss function, applied across a wildly mixed input stream where the next token might be an English word, a bounding box, a subtask label, or an action.
+
+The pretraining mixture:
+
+* **Mobile manipulation (MM):** 2.4% of phase-1 data. Smaller than most people guess for the actual target task.
+* **Manipulation, other (ME):** Non-mobile robot data. General manipulation priors.
+* **Cross-embodiment (CE):** Other robot platforms. Same role OXE plays in Octo and OpenVLA.
+* **High-level subtasks (HL):** Subtask decompositions. Trains the semantic planner.
+* **Web data (WD):** VQA, captioning, image-text, bounding boxes. The semantic backbone for the high-level reasoner.
+* **Verbal instructions (VI):** Human supervisors verbally walking the robot through tasks. Only about 11% of the high-level data, but it carries far more weight in the ablations than its size suggests [6].
+
+**Stage 2: post-training with flow matching.** Once pretraining is done, the 300M action expert is bolted onto PaliGemma and trained with flow matching [14] to produce continuous action chunks.
+
+
+### 5.4 Scaling and Experiments
+
+* **Data scaling.** ~400 hours of mobile manipulation across ~100 homes is the core in-domain dataset, but it's only 2.4% of the pretraining mixture. The other 97.6% is the broader data sources. Performance scales with the *number of distinct training homes*, not just the trajectory count: training on 3 homes is significantly worse than training on 104, which is the cleanest empirical evidence that home-level diversity is what matters, not raw hours.
+* **Training scaling.** 280k pretraining steps, then 80k post-training steps for the flow-matching expert. PaliGemma-2.6B plus a 300M expert plus 280k pretraining steps over the heterogeneous mixture is in the same general compute neighborhood as OpenVLA's 21,500 A100-hours.
+* **Generalization.** The paper's headline result is that $\pi_{0.5}$ executes 10-to-15-minute autonomous cleaning behaviors in three real homes that weren't part of the training data. Performance in unseen homes was reported as comparable to a control model that had seen those environments before, which is the strongest empirical argument the paper makes for whether co-training actually closes the in-the-wild generalization gap.
+* **Ablations.** The paper includes ablations against removing web data, removing the verbal-instruction data, and removing high-level subtask data entirely. These are the load-bearing experiments for the heterogeneous-supervision argument.
+
+## 6. Limitations and Future Outlook
+The trajectory from behavior cloning to flow-matching VLAs demonstrates progress in closing the embodiment gap. However, physical robotics cannot strictly replicate the internet-scale passive scraping of LLMs. The field is approaching an asymptote on raw physical data collection. Future methods will likely depend on sample-efficient architectures capable of implicit physics understanding.
+
+## References
+  
+[1] A. Brohan et al., "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control," *CoRL*, 2023.
+ 
+[2] Open X-Embodiment Collaboration, "Open X-Embodiment: Robotic Learning Datasets and RT-X Models," *ICRA*, 2024.
+ 
+[3] D. Ghosh et al., "Octo: An Open-Source Generalist Robot Policy," *RSS*, 2024.
+ 
+[4] M. J. Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model," *CoRL*, 2024.
+ 
+[5] K. Black et al., "π₀: A Vision-Language-Action Flow Model for General Robot Control," arXiv:2410.24164, 2024.
+ 
+[6] Physical Intelligence, "π₀.₅: a Vision-Language-Action Model with Open-World Generalization," arXiv preprint, 2025.
+ 
+[7] S. Karamcheti et al., "Prismatic VLMs: Investigating the Design Space of Visually-Conditioned Language Models," *ICML*, 2024.
+ 
+[8] H. Touvron et al., "Llama 2: Open Foundation and Fine-Tuned Chat Models," arXiv:2307.09288, 2023.
+ 
+[9] M. Oquab et al., "DINOv2: Learning Robust Visual Features without Supervision," *TMLR*, 2024.
+ 
+[10] X. Zhai et al., "Sigmoid Loss for Language Image Pre-Training," *ICCV*, 2023.
+ 
+[11] C. Raffel et al., "Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer," *JMLR*, 2020.
+ 
+[12] L. Beyer et al., "PaliGemma: A versatile 3B VLM for transfer," arXiv:2407.07726, 2024.
+ 
+[13] J. Ho, A. Jain, and P. Abbeel, "Denoising Diffusion Probabilistic Models," *NeurIPS*, 2020.
+ 
+[14] Y. Lipman et al., "Flow Matching for Generative Modeling," *ICLR*, 2023.
+ 
+[15] E. J. Hu et al., "LoRA: Low-Rank Adaptation of Large Language Models," *ICLR*, 2022.
+ 
+[16] K. Pertsch et al., "FAST: Efficient Action Tokenization for Vision-Language-Action Models," arXiv:2501.09747, 2025.
+ 
+[17] C. Chi et al., "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion," *RSS*, 2023.
