@@ -1,0 +1,276 @@
+# Vision-Language-Based Social Navigation Decision on Unitree Go1
+
+
+## Motivation
+- Existing robot navigation systems primarily rely on geometric planning and lack social awareness  
+- In human environments, robots must make **interaction-aware decisions**, not just avoid obstacles  
+
+**Examples:**
+- When encountering a person:
+  - Should the robot stop?
+  - Move left/right?
+  - Continue forward?
+
+> This is fundamentally a **decision-making problem under social context**, rather than pure motion planning.
+
+---
+
+## Objective
+- Enable Go1 to perform **socially-aware action selection** using a Vision-Language Model (VLM)  
+- Focus on **decision-making at interaction points**, rather than full navigation  
+
+**Specifically:**
+- Given a scene + instruction → choose next action from:
+  - `{stop, move left, move right, move forward}`  
+
+- Ensure actions are:
+  - Safe  
+  - Socially appropriate  
+
+---
+
+## System Design
+
+### Input
+- RGB image (Go1 onboard camera)  
+- (Optional) high-level instruction  
+
+### Model
+- Qwen 3.5 9B Vision-Language Model  
+
+### Output
+- Discrete action:
+  - stop  
+  - left  
+  - right  
+  - forward  
+
+---
+
+## Core Idea
+We reformulate social navigation as a **vision-language decision problem**, instead of:
+
+- geometric path planning  
+- continuous low-level control policy learning  
+
+By operating over a **discrete action space**, the system:
+- reduces learning complexity  
+- lowers data requirements  
+- simplifies deployment on real robots  
+
+---
+
+## Architectural Delta
+
+Existing social navigation systems either:
+- rely on rule-based heuristics that lack semantic understanding, or  
+- use learned policies that are computationally expensive and difficult to deploy in real-time  
+
+While Vision-Language Models (VLMs) provide strong semantic reasoning capabilities, they are typically large and computationally intensive.
+
+This creates a key deployment challenge on **resource-constrained robots like Go1**, where:
+- onboard compute (e.g., Jetson Nano) is limited  
+- large VLMs cannot be run efficiently  
+- real-time inference is required for safe interaction  
+
+> As a result, there is a gap between the reasoning capability of VLMs and their practical deployment on embedded robotic systems.
+
+This project addresses this bottleneck through two design choices:
+
+1. **Model Scaling Strategy**  
+   - Use a smaller or efficient VLM variant to reduce computational overhead  
+   - Lower inference latency for real-time decision-making  
+
+2. **System-Level Offloading**  
+   - Offload VLM inference to an external compute node (server / laptop)  
+   - Maintain a lightweight onboard control loop on Go1  
+
+Additionally, the system constrains outputs to a **small discrete action space**: {stop, left, right, forward}
+
+This design:
+- reduces inference complexity  
+- enables real-time deployment  
+- preserves high-level semantic reasoning capability  
+
+while remaining feasible under hardware constraints.
+
+---
+
+## What I Have Done
+- Set up Unitree Go1 platform  
+- Built end-to-end VLM inference pipeline  
+- Started collecting real-world interaction data  
+
+---
+
+## Interaction Data Collection
+
+We collect **real-world interaction data** using the Go1 onboard camera.
+
+**Scenarios include:**
+- Person blocking the path  
+- Person on left/right side  
+- Person approaching or crossing  
+- Multiple people / narrow passage  
+- No person (clear path)  
+
+**For each frame:**
+- Label the appropriate action:
+  - `{stop, left, right, forward}`  
+
+**Dataset format:**
+- `(image, optional instruction, action label)`  
+
+**Collection strategy:**
+- Staged lab scenarios to ensure:
+  - Controlled variation (position, distance, number of people)  
+  - Balanced action distribution  
+  - Coverage of key interaction cases  
+
+---
+
+## Data Mix
+
+- **Pretrained Model**: Qwen 3.5 9B (no fine-tuning)  
+
+- **Dataset**:
+  - A small set of collected interaction samples from real-world scenarios  
+  - Includes basic cases such as:
+    - human blocking path  
+    - crossing  
+    - side interactions  
+    - clear path  
+
+- **Usage**:
+  - Qualitative evaluation  
+  - Prompt validation and sanity checking  
+
+- **Related Datasets**:
+  - Socially CompliAnt Navigation Dataset (SCAND)  
+  - NavWareSet: A Dataset of Socially Compliant and Non-Compliant Robot Navigation  
+
+- **Rationale**:
+Existing large-scale datasets for robotics (e.g., manipulation datasets) are not directly aligned with this task.
+
+Even for navigation-specific datasets such as SCAND and NavWareSet, they primarily focus on trajectory-level or behavior imitation.
+
+This project instead targets **decision-level action selection**, where the goal is to choose a high-level action based on semantic understanding of the scene, rather than learning continuous control policies.
+
+---
+
+## Proposed Method
+
+We prompt the VLM with:
+- current image  
+- predefined action space  
+
+**Example prompt:**
+> "Given this scene, choose the safest and most socially appropriate action: [stop, left, right, forward]"
+
+**Additional constraints:**
+- If human is too close → bias toward stop / avoidance  
+- If path is clear → allow forward  
+
+---
+
+## Loss Formulation
+
+- **State Space**:
+s = (image, instruction) 
+
+- **Action Space**:
+a ∈ {stop, left, right, forward}
+
+- **Prediction**:
+â = f_VLM(s)
+
+- **Loss (for evaluation)**:
+L = CrossEntropy(â, a_human)
+
+### Human Action Annotation
+
+The ground-truth action \( a_{human} \) is obtained via manual annotation on collected interaction data.
+
+For each recorded frame:
+- A human annotator observes the scene  
+- Selects the most appropriate action from: {stop, left, right, forward}
+
+
+Annotation guidelines are defined to ensure consistency:
+- If a human is too close → label as **stop**  
+- If path is partially blocked → label as **left/right**  
+- If path is clear → label as **forward**  
+
+### Interpretation
+
+- The model output is compared against human-labeled decisions  
+- The loss measures alignment between VLM predictions and human judgment  
+- This provides a proxy for evaluating **socially appropriate behavior**
+
+> This project does not focus on training, but on evaluating alignment between VLM decisions and human-labeled actions.
+
+---
+
+## Evaluation
+
+We evaluate the system across controlled interaction scenarios.
+
+**Metrics:**
+- Decision accuracy (vs human labels)  
+- Collision rate (safety)  
+- Distance to humans (social compliance)  
+- Temporal consistency across frames  
+
+---
+
+## Implementation Status
+
+### Completed
+- Go1 ROS pipeline setup  
+- Camera input integration  
+- VLM inference pipeline  
+
+### In Progress
+- Mapping discrete actions → cmd_vel  
+- Prompt design for stable decisions  
+
+### Critical Blocker
+- VLM latency  
+- Decision inconsistency across consecutive frames  
+
+### Mitigation Plan
+- Run VLM at low frequency  
+- Apply temporal smoothing to stabilize decisions  
+
+---
+
+## The Hard Question
+
+**Question**:  
+How can the system ensure safe and consistent decisions when using a VLM without training?
+
+**Answer**:
+- Restrict action space to safe discrete actions  
+- Evaluate against human-labeled decisions  
+- Apply temporal smoothing to reduce instability  
+
+> The system prioritizes **safe decision boundaries** over optimal navigation performance.
+
+---
+
+## Expected Contribution
+
+- Demonstrate that VLMs can perform **interaction-aware decision-making**  
+- Provide a **lightweight alternative** to full navigation pipelines  
+- Validate feasibility on a **real robot (Go1)**  
+
+## Extension 
+
+We explore fine-tuning the VLM using a small curated dataset.
+
+- Method: LoRA / lightweight fine-tuning  
+- Goal:
+  - Improve decision consistency  
+  - Improve robustness  
+
+This introduces a training phase, but remains lightweight compared to full policy learning.
