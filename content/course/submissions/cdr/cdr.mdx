@@ -1,0 +1,204 @@
+---
+title: 'Jay Vakil Capstone Project'
+author: 'Jay Vakil'
+---
+
+**Author:** Jay Vakil
+
+**Code:** [code](https://github.com/Jdvakil/prox_learning)
+
+## The Architectural Delta:
+
+This project combines exocentric vision with near-body proximity as first-class inputs to action models for an improved performance in clutter for manipulation-based tasks.
+This is not a model capacity problem, more parameters won't fix it. It is a *sensing modality* problem. No amount of additional RGB data gives you pre-contact depth around the arm body. 
+The missing modality is body-relative proximity, and time-of-flight sensing fills it directly.
+VLAs such as MolmoBot[2] has shown generalization over different environments but when clutter is involved, it often fails to solve the task. 
+
+Vision-language-action (VLA) policies for robot manipulation rely exclusively on RGB observations. This creates a fundamental blind spot: during a reach into a cluttered scene, the robot arm occludes itself from the head-mounted camera. The 5–40cm zone immediately surrounding the arm, where collision risk is highest and grasp precision most critical, provides zero visual signal until physical contact occurs.
+
+No amount of additional RGB data resolves a geometric occlusion. The missing modality is body-relative proximity, depth information in the space immediately around the arm.
+ 
+By attaching _n_ number of simulated VL53L5CX time-of-flight sensors distributed across the Franka FR3 arm body, we create a representation of the near-body space and use it as a first-class input to a VLA policy. We call this system **PLA** (Peripersonal Language-Action), which fills this gap. PLA augments a frozen Molmo2-4B vision-language backbone with _n_ number of VL53L5CX time-of-flight sensors distributed across the Franka FR3 arm body, treating the resulting depth readings as a first-class input modality alongside RGB and language. As a proof of concept, we train a Conditional Variational Autoencoder (CVAE) on proximity sensor data alone to verify it contains learnable structure, and reproduce MolmoBot-Pi0 as the vision-only performance baseline. The full PLA policy, integrating vision, language, and proximity, is the immediate next step.
+
+### Data Mix
+I am simulating the ToF sensing in MuJoCo and collecting expert trajectories using the MolmoSpaces[2] simulation platform, which provides 130,000+ object assets and 94,000+ procedurally generated indoor environments. I am taking this approach because it is easier to scale up data collection and get strong indication that this idea is feasible to move to the real-robot. 
+ 
+There is an inherent domain shift between simulated and real sensor readings. Our noise model (Gaussian noise σ=5mm per zone + zone dropout p=0.05) approximates sensor noise but does not capture IR multi-path reflections, specular surface failures on glass or metal objects, or inter-sensor cross-talk present in physical deployments. This is acknowledged as a limitation and motivates future real-robot validation.
+
+#### Sensor Simulation
+Each VL53L5CX sensor is simulated as a fixed pinhole camera inside a body rigidly attached to the corresponding arm link in the FR3 MJCF:
+ 
+```xml
+<body name="link6_sensor_0" pos="..." quat="...">
+  <site name="link6_sensor_0_site" type="sphere" size="0.004"/>
+  <camera name="link6_sensor_0" mode="fixed"
+          quat="0 1 0 0" fovy="45" resolution="8 8"/>
+</body>
+```
+ 
+The inner `quat="0 1 0 0"` applies a 180° rotation about the body X axis, so cameras look along `+Z_body` -> the outward surface normal of each sensor mount. At each timestep, we render depth buffers from all 29 cameras:
+ 
+```python
+renderer = mujoco.Renderer(model, height=8, width=8)
+renderer.enable_depth_rendering()
+ 
+def extend_obs_with_tof(obs, env):
+    readings = []
+    for cam_name in SENSOR_CAM_NAMES:
+        cam_id = mujoco.mj_name2id(
+            env.model, mujoco.mjtObj.mjOBJ_CAMERA, cam_name)
+        renderer.update_scene(env.data, camera=cam_id)
+        depth = renderer.render() * 1000   # metres → mm
+        depth = np.clip(depth, 20, 4000)   # VL53L5CX operating range
+        depth += np.random.randn(8, 8) * 5 # σ = 5mm Gaussian noise
+        readings.append(depth)
+    obs['tof'] = np.stack(readings)        # [29, 8, 8]
+    return obs
+```
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/refs/heads/jdvakil/cdr/content/course/submissions/cdr/dataset.gif">
+
+`Example of a trajectory from the dataset`
+
+### Architecture
+
+I am using a VLM backbone for language and vision grounding, which feeds into an action-chunking transformer (ACT) policy that uses a CVAE encoder. I plan on adding another encoder which learns from proximity data.
+
+PLA combines three input modalities into a single context sequence decoded by an ACT action head. All components are trained jointly except the frozen Molmo2 backbone.
+ 
+```
+RGB + Language  →  [Molmo2-4B, frozen]  →  visual-language tokens  [N_vis, 512]
+ToF [29, 8, 8]  →  [CVAE Encoder]       →  proximity tokens        [29,    512]
+qpos [7]        →  [Linear]             →  proprioception token     [1,     512]
+                                                  ↓
+                             Fusion: concat → LayerNorm             [N, 512]
+                                                  ↓
+                             ACT Decoder (7-layer transformer)
+                                                  ↓
+                             Action chunk  Δq ∈ ℝ^{100 × 7}
+ ```
+
+
+**Architecture:**
+Molmo2-4B was trained on billions of image-text pairs plus 1.8M robot trajectories. Fine-tuning on 500 episodes causes catastrophic forgetting of its visual priors. Freezing treats it as a fixed feature extractor, the downstream components learn "given these rich visual features and these proximity readings, what action?" Molmo2-4B consists of a SigLIP2 vision encoder and a Qwen3-based LLM. The vision encoder processes 224×224 RGB frames into 14×14 patch tokens, which are 2×2 average pooled to produce approximately 192 tokens per frame. With K=2 input frames, this yields ~384 visual tokens carrying rich semantic information about the scene, objects, and task.
+ 
+Each sensor's 8×8 depth grid is encoded by a Conditional VAE conditioned on robot state. The conditioning on robot state is critical: it factors out information about where the arm is, so the latent $z$ encodes what the sensors see in the environment, not what configuration the arm is in.
+ 
+**Why CVAE and not a plain MLP?** The KL regularization imposes a structured latent space, each dimension captures a distinct axis of variation in the proximity field. The reconstruction objective ensures the latent is informationally complete: it must capture everything needed to reconstruct the full 29×8×8 reading. This produces a richer representation than a discriminatively trained encoder.
+
+
+
+## The Loss Formulation
+
+**State space**
+ 
+$$s_t = \{ I_t^{1:K},\ x_t^{tof} \in \mathbb{R}^{37 \times 8 \times 8},\ q_t \in \mathbb{R}^7 \}$$
+ 
+where $I_t^{1:K}$ are K=2 RGB frames and $q_t$ are FR3 joint positions.
+ 
+**Action space**
+ 
+$$a_t = \Delta q_t \in \mathbb{R}^7$$
+ 
+Predicted as a chunk $\hat{\mathbf{a}}_{t:t+k}$ with $k=100$.
+ 
+**Total loss**
+ 
+$$\mathcal{L}_{total} = \underbrace{\frac{1}{k}\sum_{j=0}^{k-1}\left\|\hat{a}_{t+j} - a_{t+j}\right\|_1}_{\mathcal{L}_{L1}} + 10 \cdot \underbrace{D_{KL}\!\left(\mathcal{N}(\mu, \sigma^2)\ \big\|\ \mathcal{N}(0, I)\right)}_{\mathcal{L}_{KL}}$$
+ 
+- $\beta = 10$ — constant, not annealed
+- L1 not L2 — robust to outliers, sharper predictions
+- At inference: $z = \mathbf{0}$, CVAE encoder discarded
+ 
+### CVAE Experiments
+Before integrating proximity into the full policy, we need to verify that ToF sensor readings contains a learnable structure which the model can then compress, reconstruct, and generalize from them across scenes and task phases. A CVAE trained on proximity data alone is the right tool: if it reconstructs faithfully on held-out trajectories, the data is learnable.
+ 
+### Setup
+ 
+- **Data:** 5 pick trajectories
+- **Split:** 4 trajectories train, 1 trajectory val 
+- **Input preprocessing:** `X = clip(tof, 0, 4.0) / 4.0` — normalizes to [0,1], places no-obstacle at 1.0
+
+ 
+**Reconstruction loss:** Both train and val converge. Val plateaus around epoch 50 while train continues dropping, indicating the model memorizes trajectory-specific patterns after sufficient epochs. This is expected on the small dataset was the intention for overfitting. This motivates scaling to 1000+ trajectories.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/refs/heads/jdvakil/cdr/content/course/submissions/cdr/loss_curves.png">
+ 
+**KL divergence:** Converges to ~60 nats. The latent space is not collapsed — each of the 32 dimensions carries distinct information about the proximity field.
+ 
+**Reconstruction quality:** Input vs. reconstruction grids across 4 timesteps and 8 representative patches show the CVAE faithfully recovers depth gradients, contact patches (dark, depth < 0.1m), and saturated far-range regions (yellow, depth ≈ 4m) across all task phases.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/refs/heads/jdvakil/cdr/content/course/submissions/cdr/recon_samples.png">
+
+`This is the reconstruction from the CVAE which shows that the model is able to reconstruct when overfitted.`
+ 
+
+ ## Baselines
+ We reproduce MolmoBot-Pi0 as the vision-only performance ceiling. MolmoBot-Pi0 uses a pi0-style action head trained on 1.8M expert trajectories in MolmoSpaces simulation. It operates zero-shot, no task-specific fine-tuning.
+ 
+**Results:**
+ 
+| Task | Paper (MolmoBot-Pi0) | Reproduced |
+|------|---------------------|------------|
+| Pick Rand-Cam | 39.8% | **40%** |
+| Pick & Place | 44.7% | **44%** |
+ 
+The ~6pp gap on Pick Rand-Cam is attributable to the objaverse asset version difference between our deployment (20260131) and the paper's benchmark (20251016). Newer assets include different object meshes. This is a documented and expected difference in the MolmoSpaces infrastructure.
+ 
+**Significance:** The reproduced result confirms our evaluation pipeline is functioning correctly. 40% represents the vision-only ceiling what a state-of-the-art policy achieves with 1.8M training trajectories and no proximity sensing. PLA targets to exceed this on near-contact tasks where RGB observation is occluded by the arm body.
+ 
+ <img src="https://raw.githubusercontent.com/arpg/vla-foundations/refs/heads/jdvakil/cdr/content/course/submissions/cdr/evaluation.gif">
+
+## Implementation Status
+
+
+| Item | Status |
+|------|--------|
+| MolmoSpaces + eval pipeline installation | Done |
+| MolmoBot-Pi0 Pick Rand-Cam reproduced (40%) | Done |
+| MolmoBot-Pi0 Pick and Place Rand-Cam reproduced (44%) | Done |
+| ToF MJCF integration (29 sensors) | Done |
+| CVAE trained and validated on proximity data | Done |
+| Data collection (500+ trajectories with ToF) | Running |
+| Pick & Place baseline eval | Running |
+| PLA full model training | Blocked on dataset |
+| Controlled experiment: PLA vs. VLM-only | Blocked on PLA training |
+
+## The Hard Question 
+
+
+Are expert trajectories actually proximity-informative? TAMP planners take efficient paths, 
+they may not pass near obstacles, giving the encoder nothing to learn. 
+Verify ToF activations < 200mm appear in training data before scaling collection.
+
+## Challenges and Next Steps
+**CVAE overfitting:** Trained on 5 trajectories, for a small sanity check. The model memorizes trajectory-specific patterns after epoch 100.
+ 
+**Proximity-informative trajectories:** TAMP planners take efficient paths that may not pass near obstacles, meaning the training data may lack examples where sensors fire below 200mm, the range where proximity provides informative signal. I will have to design some tasks where the clutter is in a tight space and it reads the close proximity sensor reading. 
+ 
+**GPU VRAM:** MolmoBot-DROID (F=2, 21GB) exceeds available headroom on a 24GB RTX 4090. All experiments use MolmoBot-Pi0 (7GB) with a maximum of 3 parallel workers. The full final model must also fit within 24GB.
+ 
+**Simulation-to-reality gap:** The noise model does not capture IR multi-path reflections, specular failures, or inter-sensor cross-talk. Real-robot validation with physical GenTact[4] hardware is planned as future work.
+ 
+### Next Steps
+ 
+* **Scale data collection** to 1000+ trajectories across 10+ environments. Verify proximity-informative examples are present.
+* **Train VLM-only baseline** same architecture as PLA, proximity tokens removed. This is the primary controlled comparison that isolates the proximity sensing contribution.
+* **Train PLA full model** frozen Molmo2 + CVAE encoder + ACT[3] head.
+* **Run controlled experiment: PLA vs. VLM-only ACT** on the same data and evaluation environment. The delta between these two conditions is the paper's central result.
+* **Ablations** proximity + vision vs vision. 
+* **Generalize** across object categories and environments not seen in training.
+* **Paper Submission** I am aiming to continue work in this direction and submit this work to CoRL 2026 due on May 28, 2026. 
+
+ 
+## References
+ 
+[1] Deshpande, A., et al. "MolmoBot: Large-Scale Simulation Enables Zero-Shot Manipulation." arXiv:2603.16861, 2026. https://allenai.github.io/MolmoBot/
+ 
+[2] Kim, Y., et al. "MolmoSpaces, an open ecosystem for embodied AI." 2026. https://allenai.org/blog/molmospaces
+ 
+[3] Zhao, T.Z., et al. "Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware." RSS, 2023. arXiv:2304.13705
+ 
+ 
+[4] Kohlbrenner, C., et al. "The GenTact Toolbox." ICRA, 2025. arXiv:2412.00711
+ 
