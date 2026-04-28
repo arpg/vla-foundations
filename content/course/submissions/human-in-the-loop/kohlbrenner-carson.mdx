@@ -1,0 +1,72 @@
+---
+title: 'Human in the Loop: Safe Humanoid Control'
+student: 'Kohlbrenner, Carson'
+date: '2026-03-13'
+---
+
+# Humans in the Loop: Safe Humanoid Control
+
+## Introduction
+Last October, [1X Technologies](https://www.1x.tech/discover/neo-home-robot) announced the first consumer ready humanoid robot with the purpose of automating house chores.
+[Figure](https://time.com/7324233/figure-03-robot-humanoid-reveal/) and [Tesla](https://www.axios.com/2026/01/22/elon-musk-tesla-optimus-robots) are closely following, with plans to relaease their humanoid robots for home-use by 2027.
+As these humanoid robots begin to work in human environments with kids, elderly, and pets, safety becomes a critical concern.
+Humanoid robot safety is currently governed by [ISO 10218-1:2025](https://www.iso.org/standard/73933.html), which is intended for industrial regulation.
+Currently, *no standardized safety framework exists for humanoid robots operating in people's homes.*
+
+Humanoid robot companies, inspired by the autonomous automotive industry, use humans in the loop to provide safety in the form of teleoperation.
+For example, when [1X's NEO robot encounters a task it cannot complete](https://medium.com/@hayekesteloo/1xs-20-000-neo-humanoid-robot-launches-with-a-catch-it-needs-humans-to-do-your-chores-77eda207fbb8), it will schedule an operator wearing a virtual reality headset to take over and do the task.
+Teleoperation may even be used as the primary control method for the robot, as in the case of [Tesla's bartending robot Optimus](https://www.businessinsider.com/tesla-optimus-robots-bartending-controlled-by-humans-2024-10).
+But what happens when the connection to the operator is lost?
+
+Consider the scenario where a humanoid is folding laundry and loses connection to an operator.
+It may be sufficient in this case for the humanoid to freeze and wait for the operator to resume control.
+However, if the humanoid was pouring a hot pot of coffee, assisting someone with limited mobility, or carrying heavy objects down a flight of stairs, freezing may be catastrophic.
+Luckily, researchers have been proposing ideas for how to fail safely since the 80s [1].
+In this article, we will look at potential fallbacks ranging from hardware compliance, return states, and autonomous control for household humanoid robots when the connection to a human in the loop is lost.
+
+## Failing Safely
+The robot should know if it is in a “potentially hazardous” configuration or task when the hand-off from human to robot is initiated due to a loss of connection.
+The ideal case is that the robot is able to safely continue performing the task autonomously until the human in the loop returns if it is deemed non-hazardous.
+If the task is potentially hazardous, the robot should immediately assume the safest state.
+One common “safe state” is to lower the robot’s center of mass and have them sit [5]. 
+This reduces the potential danger of the robot losing balance and falling on someone or something, but sitting may also pose a danger in itself. 
+Take the example of a robot moving boxes into a garage, or walking across a street at a crosswalk. 
+If the human in the loop loses connection, having the robot sitting down in the way of large vehicles poses a serious hazard.
+Instead, if the robot is capable of high-level reasoning, such as possible through vision-language-action (VLA) models, then the robot should identify possible locations to sit or stand that pose the lowest safety hazard and navigate to them.
+The robot should additionally avoid collisions wherever possible while in transit to the safe location and configuration until the human in the loop returns to minimize the risk of being a hazard.
+
+Even with a sophisticated ability to reason and react to the environment, the robot may still be unable to avoid a collision.
+Robot's with metal frames are particularly dangerous and can cause serious injury from minor collisions. For this reason, robots deployed in the home should always have a flexible exterior to absorb impact energy [6].
+
+## The Autonomy Boundary
+The amount of edge cases that a home robot may face is vast, so identifying when the robot should resort to a safe state should depend on experience, not intuition.
+Instead of manually identifying tasks that are hazardous, a VLA model should be trained to both identify when a task is in distribution and if it is confident in its ability to complete the task autonomously.
+Semantically describing all the possible tasks that a robot may face with a classical control model is infeasible, so future home robots will likely rely on learning skills from data.
+If the task has been done hundreds to thousands of times with high success and low impact to other objects or people, then the robot should only then consider completing the task autonomously.
+
+A contemporary challenge remains on how humanoid robots should avoid collisions with objects and people.
+Humans and animals use a combination of all their senses to be spatially aware of objects in their environment, but even the most sophisticated artificial perception systems have trouble tracking objects that move when outside the field of view of their onboard cameras.
+Luckily, world models such as [Cosmos](https://arxiv.org/abs/2501.03575) [2] have begun to show that object permanence can be learned, and may be the key to anticipating collisions before they happen.
+Until such models can be deployed in real-time, humanoid robots should be equipped with distributed high coverage sensors that minimize blind spots and can detect objects in the environment for reactive avoidance.
+
+## Trust and Latency
+When a task is being performed by a human teleoperator, they need to be aware of what the robot's fallback state is should they lose connection and seamlessly be able to resume control.
+The robot's confidence may directly impact a teleoperator's decision to engage in a risky operation or trust the robot to complete the task autonomously.
+Additionally, it was recently reported that the state of the teleoperator diverges from the robot's state due to latency, and VR teleoperation introduces an average of 400ms of latency [3].
+This latency alone renders reactive control infeasible for a teleoperator, considering that human reaction time is around 213ms, where 130 ms accounts for just detecting the stimulus [4].
+Humanoid robots should have a low-latency reactive controller that compliments the teleoperator's control input to ensure the robot can better avoid collisions and the human teleoperator can provide coarse inputs to resolve reactive edge cases.
+
+## Conclusion
+Latency makes reactive teleoperation unreliable, and connection loss can occur at any moment, making the human-in-the-loop model an incomplete safety solution on its own. 
+Robots must be able to identify hazardous situations, transition gracefully to a safe state, and resume tasks autonomously when confident in their ability to do so. 
+Compliant hardware, distributed sensing, and low-latency reactive controllers are baseline requirements for operating safely around people. 
+As deployment scales, the trust between teleoperator and robot will only be as strong as the robot's ability to fail predictably and recover intelligently. 
+With companies like 1X, Figure, and Tesla planning to bring humanoid robots into homes within the next few years, solving these challenges belongs on the critical path to deployment.
+
+### References
+[1] Hogan, Neville. "Impedance control: An approach to manipulation." 1984 American control conference. IEEE, 1984.
+[2] Agarwal, Niket, et al. "Cosmos world foundation model platform for physical ai." arXiv preprint arXiv:2501.03575 (2025).
+[3] Sun, Zhenguo, et al. "MOSAIC: Bridging the Sim-to-Real Gap in Generalist Humanoid Motion Tracking and Teleoperation with Rapid Residual Adaptation." arXiv preprint arXiv:2602.08594 (2026).
+[4] Woods, David L., et al. "Factors influencing the latency of simple reaction time." Frontiers in human neuroscience 9 (2015): 131.
+[5] Scianca, Nicola, et al. "A behavior-based framework for safe deployment of humanoid robots." Autonomous Robots 45.4 (2021): 435-456.
+[6] Ikuta, Koji, Hideki Ishii, and Makoto Nokata. "Safety evaluation method of design and control for human-care robots." The International Journal of Robotics Research 22.5 (2003): 281-297.
