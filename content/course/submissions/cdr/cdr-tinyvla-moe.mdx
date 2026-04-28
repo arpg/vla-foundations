@@ -1,0 +1,349 @@
+# Capstone Design Review — Engineering a Compact VLA Policy with Modular Action Heads and Safety Checks
+
+## Introduction
+
+This project builds a compact Vision-Language-Action (VLA) policy inspired by TinyVLA and SmolVLA using pretrained multimodal components and a custom action head.
+
+Prior work such as TinyVLA shows strong robustness to visual changes such as viewpoint, lighting, and distractors.
+
+However, these settings largely preserve task structure and do not fully test interaction-level generalization.
+
+In practice, small or custom-trained VLA systems often fail on tasks requiring precise contact, directional force transfer, and pull-based interactions, even when perception is correct.
+
+We study this problem in multi-task MetaWorld manipulation, where tasks such as reaching, door opening, and peg insertion share structure but differ in interaction dynamics.
+
+The original goal was to test whether a Mixture-of-Experts (MoE) policy head improves cross-task generalization in small VLA systems.
+
+The current implementation focuses on a narrower question:
+
+> Can language-conditioned expert routing improve task specialization and execution behavior in a multi-task VLA policy?
+
+---
+
+## Architecture
+
+**Planned Design**
+For example, given an instruction such as "pick a red apple," the system first verifies whether the target object exists in the scene before executing the action.
+
+The system extends the current VLA pipeline by adding a lightweight **execution validation module** before action execution.
+
+**Input**
+
+- RGB observation $o_t^{img}$
+- Geometry/state features $x_t^{geom}$
+- Language instruction $l$
+
+**Perception & Encoding**
+
+- Vision encoder: SigLIP2 → visual features $f_v$
+- Text encoder: SigLIP2 / BERT → language features $f_l$
+
+**Fusion**
+
+$$
+f_{vl} = \text{CrossAttn}(f_v, f_l)
+$$
+
+**Policy Head (MoE)**
+
+Router:
+
+$$
+w = \text{softmax}(R(f_l))
+$$
+
+Expert actions:
+
+$$
+a_i = E_i(f_{vl}, x_t^{geom})
+$$
+
+Final action:
+
+$$
+a_t = \sum_i w_i a_i
+$$
+
+**Execution Validation**
+
+$$
+g_t =
+\begin{cases}
+1 & \text{if target object is detected} \\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+**Action Gating**
+
+$$
+a_t^{exec} =
+\begin{cases}
+a_t & \text{if } g_t = 1 \\
+\mathbf{0} & \text{otherwise}
+\end{cases}
+$$
+
+**Execution**
+
+- If object exists → execute policy action
+- If not → suppress or return safe fallback
+
+---
+
+**Current Implementation**
+
+- SigLIP2-based vision-language backbone
+- Cross-attention fusion between vision and language
+- Temporal geometry features derived from state
+- 4-expert MoE action head
+
+Routing is conditioned **only on language features**, rather than full multimodal inputs.
+
+This design enforces a partial separation between:
+
+- task intent (language)
+- action execution (experts)
+
+---
+
+## Data Mix
+
+**Original Plan:**
+
+* 60% pretrained vision-language priors
+* 30% embodied data (MetaWorld + OXE)
+* 10% synthetic data
+
+---
+
+**Current Data:**
+
+Training is performed on a multi-task subset of MetaWorld:
+
+* ~62,987 training samples
+* ~7,013 validation samples
+* 18 tasks including:
+  
+  * reach-v3
+  * door-open-v2/v3
+  * peg-insert-side-v2/v3
+  * handle-pull-v3
+  * stick-pull-v3
+
+Each sample contains:
+
+* RGB observation
+* Language instruction
+* 4D action vector
+* Geometry features (end-effector → object, object → goal)
+* Temporal context (stacked over 4 steps)
+
+---
+
+**Gap vs Proposal:**
+
+* No explicit OXE integration
+* No synthetic data augmentation
+* Data mixture strategy not fully realized
+
+---
+
+## Loss Formulation
+
+The effective training objective is:
+
+$$
+\mathcal{L}_{total} = \mathcal{L}_{Huber} + \lambda \mathcal{L}_{lb}
+$$
+
+where
+
+$$
+\mathcal{L}_{lb}
+$$
+
+is the MoE load-balancing loss.
+
+Action prediction is trained using Huber loss:
+
+$$
+\mathcal{L}(\theta) =
+\begin{cases}
+\frac{1}{2}(y - \hat{y})^2 & \text{if } |y - \hat{y}| < \delta \\
+\delta \left(|y - \hat{y}| - \frac{1}{2}\delta \right) & \text{otherwise}
+\end{cases}
+$$
+
+* Actions are normalized before training
+* Router is trained implicitly via this objective
+* load-balancing loss is used for MoE stability
+
+---
+
+## Implementation Status
+
+**Complete:**
+
+* Training across 18 MetaWorld tasks
+* Routing diagnostics (entropy and expert weights)
+* Recorded MetaWorld rollout videos
+* MoE Architecture
+
+---
+
+**Partial / In Progress:**
+
+* Baseline comparison with mixed-feature routing
+* Cross-task generalization evaluation (held-out tasks)
+* Robustness to language variation
+
+---
+
+## The Hard Question
+
+> *Does language-conditioned routing actually improve specialization, or does it act as a task classifier over seen instructions?*
+
+---
+
+## Evaluation
+
+### Offline Metrics
+
+From current experiments :
+
+**Baseline (SigLIP2 + DistilBERT):**
+
+* Validation loss: **0.01635**
+* Train loss : **0.01334**
+
+**MoE Model (text-conditioned routing):**
+
+* Best validation loss: **0.03394**
+* Train loss: **0.00671**
+
+**Interpretation:**
+
+* MoE achieves lower training loss but higher validation loss
+* Suggests weaker generalization or ineffective specialization
+
+---
+
+### MoE Routing Behavior
+
+From routing diagnostics :
+
+* Entropy ≈ **1.386 (≈ ln(4))**
+* Expert weight gap ≈ **0.0074**
+
+**Interpretation:**
+
+* Routing is nearly uniform across experts
+* Minimal expert specialization observed
+
+---
+
+### Behavioral Observations
+
+From rollout analysis:
+
+**Successful behaviors:**
+
+- Reaching
+- Pushing
+- Coarse object manipulation
+
+**Failure modes:**
+
+- Peg insertion
+- Handle/stick pulling
+- Precision contact tasks
+
+The model reliably solves seen tasks with simple interaction dynamics, but fails on tasks requiring **precise contact and force alignment**.
+
+Despite strong visual grounding (accurate object and goal localization), the policy often:
+
+- Approaches objects from suboptimal directions
+- Produces motion parallel to the object rather than transferring force
+- Fails to execute pull-based interactions
+
+I believe this indicates that the primary limitation is not perception, but **interaction geometry and action grounding**.
+
+---
+
+### Single-Task Overfitting Observation
+
+As a sanity check, the model was trained in a single-task setting, where it was able to overfit and execute the task reliably.
+
+This suggests:
+
+- The model has sufficient capacity to learn precise behaviors
+- Failures in the multi-task setting arise from **poor skill specialization and task separation**, rather than optimization or representation limits
+
+---
+
+### Key Insight
+
+- MoE routing remains nearly uniform → no strong expert specialization
+- Multi-task setting introduces interference between behaviors
+
+---
+
+## Discussion
+
+### What worked
+
+* Stable multi-task training across 18 MetaWorld tasks
+* Clean implementation of language-conditioned routing
+* Successful rollout generation on coarse manipulation tasks
+
+---
+
+### What didn’t work (yet)
+
+* MoE experts do not strongly specialize
+* Routing remains high-entropy
+
+---
+
+### Hypotheses
+
+**H1:** Text-only routing enables cleaner task separation than mixed features.
+
+- **Test:** Compare routing entropy (text-only vs. mixed)
+- **Falsifiable:** If mixed routing has lower entropy, H1 is false
+
+**H2:** MoE improves cross-task generalization via expert specialization.
+
+- **Test:** Held-out task performance (MoE vs. baseline)
+- **Falsifiable:** If baseline transfers better, H2 is false
+
+**H3:** Geometry features are critical for precision tasks.
+
+- **Test:** Ablate geometry, measure peg-insertion success rate
+- **Falsifiable:** If performance stays same, H3 is false
+
+## Open Questions
+
+1. **Why is routing uniform?**
+   
+   - Is load-balancing loss too strong?
+   - Is router capacity too low?
+   - Do tasks lack separable structure?
+2. **Is text-only routing the right choice?**
+   
+   - Would mixed features improve specialization?
+   - Can we quantify the information loss?
+3. **What is the actual bottleneck?**
+   
+   - Perception (vision encoder)?
+   - Routing (expert selection)?
+   - Execution (action decoder)?
+
+## Demo Videos
+
+1. MoE overfit on one task - [dooropen_corner2.mp4](https://o365coloradoedu-my.sharepoint.com/:v:/g/personal/thsu9525_colorado_edu/IQAP3MuVwvuwQqk6Zg61YmHdAQVWi0SJCmScu-vUkQ8Kq4Y?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=UbCIPx)
+2. MoE trained on multiple task - [siglip2_30](https://o365coloradoedu-my.sharepoint.com/:f:/g/personal/thsu9525_colorado_edu/IgA4904tX_taTonIFz0-NOp3AXvpb9OcLv2lc6CkTK6r1sM?e=03AhQ6)
+
+---
+
