@@ -1,0 +1,75 @@
+# Humans in the loop write up
+
+
+## Introduction 
+
+The human-in-the-loop (HITL) paradigm rests on a rarely examined
+assumption: the human is always reachable. Safety architectures treat
+the operator as a continuously available oracle, present and
+communicating over a reliable, low-latency channel. In practice, this
+assumption breaks. Networks drop, environments degrade, and operators go
+offline. When they do, the automated system must answer a question it
+was often never explicitly designed to answer: what now? 
+
+A mobile manipulation robot whose safety case relies on a remote human operator
+for edge-case recovery, but which loses its communication link mid-task.
+While deploying the Stretch mobile manipulator during the [OK-Robot](https://ok-robot.github.io/) project and the [HomeRobot Open-Vocabulary Mobile Manipulation challenge (NeurIPS 2023)](https://arxiv.org/pdf/2407.06939), I encountered exactly this failure mode, not in the form of a dropped network link, but in the equally instructive form of a physical disconnection between the robot and its operator. The three interlocking arguments grounded in that experience: 
++ How to fail safely in the operator's absence
++ Where to draw the line between machine-delegated and human-gated decisions
++ How to manage trust and cognitive load at reconnection.
+
+## The failure case
+
+During one of many deployment runs, the Stretch robot got stuck mid-experiment. The base had drifted into the edge of a kitchen island, and a small physical protrusion, something no sensor array had flagged and no policy had been trained to handle, stopped the robot cold. My first instinct was that the policy had failed. It hadn't. The robot's learned behavior was fine; the environment had simply produced a state that was invisible to the system's perception stack and completely outside its training distribution.
+ 
+The fix was humbling in its simplicity: I got up, walked over, lifted the robot clear of the obstruction, and watched it resume its task and complete the goal. But that moment of walking across the room *was* the human-in-the-loop intervention. I was the redundant sensor. I was the recovery system. And critically, I was only able to intervene because I was physically present, watching, and not managing six other robots simultaneously.
+
+A similar thing happened with a Spot robot I was operating during a mapping task. It wandered into a storage room to build a semantic map and I heard a loud crash, the Spot had climbed over a pile of clutter and nearly toppled. I caught it in time, but only because I was close enough to react. Neither of these failures were policy failures. They were environment failures that the system had no framework to recognize or communicate.
+ 
+This is the HITL assumption made visible. It works when the human can see the robot, reach the robot, and act in time. It breaks the moment any of those three conditions fail, whether due to a dropped WiFi link, a remote deployment, or simply an operator who stepped away. The kitchen island incident was recoverable. Scaled to a fleet, or deployed in a home without an engineer present, it is not.
+
+## Failing safely
+
+Safe failure is not the same as a full stop. In the kitchen island case, the robot stopping mid-task was the *symptom*, not the safe outcome. Had the robot been holding a fragile object above an unstable surface when it halted, freezing in place could have caused the same harm as continuing blindly. Safe failure must be defined with respect to the environment, not just the system's internal state.
+
+A well-designed safe failure should have three layers. First, the system stops motion while preserving the current physical situation, stop moving, but don't drop what you're holding. Second, if it can safely return to a known-good configuration (e.g., back to the pickup location, or clear of an obstacle), it should attempt that retract. Third, and most importantly, it should keep its perception stack running and generate a human-readable account of what happened: not a raw data dump, but something like *"base motion commanded but not achieved for _n_ seconds."*
+ 
+In both the Stretch and Spot cases, neither system flagged anything. The robot just stopped or kept going. There was no signal to me as the operator that something was wrong beyond the physical sound of metal on furniture. The safe failure wasn't designed, it was just me being in the room.
+
+## The Autonomy Boundary
+ 
+The harder question is not what the robot should do when stuck, but which decisions it should never be allowed to make on its own. The implicit answer in most research deployments is "almost everything", the policy runs, and if something goes wrong, the operator deals with it. The kitchen island and Spot incidents reveal the gap: the system had no mechanism for distinguishing "I failed at my task" from "I've encountered something outside my operating envelope that a human needs to see."
+
+A reasonable framework classifies decisions along two axes: how well the current situation is covered by the training distribution, and how bad an error would be. Routine actions in familiar states, navigation between known waypoints, picking a known object in a standard pose, can be pre-delegated. The robot doesn't need to ask permission. But anything that falls outside the distribution, or where a mistake is hard to reverse, should require human sign-off before proceeding. In the Stretch case, "base not moving despite commanded velocity" is an unambiguous out-of-distribution signal. That should have been a hard stop with an escalation flag, not a silent halt.
+
+The boundary between pre-delegated and human-gated should be set conservatively and only expanded through deliberate review of real deployment logs, not by the robot deciding in real time that it feels confident enough to proceed. Notably, every operator intervention is also a data point. When I lifted Stretch off the island, that was a demonstration of exactly the kind of recovery behavior the system couldn't produce on its own. Those moments are the most valuable training signal available.
+
+## Trust, Latency, and Getting the Operator Back Up to Speed
+ 
+When an operator reconnects, or walks back into the room, they're at an immediate disadvantage. In the kitchen island case, I had been watching the whole time and I still misdiagnosed the problem. I assumed policy failure before I figured out it was physical obstruction. An operator coming back after a communication blackout, reading a log they didn't witness, is in a much worse position.
+ 
+Two things matter here. First, uncertainty needs to be communicated in plain language, not raw numbers. A joint-state log is useless. What I needed was: *"Base motion commanded, not achieved, wheel torque spiked, likely physical contact, recommended inspection before resuming."* That's the kind of output that lets a human make a good decision quickly. Second, reconnection should be structured. You shouldn't immediately dump the operator into an authorization prompt. Give them a brief, forced summary of what happened during the blackout before asking them to approve anything.
+ 
+The Spot incident is a good example of what happens when this breaks down. I heard the crash and reacted, but if I had been monitoring remotely and received a notification that just said "robot tipped," I would have had no idea what the environment looked like, what Spot had been doing before it fell, or what the right recovery was. The information I needed to act correctly was not captured anywhere.
+ 
+---
+ 
+## Conclusion
+ 
+HITL isn't a feature you add to a system, it's an assumption baked into the safety case. The kitchen island and Spot incidents show what happens when that assumption is left implicit: the system stops, the operator has no structured account of why, and recovery depends entirely on proximity and luck. That works in a lab. It doesn't work in a home, at scale, or over any meaningful communication distance.
+ 
+The three principles here: 
++ Design the failure state before the failure happens
++ Set the autonomy boundary conservatively and expand it deliberately
++ Give the operator a structured account before asking them to decide  
+
+are the minimum required to make HITL mean something in practice.
+ 
+---
+ 
+## References
+ 
+- Liu, P., Orru, Y., Vakil, J., Paxton, C., Shafiullah, N. M., & Pinto, L. (2024). OK-Robot: What Really Matters in Integrating Open-Knowledge Models for Robotics. *RSS 2024*.
+- Yenamandra, S., et al. (2024). Towards Open-World Mobile Manipulation in Homes: Lessons from the NeurIPS 2023 HomeRobot Challenge. *arXiv*.
+- Parasuraman, R., Sheridan, T. B., & Wickens, C. D. (2000). A model for types and levels of human interaction with automation. *IEEE Transactions on Systems, Man, and Cybernetics*, 30(3), 286–297.
+- Endsley, M. R. (1995). Toward a theory of situation awareness in dynamic systems. *Human Factors*, 37(1), 32–64.
