@@ -1,0 +1,332 @@
+---
+title: "VLM-Enhanced Intent Inference for Shared Autonomy"
+status: "finished"
+---
+
+# VLM-Enhanced Intent Inference for Shared Autonomy
+
+---
+
+## Problem
+
+In shared autonomy systems, user intent is often inferred from motion trajectories.
+
+However, motion introduces a systematic bias:
+
+- Moving toward an object increases confidence, even if it is not the intended target  
+- Early trajectory signals can dominate the decision process  
+- This leads to **premature commitment to incorrect targets**
+
+This phenomenon is referred to as **motion-induced overconfidence**.
+
+At the same time:
+
+- Semantic signals (image + instruction) are weaker but informative  
+- They provide complementary information about user intent  
+
+The key problem becomes:
+
+> How can we correct motion-induced bias by integrating semantic signals into intent inference?
+
+---
+
+## Approach
+
+We reformulate shared autonomy as a **probabilistic intent inference problem** over a fixed set of object hypotheses.
+
+Instead of generating grasps or filtering infeasible ones, we estimate:
+
+P(object | motion, image, instruction)
+
+We compute two complementary signals:
+
+1. **Motion-based likelihood**  
+   - inferred from trajectory and proximity  
+
+2. **Semantic likelihood (VLM)**  
+   - inferred from image-language alignment  
+
+These signals are fused into a unified belief:
+
+P_final = α P_motion + β P_semantic
+
+The selected object is then mapped to a predefined grasp.
+
+---
+
+## System Overview
+
+Pipeline:
+
+Image + Instruction + Motion  
+→ Dual Scoring (motion + semantic)  
+→ Belief Fusion  
+→ Object Selection  
+→ Fixed Grasp Execution  
+
+### Components
+
+**1. Object Candidates**  
+- Discrete set of objects in the scene  
+
+**2. Shared Autonomy Module (existing)**  
+- Computes motion-based intent probabilities  
+
+**3. VLM Module (new)**  
+- Backbone: CLIP (frozen)  
+- Input:
+  - RGB image  
+  - natural language instruction  
+- Output:
+  - probability over object candidates  
+
+**4. Fusion Module**  
+- Combines motion and semantic signals  
+- Produces final belief used for decision  
+
+---
+
+## Representation
+
+We do not explicitly encode grasp candidates into the VLM input.
+
+Instead, we operate at the **object level**:
+
+- Input: image + instruction  
+- Output: probability distribution over objects  
+
+The selected object is then mapped to a predefined grasp:
+
+- pickup → top grasp  
+- pour → side grasp  
+
+This design avoids the need for explicit grasp annotation while still enabling semantic correction at the decision stage.
+
+---
+
+## Training (Lightweight)
+
+We use a frozen vision-language backbone and train a lightweight classifier.
+
+### Model
+
+- Backbone: CLIP (frozen)  
+- Task: 3-way object classification  
+
+### Labels
+
+- target object (e.g., whole / oat / soy)
+
+### Rationale
+
+We avoid candidate-level binary classification because:
+
+- strong class imbalance (many negative candidates)  
+- poor learning signal  
+
+Instead, object-level classification provides stable supervision and directly aligns with the decision stage.
+
+---
+
+## Data
+
+### Simulation Data
+
+Collected from the existing tabletop setup:
+
+- RGB images from robot camera  
+- object layouts (left / center / right)  
+- natural language instructions  
+- ground-truth target object  
+
+We include diverse configurations to avoid language shortcuts.
+
+### Real Data (optional)
+
+- small number of real-world trials for validation  
+
+---
+
+## Evaluation
+
+We evaluate the system at three levels:
+
+### 1. Semantic Accuracy
+- object classification Top-1 accuracy  
+
+### 2. Decision-Level Performance
+- correctness of final selected object  
+- comparison:
+  - motion-only baseline  
+  - motion + semantic fusion (ours)
+
+### 3. Overconfidence Behavior
+- belief evolution over time  
+- whether premature confidence collapse is prevented  
+
+---
+
+## Key Design Choice
+
+We do **not** treat feasibility as a filtering problem.
+
+- All predefined grasps are executable in our setup  
+- The main uncertainty lies in **intent inference**, not feasibility  
+
+Therefore:
+
+> The problem is better formulated as probabilistic ranking under uncertainty rather than constraint-based filtering.
+
+Semantic signals act as a **soft corrective term**, not a hard constraint.
+
+---
+
+## Expected Outcome
+
+- Motion-only systems exhibit overconfidence and early commitment  
+- Semantic signals stabilize belief updates  
+- Fusion improves robustness in ambiguous scenarios  
+
+---
+
+## Key Takeaway
+
+We show that semantic signals should not replace motion-based inference, but act as a **bias-correcting term**.
+
+- Motion is strong but biased  
+- Semantics is weak but informative  
+
+Their combination improves robustness by preventing premature confidence collapse.
+
+This provides a simple and interpretable mechanism for improving shared autonomy without requiring full VLA policies.
+
+---
+
+---
+
+---
+
+# Final Update: VLM-Enhanced Intent Scoring
+
+This section presents the finalized system and experimental findings based on the original CDR proposal.
+
+We refine the original grasp selection problem into a controlled **object-level intent inference task**, enabling clear evaluation of semantic signals.
+
+---
+
+## Final System
+
+We implement a **VLM-enhanced shared autonomy pipeline**:
+
+Image + Instruction + Motion  
+→ Motion Likelihood + Semantic Likelihood  
+→ Belief Fusion  
+→ Object Selection  
+→ Fixed Grasp Execution  
+
+Key design choice:
+
+> The VLM acts as a **semantic correction signal**, not a decision-maker.
+
+---
+
+## Task Formulation
+
+We use a simplified tabletop setup with three objects:
+
+- whole milk  
+- oat milk  
+- soy milk  
+
+Each object maps to a predefined grasp:
+
+- pickup → top grasp  
+- pour → side grasp  
+
+The learning problem becomes:
+
+> Image + Instruction → Object Probability
+
+---
+
+## Model
+
+- Backbone: CLIP (frozen)  
+- Task: 3-way object classification  
+- Output: probability over objects  
+
+This avoids grasp-level annotation while aligning directly with decision-making.
+
+---
+
+## Key Iterations
+
+We explored several formulations:
+
+- **Binary classification (failed)**  
+  → severe class imbalance  
+
+- **6-way candidate ranking (failed)**  
+  → language and grasp-type shortcuts  
+
+- **3-way object classification (final)**  
+  → stable and meaningful learning signal  
+
+---
+
+## Results
+
+Final performance (Top-1 accuracy):
+
+- Image + Text (CLIP): ~0.90  
+- Text-only baseline: ~0.83  
+
+This shows that **visual information contributes to decision-making**, not just language matching.
+
+---
+
+## Shared Autonomy Fusion
+
+We integrate semantic scores into the existing system:
+
+P_final(i) = α P_motion(i) + β P_semantic(i)
+
+Observations:
+
+- motion-only → overconfidence and early commitment  
+- fusion → more stable belief updates and improved selection  
+
+---
+
+## Key Insight
+
+> Motion is strong but biased, while semantics is weak but informative.
+
+Semantic signals act as a **bias-correcting term**, preventing premature confidence collapse.
+
+---
+
+## Limitations
+
+- Object-level reasoning only (no grasp-level modeling)  
+- No explicit feasibility modeling  
+- Limited dataset size  
+- Not a full VLA system  
+
+---
+
+## Future Work
+
+- Incorporate grasp-level representations  
+- Use reasoning-capable VLMs like smalVLA or LLaVA
+- Extend to continuous control  
+
+---
+
+## Repository
+
+Code for the final implementation is available at:
+
+https://github.com/cairo-robotics/tabletop_workspace_opt/tree/clip-fusion-intent-scoring
+
+---
