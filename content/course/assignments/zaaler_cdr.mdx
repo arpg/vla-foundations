@@ -1,0 +1,222 @@
+# Capstone Design Review — SFT Knowledge Distillation for Robotic EV Battery Disassembly
+
+--- 
+
+## Repository
+
+https://github.com/Zaaler/vla-capstone
+
+--- 
+
+## Introduction
+
+This project extends the RAPID (Robotic Agentic Platform for Intelligent Disassembly) system submitted to CASE 2026.
+RAPID uses a SmolAgents `CodeAgent` to control a gantry-mounted UR16e manipulator for disassembling Hyundai Ioniq5 EV battery packs via ROS MCP tool calls.
+The CASE paper evaluated GPT-4o-mini, Qwen 3.5 9B, and Qwen 3.5 4B on the task *"Remove all remaining parts."*
+**Qwen 3.5 4B failed in 7/10 trials**, removing 0–1 of 5 target parts despite claiming 5 successes.
+This capstone investigates whether SFT on GPT-4o-mini reasoning traces can close that gap without increasing model size.
+All evaluation was conducted in simulation using `sim_services_node.py`, which provides `/remove_part`, `/reset_sim`, and `/check_sim` with interfaces identical to the real robot.
+Success is determined by `/check_sim` — which checks physical removal state, not the tracking JSON.
+
+---
+
+## Architectural Delta
+
+**Bottleneck:** The Qwen 3.5 4B model lacks the structured planning depth to reliably sequence multi-step ROS tool invocations via MCP.
+The failure is not syntactic; the 4B model produces valid code but skips the logical dependency chain: `status` → `call_service('/remove_part')` → `mark_removed`.
+
+**Key architectural note:** The smolagents planning step sends **no system prompt** — only the `initial_plan` user message with all tool signatures.
+The system prompt is only present at code execution steps.
+GPT-4o-mini succeeds by following the system prompt at execution time despite the plan omitting `/remove_part`.
+The 4B model follows its generated plan instead.
+
+---
+
+## Data Mix
+
+**Base model:** `Qwen/Qwen3.5-4B` (full fine-tune, no LoRA)
+
+**Task data:** 1,000 (8,000 unused but generated) GPT-4o-mini planning traces, formatted as a two-turn chat matching the exact format smolagents sends at planning time:
+`user` (full smolagents planning template with all tool signatures + task) → `assistant` (planning trace + `<end_plan>`).
+
+**General data:** 150 examples from OpenHermes-2.5 mixed at **85% task / 15% general** to prevent catastrophic forgetting.
+
+---
+
+## Loss Formulation
+
+Standard SFT cross-entropy, masked to assistant response tokens only:
+
+$$
+\mathcal{L}_{\text{SFT}}(\theta) = -\frac{1}{|\mathcal{D}|} \sum_{(C,\, A) \,\in\, \mathcal{D}} \frac{1}{T} \sum_{t=1}^{T} \log P_\theta\!\left(a_t \mid C,\, a_{1:t-1}\right)
+$$
+
+where $C = (U)$ is the user planning template, $A = (a_1, \ldots, a_T)$ is the planning trace, and system/user tokens contribute zero gradient.
+
+---
+
+## Simulation Baselines
+
+N=20 runs per condition. Established before any fine-tuning to provide a controlled reference point.
+
+| Condition | Sim success |
+|---|---|
+| GPT-4o-mini (teacher) | 19/20 (95%) |
+| Qwen 3.5 4B | 12/20 (60%) |
+
+The 4B model's 60% rate reflects execution-time failure: it generates plans that call only `mark_removed`, never `call_service('/remove_part')`, so the sim never registers physical removal.
+This is better than the CASE paper originally found likely due to a smaller ROS simulation environment.
+
+---
+
+## Training Run 1 — Wrong Format: Total Failure
+
+The first training run used `system + user("Remove all remaining parts") + assistant(plan)` — a natural assumption that turned out to be wrong.
+Smolagents sends **no system message** at planning time; the actual inference format is a single user message containing the full planning template plus all tool signatures.
+
+**Result:** The model produced no valid reasoning traces for smolagents to execute because they didn't match the expected format.
+
+This was diagnosed by capturing the live inference messages and comparing against the training format.
+Then, the data pipeline was altered to match the expected reasoning traces in training.
+
+---
+
+## Training Run 2 — Corrected Format: Still Below Baseline
+
+With the correct chat template, training converged at **epoch 0.17 (step 101)**, eval_loss 0.0002.
+Rapid convergence and near-zero loss appeared to indicate success.
+
+| Condition | Sim success |
+|---|---|
+| Qwen 3.5 4B-SFT | 4/20 (20%) |
+
+**Below the untuned 4B baseline (60%).**
+The low eval loss reflected template memorization, not learned reasoning — inspection of all 9,139 GPT-4o-mini training plans confirmed that **zero plans mention `/remove_part` or `call_service`**.
+GPT-4o-mini succeeds at runtime by following the system prompt at execution time; the trained 4B model simply imitated the plan structure, which never contained the critical step.
+
+---
+
+## Training Run 3 Side Quest: Inference Parameter Investigation — Parameter Match Made Things Worse
+
+While investigating the failure, the Qwen 3.5 Modelfile was found to have `presence_penalty=1.5`, `top_k=20`, `top_p=0.95`.
+GPT-4o-mini runs with OpenAI API defaults: `presence_penalty=0`, no `top_k`, `top_p=1.0`.
+High presence penalty directly penalizes repeated tokens, which is harmful for a task requiring the same tool call pattern 5 times.
+
+The Modelfile was corrected to match GPT-4o-mini defaults for a fair comparison.
+
+| Condition | Sim success |
+|---|---|
+| Qwen 3.5 4B — gpt-4o-mini params | 5/20 (25%) |
+| Qwen 3.5 4B-SFT — gpt-4o-mini params | 4/20 (20%) |
+
+Correcting the parameters **remained** the SFT performance from 20% to 20%.
+However, it **decreased** the base model from 60% to 20%.
+The original Qwen sampling constraints, `top_k=20` in particular, appear to have acted as a beneficial consistency filter for the smaller model, constraining token selection in a way that helped rather than hurt.
+At this point, I restored the Qwen3.5 parameters back to the default values.
+---
+## Training Run 4 — Attempt at Vague Plans Forcing use of System Prompt
+
+As an experiment, an SFT model was trained on examples that had no mention of either tool removal.
+Without the information about the tools, there was hope that the model would look into the system prompt in an attempt to solve the problem.
+
+| Condition | Sim success |
+|---|---|
+| Qwen 3.5 4B-SFT run 4 (low signal) | 0/20 (0%) |
+
+This made sense, the reasoning traces now contained the least amount of information about how to solve the problem.
+Unfortunately, this didn't result in the lower parameter model looking to the system prompt for additional information about generating the execution procedure.
+
+---
+
+## Training Run 5 — `/remove_part` and Vehicle Name Injection
+
+The root cause was clear: 0% of training plans mentioned `/remove_part`.
+A post-processing step injected `call_service('/remove_part', ...)` before every `mark_removed` line in the training data and filtered to plans naming the car.
+This yielded ~4,030 plans with the two-step sequence.
+Again, the model converged much quicker and didn't require all of the training data.
+
+| Condition | Sim success |
+|---|---|
+| Qwen 3.5 4B-SFT run 3 (inject + car filter) | 1/17 (6%) |
+
+The model began hallucinating non-existent ROS action tools (`get_actions()`, `get_action_details()`, `send_action_goal()`) in nearly every plan.
+Three runs hallucinated turtlesim namespaces (e.g., /turtlesim/action/ManageDisassembly, turtlesim/action/RotateAbsolute). 
+The model was attempting to look up action details for the disassembly task but substituted the example values from the ros-mcp-server tool docstrings in place of the correct /remove_part service path.
+
+---
+
+## Tool Description Fix — Near-Parity With GPT
+
+**Insight:** Since the planning step sees tool descriptions but not the system prompt, the `manage_in_progress_disassembly` tool description is a direct channel into the planning context.
+
+One sentence was added to the `mark_removed` description:
+> *"WARNING: this does NOT physically remove the part. You MUST call the /remove_part ROS service via call_service() first, then call mark_removed to record it."*
+
+The original system prompt remained unchanged to maintain consistency across all conditions.
+
+| Condition | Sim success |
+|---|---|
+| Qwen 3.5 4B + tool description fix | 16/20 (80%) |
+| GPT-4o-mini + tool description fix | 18/20 (90%) |
+
+**The 4B model jumped from 60% to 80%** surpassing every SFT attempt and approaching GPT-4o-mini.
+Multiple plans quoted the WARNING text verbatim in their Facts to Derive section, directly incorporating it into the reasoning trace.
+The model was not failing due to reasoning incapacity.
+It was failing because the two-step requirement was invisible to the planner and it adhered to its generated plan.
+
+The four 4B failures break down as: one reversed the sequence (mark_removed before /remove_part), one hedged the step as optional, one hit max steps with an empty plan, and one planned correctly but failed in execution.
+
+---
+
+## The Hard Question
+
+> *"Your model is trained on 9,139 examples of one task with one prompt.*
+> *Have you instilled generalizable tool-use reasoning, or just memorized one plan?"*
+
+This turned out to be the wrong question.
+The model did learn the training data — eval_loss 0.0002 and coherent plan generation across all SFT runs confirm that.
+The real question was: **does the training data contain the signal necessary to solve the problem?**
+The answer was no.
+Zero of 9,139 GPT-4o-mini planning traces mentioned `/remove_part` or `call_service`.
+The teacher model succeeds by following the system prompt at execution time, not by planning the physical removal step.
+Every SFT attempt faithfully learned what was in the data, and what was in the data was incomplete.
+The tool description fix demonstrated this directly: the 4B model already possessed sufficient reasoning capability.
+The bottleneck was informational. 
+The planner never saw the critical two-step constraint and a one-sentence fix to a tool description closed most of the gap without any training at all.
+
+---
+
+## Lessons Learned
+
+- **Agentic systems have many interdependent knobs.** 
+Sampling parameters, system prompt content, tool descriptions, planning interval, and max steps all interact.
+Changing one without first analyzing agent output led to the inference parameter investigation consuming significant time and the corrected parameters actually degraded performance.
+
+Instrument the output before tuning.
+
+- **Full fine-tuning is not technically difficult; doing it correctly is a science.** 
+Getting the optimizer, precision, and hardware budget right is straightforward with modern tooling. 
+Deciding what data to train on, how to format it, and what signal to supervise is where the real work is.
+
+- **Training data is the most important step in any fine-tuning.** 
+Architecture choices, hyperparameters, and compute are secondary. 
+If the data does not contain the signal for the target behavior, no amount of training will produce it.
+
+- **Learning the training data does not mean solving the task.** 
+All SFT runs converged cleanly and produced coherent plans. 
+None outperformed the untuned baseline. 
+A model can achieve near-zero eval loss and still fail at the task.
+The model must be run for its particular use case to understand if the new signal was enough information to actually solve the problem.
+
+- **MCP servers consume substantial model context.** 
+The ros-mcp-server exposes dozens of tools with full docstrings, examples, and JSON schemas.
+This was already observed as a performance factor in the CASE 2026 paper and remained a constraint throughout this work. 
+Smaller models are more sensitive to context pressure from large tool sets.
+
+---
+
+## Future Work
+
+The most promising direction is continuing development of the agentic framework to make it more capable and easily adaptable across tasks and robot platforms.
+One concrete opportunity is building an agent that reads the full tool set at startup and dynamically generates focused system prompts tailored to the specific task, rather than relying on static descriptions written in advance.
+This would allow the execution loop to have more accurate fine tuned details about the problem, potentially leading to higher task success rates for new procedures.
