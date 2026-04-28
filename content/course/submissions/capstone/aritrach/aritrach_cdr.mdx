@@ -1,0 +1,426 @@
+---
+title: "CDR: Token-Level Uncertainty in VLM Controllers Near Irreversible Failure"
+author: "Aritra Chakrabarty"
+date: "2026-04-15"
+assignment: "CDR"
+---
+
+# What do token-level uncertainty signals from a VLM controller indicate near irreversible failure?
+
+Aritra Chakrabarty
+
+## Motivation
+
+VLMs are showing up as robot controllers, but nobody really knows what their confidence signals mean.
+A model can be uncertain for two very different reasons: the task might be structurally unrecoverable (the goal is physically unreachable), or the model's own policy might be about to fail.
+These get conflated constantly.
+If entropy only tracks "I'm about to mess up" and not "the situation is hopeless," then using raw confidence as a safety signal will miss the worst states, the ones where the model is confident and wrong.
+
+This project tries to figure out which one VLM uncertainty actually tracks.
+
+---
+
+## System Design
+
+**Battery World** is an 8x8 grid navigation task rendered as a top-down RGB image (224px or 448px square).
+The agent has limited battery, loses 1 unit per step, and needs to reach a goal while avoiding hazards.
+Battery hits zero or agent hits a hazard, it fails.
+Five word-token actions: UP, DOWN, LEFT, RIGHT, STAY.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/battery_world_tjunction_start.png" alt="Battery World T-junction, start state" width="300" /> <img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/battery_world_tjunction_midgame.png" alt="Battery World T-junction, mid-game near hazard" width="300" />
+
+*T-junction map. Left: start state (battery=20). Right: mid-game decision point (battery=8). Green circle = goal, red X = hazard, blue agent, grey = walls. The battery meter is top-left.*
+
+**Qwen3-VL-8B (FP8)** is the controller.
+It gets the rendered image plus a text prompt with a legend, battery count, and action menu.
+Action distributions come from candidate scoring: each action word is appended to the prompt and its log-likelihood is read off.
+This gives entropy, perplexity, top-2 margin, and negative log-likelihood per state.
+Candidate scoring avoids the noise from autoregressive sampling and gives a clean distribution over all five actions.
+
+**Oracle labels** are computed exactly over the known grid using BFS and dynamic programming:
+- Viability margin m(s): battery minus shortest safe path length.
+- Irreversibility: binary, can the goal still be reached before battery runs out?
+- Safe-action count k(s): how many next actions still preserve recoverability.
+- Policy-conditioned risk R_H(s): probability of failure within H steps under the model's own stochastic policy, computed via exact Dynamic Programming.
+
+---
+
+## Architectural Delta
+
+Prior work on VLM uncertainty in robotics assumes model confidence is a useful safety proxy.
+This project tests that assumption by pulling apart two things that usually get lumped together:
+
+1. Structural irreversibility, a property of the environment state, independent of which policy is running (eg. you have 3 battery units left, but the goal is 5 steps away).
+2. Policy-conditioned risk, a property of what this specific model will do from a given state (eg. the model always chooses an action that throws vehicle into a ravine).
+
+The candidate scoring setup is the design choice that makes this possible.
+Rather than letting the model generate an action token freely, each candidate action word (UP, DOWN, LEFT, RIGHT, STAY) is appended to the same prompt and scored in a separate forward pass.
+The model's logits at each position predict the next token, so the log-probability of the appended action word can be read directly off the output.
+Softmax over those five scores gives a calibrated distribution over the full action space, without the noise from autoregressive sampling or issues with multi-token action words.
+
+---
+
+## Data Mix
+
+No training data.
+This is inference-only, no fine-tuning involved.
+
+The analysis enumerates every reachable state across 4 grid maps (T-junction, corridor, open room, two-way), giving 85 to 201 states per map.
+Oracle labels are exact.
+Ablation conditions include baseline (correct image), text-only (no image), and shuffled-image (wrong image fed to the model).
+
+---
+
+## Loss Formulation
+
+There is no training loss.
+The analysis uses correlation and classification metrics on inference-time uncertainty.
+
+Entropy per state `s`:
+
+`H(s) = -Σ P(a|s) log P(a|s)` over all actions `a` in the action space,
+
+where `P(a|s)` comes from candidate scoring.
+
+Evaluation targets: Spearman rho between entropy and viability margin, entropy and policy-conditioned risk, and AUROC for binary irreversibility classification using entropy as the score.
+All metrics include bootstrap 95% confidence intervals.
+
+---
+
+## Implementation Status
+
+### Completed
+
+- Environment simulator with exact oracle labels (BFS + DP)
+- PIL renderer at 224px and 448px
+- Qwen3-VL-8B policy wrapper with candidate scoring and content-addressed caching (411 cached queries)
+- Word-token action pipeline, replacing the earlier letter-code approach that had confounding issues
+- Full state-enumeration sweeps on all 4 maps
+- Vision ablation (baseline vs text-only vs shuffled-image)
+- Model scaling comparison (3B, 8B, 9B)
+- Resolution comparison (224px vs 448px)
+- Bootstrap confidence intervals
+
+### In Progress
+
+- Additional experimental conditions
+- Qualitative example figures
+- Partial correlation analysis controlling for grid position across maps
+- Larger maps to understandindicator behaviour at scale
+
+---
+
+## The Hard Question
+
+> "Battery World is a synthetic grid rendered as a PNG. VLMs are trained on web images. Why would uncertainty signals here tell us anything about real robots?"
+
+Fair.
+Battery World is synthetic on purpose.
+You cannot get exact *ground-truth* viability and policy-risk labels in a real environment, so simplified conditions are necessary to even ask the question.
+The contribution is methodological: what does uncertainty track, and what confounds it?
+
+The vision ablation does show the model uses image content.
+Entropy is 3x higher without an image, and the policy-risk correlation disappears entirely with wrong images (rho drops from +0.49 to +0.01).
+So the model is not just reading the text prompt.
+But transfer to real-world VLA deployments is future work.
+The confounds identified here, especially position-entropy coupling across maps, would apply to any grid-structured or discrete-state setting.
+
+---
+
+## Evaluation
+
+### Preliminary results (T-junction, 448px, n=85 states)
+
+| Target | Metric | Result (95% CI) |
+|---|---|---|
+| Viability margin | rho(entropy, m(s)) | -0.13 [-0.35, +0.08] |
+| Safe-action count | rho(entropy, k(s)) | -0.14 [-0.35, +0.06] |
+| Irreversibility | AUROC | 0.59 [0.47, 0.71] |
+| Policy risk (H=8) | rho(entropy, risk) | +0.48 [+0.29, +0.65] |
+
+Early picture: uncertainty has a strong correlation with short-horizon policy risk but is weak or null for structural irreversibility.
+Cross-map and ablation analysis is still in progress.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/entropy_vs_risk_h8.png" alt="Entropy vs Policy Risk (H=8), T-junction 448px" width="600" />
+
+*Entropy vs policy-conditioned risk (H=8) on the T-junction map, 448px.
+The positive trend is visible, with high-risk states (risk=1.0) spanning the full entropy range.*
+
+---
+
+## Expected Contribution
+
+- A controlled test of what VLM token-level uncertainty actually measures near failure, rather than assuming it is a general safety signal.
+- Evidence (preliminary) that entropy tracks policy-conditioned risk, not structural irreversibility.
+- Identification of confounds (position coupling, resolution effects, vision dependence) that anyone working on VLM uncertainty should probably control for.
+
+---
+
+# Final Report
+
+The CDR above presented preliminary results on the T-junction map only.
+This section reports the completed study: cross-map analysis, validation experiments, attention-based mechanistic evidence, and an honest accounting of what worked and what didn't.
+
+**Code repository:** [https://github.com/aritrach-coursework/CSCI7000-VL-Models-for-Robotics-CAPSTONE](https://github.com/aritrach-coursework/CSCI7000-VL-Models-for-Robotics-CAPSTONE) (read access granted to @crheckman).
+
+---
+
+## Summary of Findings
+
+I tested whether a VLM's token-level uncertainty predicts policy-conditioned failure risk on four Battery World maps.
+The answer depends on the environment.
+
+On the T-junction, a constrained map with a single forced chokepoint, entropy correlates with policy risk (Spearman rho = +0.49, p < 0.001, 95% CI [+0.29, +0.65]).
+On the other three maps (corridor, open room, two-way), the correlation is near zero or weakly negative.
+
+**What uncertainty tracks:** the probability that the model's own policy will fail over the next several steps (policy-conditioned risk).
+**What uncertainty does not track:** whether the state is objectively dangerous. Viability margin, safe-action count, and irreversibility are all null or marginal across every map.
+
+The model doesn't know when the situation is hopeless.
+It does know when its own next moves are likely to go wrong, but only in environments where indecision at a choicepoint is costly.
+
+---
+
+## Model Selection: Only One Model Worked
+
+I evaluated three VLMs before settling on Qwen3-VL-8B-FP8 as the primary model.
+The results were surprising:
+
+| Model | Parameters | Behavior |
+|---|---|---|
+| Qwen2.5-VL-3B-Instruct | 3B | Argmax = UP for 100% of states. Near-uniform entropy across all states. No spatial reasoning. |
+| Qwen3.5-9B | 9B | Argmax = LEFT for 100% of states. Same degenerate behavior despite being larger. |
+| **Qwen3-VL-8B-Instruct-FP8** | **8B** | **Diverse argmax (UP=42, RIGHT=43 on T-junction). Entropy range [0.006, 0.680]. Genuine spatial reasoning.** |
+
+The 3B model's failure makes sense as it's a small model asked to do zero-shot spatial reasoning from a synthetic image.
+The 9B model's failure is harder to explain.
+Qwen3.5 should have vision-language capabilities, but it produced completely degenerate outputs on this task, selecting the same action regardless of the state.
+I don't have a clear explanation for why the older, slightly smaller Qwen3-VL-8B model works while the newer Qwen3.5-9B does not.
+One possibility is that the specific vision-language instruction tuning in the `-VL-` model family produces qualitatively different behavior from models where vision is integrated but not explicitly tuned for instruction following.
+But this is speculation; I didn't investigate further.
+Upon speaking to the professor however, I think using a pre-trained VLM for this task is a poor design choice.
+
+The practical takeaway: parameter count is not the relevant variable.
+The specific training recipe for vision-language grounding matters, and you cannot assume a newer or larger model will perform better on a zero-shot visual reasoning task.
+
+---
+
+## Candidate Scoring: Extracting an Action Distribution
+
+The VLMs vocabulary has ~150K tokens.
+Letting the model generate freely and parsing the output would mix navigational intent with formatting noise: the probability mass for "move up" is scattered across `UP`, `Up`, `up`, ` UP`, and dozens of other surface forms.
+
+Instead, I use **candidate scoring**.
+For each of the five action strings (UP, DOWN, LEFT, RIGHT, STAY), I append the string to the prompt and run a forward pass.
+The model's log-probability for that candidate completion is summed across its constituent tokens (the standard autoregressive factorization).
+This gives five raw log-scores (one per action), which are then softmax-normalized into a proper 5-way distribution.
+
+The normalization preserves the *ratios* between action probabilities while discarding information about how much total mass lands on these five tokens versus the other 149,995.
+The result is a clean distribution over the action space: `π(a|s)` for each action `a` at state `s`.
+Entropy, perplexity, NLL, and top-2 margin are all computed from this distribution.
+
+Each state requires five forward passes (one per candidate), and each pass is deterministic under the FP8-quantized model with greedy decoding, and re-querying a state produces bit-identical log-probabilities.
+
+Note that there is a weakness in this method. If a lot of probability mass was given to the other tokens, that information is lost. A custom made VL system would avoid this issue by directly modeling the action space, and more details are covered in the future work section of this report.
+---
+
+## Model Behavior: A Mediocre Policy
+
+The model that *does* work was not a good navigation policy.
+
+| Map | n states | Argmax accuracy | Argmax distribution |
+|---|---|---|---|
+| T-junction | 85 | 52% | UP: 42, RIGHT: 43, LEFT: 0, DOWN: 0 |
+| Corridor | 163 | 29% | UP: 114, RIGHT: 31, LEFT: 18, DOWN: 0 |
+| Open room | 201 | 66% | UP: 143, RIGHT: 48, LEFT: 10, DOWN: 0 |
+| Two-way | 190 | 57% | UP: 133, RIGHT: 37, LEFT: 20, DOWN: 0 |
+
+Two things stand out.
+
+**DOWN is never the argmax action on any map.**
+Across all 639 evaluated states, the model never selects DOWN as its top choice.
+This is a directional bias baked into the model. It has a systematic preference for upward and rightward movement regardless of the spatial layout.
+The model isn't broken (it does vary its distribution across states, and the probabilities for DOWN are nonzero), but its top-1 choices avoid an entire direction.
+
+**Accuracy is mediocre at best.**
+On the corridor map, the model's argmax action matches the oracle-optimal action only 29% of the time.
+Even on the open room, where many actions are acceptable because of spatial freedom, optimal action accuracy is only 66%.
+The ablation experiments confirm the model is making navigation decisions based on the image, but it is not making *good* navigation decisions.
+
+However, for entropy-risk correlation, this is a helpful property.
+The model's uncertainty is informative precisely because the model is fallible: a perfect policy would never take a risk, making the correlation question meaningless.
+The signal exists because the model is uncertain at states where it is genuinely likely to make a costly mistake.
+
+---
+
+## Cross-Map Results: Topology Determines Whether Uncertainty Is Informative
+
+The CDR reported only the T-junction, but the full report contains comparisons across different maps.
+The four Battery World maps are shown below at their start states:
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/map_tjunction_start.png" alt="T-junction map start state" width="200" /> <img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/map_corridor_start.png" alt="Corridor map start state" width="200" /> <img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/map_openroom_start.png" alt="Open room map start state" width="200" /> <img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/map_twoway_start.png" alt="Two-way map start state" width="200" />
+
+*The four Battery World maps at their start states (battery=15). Left to right: T-junction (forced chokepoint), corridor (linear dead-end), open room (central hazard), two-way (parallel paths). Green circle = goal, red X = hazard, blue agent, grey = walls.*
+
+| Map | n | Mean entropy | rho(entropy, risk H=8) | 95% CI |
+|---|---|---|---|---|
+| **T-junction** | 85 | 0.223 | **+0.49** | [+0.29, +0.65] |
+| Corridor | 163 | 0.097 | -0.05 | [-0.21, +0.12] |
+| Open room | 201 | 0.174 | -0.12 | [-0.24, +0.02] |
+| Two-way | 190 | 0.190 | -0.00 | [-0.15, +0.14] |
+
+Only the T-junction shows a meaningful entropy-risk correlation.
+The corridor, open room, and two-way maps are all near zero.
+
+**The pattern:** uncertainty predicts risk only when the map forces a consequential decision with limited recovery options.
+The T-junction has a single chokepoint where the agent must commit to a direction, and walls prevent recovery from a wrong choice.
+Indecision at the choicepoint (high entropy) is costly, so entropy and risk co-vary.
+
+On the other maps, indecision is cheap.
+The corridor is so constrained that the model is highly confident throughout (mean entropy 0.097, lowest of all maps), leaving little variation in uncertainty to correlate with anything.
+The open room offers many viable paths, so the model can be uncertain without consequence.
+The two-way map has two parallel routes to the goal, so uncertainty at the split doesn't predict failure because both paths can succeed.
+
+This is a characterization of *when* the signal exists, not a failure to generalize.
+Four maps is too few to draw a general boundary, but the T-junction and open room suggest two ends of a topological spectrum: constrained chokepoint vs. open space.
+
+---
+
+## Validation: Is the Signal Real?
+
+### Image Ablation
+
+Three conditions tested on all 85 T-junction states at 448px:
+
+| Condition | Mean entropy | rho(entropy, risk H=8) |
+|---|---|---|
+| **Correct image** | 0.223 | **+0.475** |
+| Text only (no image) | 0.645 | +0.070 |
+| Shuffled image (wrong state) | 0.238 | +0.009 |
+
+The correct image is necessary for calibrated uncertainty.
+Without it, the model is either uniformly uncertain (text-only, entropy nearly 3x baseline) or confidently wrong (shuffled image).
+
+The shuffled condition is the most revealing.
+The model achieves similar overall confidence to the baseline (entropy 0.238 vs 0.223). It doesn't "know" the image is wrong.
+But the entropy-risk correlation drops to zero.
+The image is what makes confidence *meaningful*, not what makes it high.
+
+### In-Distribution Check
+
+A reviewer raised the question at CDR: does the model actually process synthetic Battery World renders as meaningful images, or does it treat them as visual noise?
+
+I compared per-token NLL of the completion "UP" across three image categories:
+
+| Category | n | Mean NLL | Interpretation |
+|---|---|---|---|
+| Synthetic (Battery World) | 50 | 2.64 | Navigational context |
+| Aerial (satellite imagery) | 25 | 2.16 | Navigational context |
+| Natural (food photos) | 25 | 14.39 | Non-navigational |
+
+Synthetic and aerial are statistically indistinguishable (Mann-Whitney p = 0.96).
+Both are completely separated from natural images (p < 0.0001).
+The model treats Battery World renders as legitimate navigational imagery, in the same visual regime as real satellite photos.
+
+This strengthens the ablation finding: the model isn't reacting to visual noise.
+It processes the renders like real top-down imagery, which makes the entropy signal more credible as a visual-reasoning signal rather than an artifact.
+
+---
+
+## Attention Analysis: The Model Looks Harder When Things Are Risky
+
+All prior evidence was output-level: I looked at action distributions.
+The attention analysis asks a different question: *what does the model look at* when it produces those distributions?
+
+I extracted attention weights from the candidate-scoring forward pass for 8 representative T-junction states at 448px.
+For each state, I measured what fraction of the model's total attention goes to image tokens vs. text tokens, and how that attention is distributed spatially across the grid.
+
+**Key results (n = 7 states with complete data):**
+
+| Metric | rho vs. policy risk | p-value |
+|---|---|---|
+| Image attention fraction | **+0.83** | **0.02** |
+| Goal-region attention | +0.74 | 0.06 |
+
+The model allocates more total attention to the image at high-risk states (rho = +0.83, p = 0.02).
+At low-risk states, it relies more on text.
+It also looks more at the goal region when the situation is dire (rho = +0.74), as if searching for the objective.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/attention_risk_vs_fimage.png" alt="Image attention fraction vs policy risk" width="600" />
+
+*Image attention fraction (f_image) and goal-region attention vs policy risk (H=8). The model engages more with the visual input precisely when the policy situation is risky.*
+
+Only about 2.5% of total attention goes to image tokens, which is expected for a decoder-only model where text tokens dominate.
+But the spatial distribution within that 2.5% is highly non-uniform: max/min attention ratio across the patch grid is ~727x.
+Walls receive disproportionate attention (~85% of image attention vs ~77% area share), suggesting the model over-attends to the structures that define the navigable space.
+
+This provides a mechanistic link between uncertainty and risk.
+At high-risk states, the model is engaging more with the visual input and searching for navigational cues, not producing random noise in the action distribution.
+The uncertainty at choicepoints reflects genuine visual deliberation.
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/attention_paired_contrast.png" alt="Paired attention contrast: low-risk vs high-risk states" width="700" />
+
+*Paired attention contrast. Each row shows one position at two battery levels. Left: low-risk render and attention overlay. Center: attention difference (red = more attention when risky). Right: high-risk attention overlay and render. High-risk states show denser, more focused attention on obstacles and the goal region.*
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/attention_per_action.png" alt="Per-action attention breakdown" width="700" />
+
+*Per-action attention patterns at a single state. Different candidate actions produce different spatial attention. STAY in particular produces more diffuse attention spread toward grid edges and the hazard region.*
+
+<img src="https://raw.githubusercontent.com/arpg/vla-foundations/capstone/aritrach/content/course/submissions/capstone/aritrach/figures/attention_mechanism_summary.png" alt="Mechanism summary panel" width="700" />
+
+*Combined mechanism summary: the model's visual attention pattern provides a mechanistic explanation for why uncertainty tracks policy risk at the T-junction choicepoint.*
+
+The caveat: this analysis covers only 7 states on one map.
+I have not checked whether the same attention pattern holds on maps where the entropy-risk correlation is absent.
+
+---
+
+## Limitations
+
+**Single model.**
+All results are from Qwen3-VL-8B-FP8.
+The entropy-risk correlation could be architecture-specific.
+A second VLM showing the same topology-dependent pattern would strengthen the finding; one showing a different pattern would reframe it.
+
+**Four hand-designed maps.**
+After the cross-map analysis, the entropy-risk correlation survives on one of four maps.
+Four maps cannot characterize the boundary between environments where uncertainty is informative and where it is not.
+Procedurally generated maps with controlled constraint levels (bottleneck width, path multiplicity, dead-end density) are needed.
+
+**Small attention sample.**
+The attention analysis covers 7 states.
+The correlations are descriptive, not powered for rigorous significance testing.
+
+**The model is not a good policy.**
+52% accuracy on the primary map, directional bias against DOWN, mediocre performance everywhere.
+The uncertainty signal is interesting *because* the model is fallible, but it's unclear whether the same signal would appear in a better-calibrated model.
+
+**Battery is text-conditioned.**
+The battery meter is visually unreadable at the rendered resolution; battery level is conveyed via text prompt.
+The model may be doing text-conditioned reasoning with the image as spatial context, rather than fully vision-based risk assessment.
+
+---
+
+## Conclusion
+
+Token-level uncertainty from a zero-shot VLM policy can predict short-horizon failure risk, but only under specific conditions.
+On a constrained map with a forced chokepoint (T-junction), entropy correlates with policy risk at rho = +0.49 (p < 0.001).
+On maps with spatial freedom, the correlation vanishes.
+Across all maps, uncertainty does not track structural danger. The model has no awareness of when a state is objectively unrecoverable.
+
+The attention analysis provides mechanistic evidence: the model engages more with the visual input at high-risk states, suggesting genuine deliberation rather than noise.
+The image ablation confirms that vision is necessary for the signal: shuffled images produce similar confidence but zero correlation with risk.
+
+The honest summary: I observed the entropy-risk signal on one map out of four.
+Whether this is useful depends on the environment, and four maps is not enough to characterize where the signal emerges.
+
+### Future Work
+
+The natural next step is moving from a zero-shot VLM to a system with trained components.
+Top-down grid renders, while shown to be in-distribution relative to aerial imagery, are still far from the visual conditions these models were optimized for.
+A small action head trained on top of a frozen vision backbone would produce a calibrated 5-way distribution by construction, removing the question of whether the VLM's pretraining happens to support spatial reasoning on this task.
+
+More broadly, the motivation for this project was that a pre-trained VLA (a model already trained to output actions) would give you a free uncertainty signal at inference time, with no reward model and no additional training.
+The challenge is that real VLA action spaces are continuous or high-dimensional (joint torques, end-effector deltas), tokenized into long sequences where the per-token distribution is hard to interpret.
+The 5-way Battery World action space made it possible to extract and analyze the full distribution cleanly.
+Extending this characterization to real VLAs requires either a method to aggregate meaningful uncertainty from high-dimensional tokenized action sequences, or a compact action head where the output distribution is interpretable by design.
