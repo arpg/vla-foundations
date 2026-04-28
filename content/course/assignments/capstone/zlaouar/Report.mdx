@@ -1,0 +1,193 @@
+---
+title: "Zakariya Laouar (zlaouar): Long-Horizon Planning via VOI-POMDP — Capstone Running Log"
+github: "zlaouar"
+group: "D"
+lab: "Planning & Safety Lab"
+status: "in-progress"
+---
+
+# Zakariya Laouar: Long-Horizon Planning via VOI-POMDP — Capstone Running Log
+
+**GitHub:** [@zlaouar](https://github.com/zlaouar)
+**Group:** D — Planning & Safety Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Long-horizon planning for VLA policies.
+Autoregressive VLA models operate in an open-loop, token-by-token manner.
+A single quantization error in an action token leads to compounding trajectory drift that the model cannot recover from without explicit long-horizon reasoning.
+This is the autoregressive error accumulation problem: the correct architectural choice requires transitioning the VLA from a deterministic controller to a stochastic reference policy within a formal planning framework.
+
+### Base Model
+
+A small custom base model trained on expert or near-expert data on robotics tasks.
+
+### The Delta
+
+The tentative delta is the implementation of a particular RL fine-tuning approach to enable long-horizon reasoning using the Value of Information (VOI).
+
+**VLA-as-Reference ($\overline{\pi}$):**
+The VLA provides the prior distribution for action sampling, allowing the solver to maximize rewards while minimizing KL-divergence from the VLA's "policy."
+This transitions the VLA from a deterministic controller to a Stochastic Reference Policy within a formal POMDP.
+
+**VOI-Guided Branching:**
+Using a meta-level decision space (the VOI-POMDP), the planner selectively disregards observations when the Value of Information — the expected performance gain from reasoning about observations — is low.
+
+**Information Decay:**
+*Reference Adherence (KL Bottleneck):*
+The KL-divergence penalty includes a tuning parameter controlling how much the planner can deviate from the base VLA policy $\overline{\pi}$.
+If this penalty is too high, the solver remains overly coupled to $\overline{\pi}$, suppressing corrective deviations even when the belief state indicates compounding error.
+If set too low, the planner discards useful inductive bias and wastes queries exploring implausible action sequences.
+
+*Observation Gating (VOI Bottleneck):*
+The criterion parameter $\kappa$ governs when the planner branches on observations.
+If $\kappa$ is too aggressive, the planner may ignore critical observations (obstacle proximity, contact events, slip).
+If $\kappa$ is too conservative, the search reverts toward exhaustive action-observation branching, reintroducing the computational intractability that makes long-horizon reasoning hard.
+
+**Physicality Gap:**
+This approach is still subject to physicality gaps of a VLA-only approach, including dynamics mismatch from learning on noisy data, action tokenization resolution, and world model assumptions clashing with real-world transitions.
+
+### Data Mix Strategy
+
+Most likely all synthetically generated expert trajectories on long-horizon robotics tasks.
+
+### Compute Requirements
+
+10–20 hours on an RTX 5090.
+
+### Success Metric
+
+Classical RL/MDP success metrics such as cumulative reward.
+A metric to assess the model's ability to construct (implicitly or explicitly) temporally extended actions.
+
+### Evaluation Scale
+
+Since the training model is likely to be small, the validation set will also be small.
+The data will likely be synthetically generated.
+This project will serve more as a proof of concept of a novel type of temporal abstraction for longer-horizon planning, and less as an approach grounded in real-world data.
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#54](https://github.com/arpg/vla-foundations/pull/54) (Zaaler). Group D — Planning & Safety Lab session.*
+
+### Aritra: Uncertainty as a Near-Failure Indicator
+
+**Pitch / Initial Dissolve:**
+Are token-level uncertainty signals (entropy, perplexity) from a VLA's action distribution *sufficient* indicators that the agent is near an irreversible/critical state?
+The technical delta: provide an inference-time "near-failure" indicator for VLAs without retraining the model.
+
+**Constraints / Scope:**
+No large-scale training; primarily inference-time analysis.
+Target: irreversibility in state space (unsafe/absorbing states), not just "bad actions."
+
+**Approach:**
+Generate action distributions from the VLA and test whether uncertainty predicts future failure via next-action entropy, limited lookahead tree search (depth $d$), and Monte Carlo rollouts.
+
+**Signals / Metrics:**
+Action distribution entropy.
+Action/token perplexity (or NLL of selected action).
+
+**Extension:**
+Learn an explicit safe/unsafe boundary from rollouts (e.g., constraint model / CBF-style classifier) if signals are weak.
+
+**Load-Bearing Walls / Risks:**
+Inference cost (many samples/rollouts per state).
+Weak signal: entropy/perplexity may not correlate with proximity to irreversible states.
+
+### Zakariya: VLA-as-Reference POMDP Planner
+
+**Pitch / Initial Dissolve:**
+The core robotic bottleneck is autoregressive error accumulation.
+VLA models typically operate in an open-loop, token-by-token manner; a single quantization error in an action token leads to compounding trajectory drift.
+The proposed delta transitions the VLA from a deterministic controller to a Stochastic Reference Policy ($\overline{\pi}$) within a formal planning framework.
+This is the correct architectural choice because state-of-the-art VLA deployments fail in long-horizon tasks where error recovery and future consequences are not explicitly modeled.
+
+**Technical Delta:**
+VLA-as-Reference ($\overline{\pi}$): the VLA provides the prior distribution for action sampling, allowing the solver to maximize rewards while minimizing KL-divergence from the VLA's policy.
+VOI-Guided Branching: using a meta-level decision space (the VOI-POMDP), the planner selectively disregards observations when the Value of Information is low.
+
+**Information Decay:**
+Reference Adherence (KL Bottleneck): if the KL-divergence penalty is too high, the solver remains overly coupled to $\overline{\pi}$, suppressing corrective deviations even when the belief state indicates compounding error.
+Observation Gating (VOI Bottleneck): the criterion parameter $\kappa$ governs when the planner branches on observations; aggressive gating may ignore critical observations (obstacle proximity, contact events, slip).
+
+**Physicality Gap:**
+Still subject to dynamics mismatch from learning on noisy data, action tokenization resolution, and world model assumptions clashing with real-world transitions.
+
+### Jimmy: Safety-Aware VLA for High-Latency Sensing
+
+**Pitch / Initial Dissolve:**
+Safety alignment of VLAs for resource-constrained platforms with high latency that cannot continually re-sense.
+Take a snapshot, query a VLM for scene understanding including trajectory estimates for each detected feature, then send that information to a diffusion model to project forward in time.
+Pre-emptively move around regions that could be occluded in the future; assume worst case.
+
+**Technical Delta:**
+Safety alignment with a diffusion-based rollout of scene development to add safety bounding overhead for robot navigation.
+
+**Load-Bearing Walls:**
+Where to find training data for this type of training.
+Generalization limited by understanding of hazard types in the environment.
+
+### Himanshu: VLA with Particle Filter Belief Encoding
+
+**Pitch / Initial Dissolve:**
+If a VLA is given explicit structured access to a belief state represented as a particle set, can it learn a belief-aware policy that chooses actions for both task progress and information gathering, without explicit online tree search?
+
+**Technical Delta:**
+Build a VLA-style policy whose "state" is:
+- a visual embedding $z_t^{\text{vision}}$, and
+- a learned, permutation-invariant encoding of the particle filter set $z_t^{\text{belief}} = \text{SetTransformer}(\{(x_t^i, w_t^i)\})$,
+
+trained end-to-end with the action decoder.
+
+**Core Hypothesis:**
+If a VLA is given structured access to belief uncertainty (via a particle set encoding), it can learn policies that move toward the goal when belief is confident and toward informative observations when belief is uncertain, without explicit search or reward shaping.
+
+**Load-Bearing Walls / Risks:**
+Oracle problem: if the supervisor is a planner, the model may simply distill tree-search behavior.
+Belief encoder leakage: if particles are too close to ground truth, the task becomes trivial.
+Generalization: the learned mapping may overfit to specific PF statistics.
+Long-horizon planning: direct belief-to-action mapping may fail on problems requiring explicit multi-step contingency reasoning.
+
+### Zack: Failure-Triggered VLA Recovery Overviewer
+
+**Pitch / Initial Dissolve:**
+Behavior Tree–based autonomy collapses rich execution outcomes into a binary success/failure signal, discarding the cause of failure (occlusion, degraded sensing, millimeter-scale pose error, contact/torque anomalies).
+This information decay occurs precisely where structured autonomy meets the physical world, making minor, recoverable failures indistinguishable from logical task failure.
+
+**Technical Delta:**
+A failure-triggered VLA overviewer that activates only when a BT action fails.
+The overviewer consumes raw visual observations and physics-preserving execution context to semantically interpret the failure and propose a constrained recovery action, compiled into a temporary parameterized BT subtree.
+
+**Information Decay:**
+Information is lost when continuous physical signals (contact state, torque trends, expected vs. observed motion) are projected into coarse symbolic failure tokens.
+
+**Physicality Gap:**
+Internet priors overpowering physical reality under degraded sensing (occlusion, dust, blur) is the first failure mode.
+This is mitigated by freezing or low-rank tuning the vision backbone, enforcing BT safety guards, and grounding recovery decisions in embodied failure outcomes.
+
+**Load-Bearing Walls:**
+Failure modes must map to distinct, actionable recoveries.
+Recovery primitives must be expressive yet safety-constrained.
+Physics must dominate semantics when priors and reality disagree.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Zakariya Laouar | @zlaouar | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*

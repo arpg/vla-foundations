@@ -1,0 +1,199 @@
+---
+title: "Himanshu Gupta (himanshugupta1009): Belief-Aware VLA via Particle Filter — Capstone Running Log"
+github: "himanshugupta1009"
+group: "D"
+lab: "Planning & Safety Lab"
+status: "in-progress"
+---
+
+# Himanshu Gupta: Belief-Aware VLA via Particle Filter — Capstone Running Log
+
+**GitHub:** [@himanshugupta1009](https://github.com/himanshugupta1009)
+**Group:** D — Planning & Safety Lab
+
+---
+
+## Part I — Project Proposal
+
+### The Problem
+
+Improving planning under partial observability using VLAs.
+Current VLA policies take a single observation embedding as state; they have no explicit access to the distribution of possible world states (the belief state).
+In partially observable environments, this causes the policy to act as if the world is fully known, leading to failures when ambiguous observations admit multiple plausible world states.
+
+### Base Model
+
+Compositional Learning-based Planning for Vision POMDPs (Vision Search Trees) as the primary reference architecture.
+
+### The Delta
+
+Replacing the learned observation likelihood model $Z$ with a VLM to get better probability estimates.
+Replacing the particle proposal model with a VLM.
+The resulting architecture is a VLA-style policy whose "state" includes both a visual embedding and a learned, permutation-invariant encoding of the particle filter belief set:
+
+$$
+z_t^{\text{belief}} = \text{SetTransformer}(\{(x_t^i, w_t^i)\}_{i=1}^N)
+$$
+
+The policy then decodes actions as:
+
+$$
+a_t \sim \pi_\theta(a \mid z_t^{\text{vision}}, z_t^{\text{belief}})
+$$
+
+**Core Hypothesis:**
+If a VLA is given structured access to belief uncertainty via a particle set encoding, it can learn policies that move toward the goal when belief is confident and move toward informative observations when belief is uncertain, without explicit search or reward shaping at inference time.
+
+### Data Mix Strategy
+
+Unsure; likely primarily synthetic rollouts in toy visual POMDP environments.
+Open dataset reference: [arxiv.org/pdf/1702.01105](https://arxiv.org/pdf/1702.01105).
+
+### Compute Requirements
+
+Unsure; to be determined based on environment scale.
+
+### Success Metric
+
+Increased success rate in simulation.
+Reduced computation and planning time in simulation.
+Belief-conditioned action sensitivity: hold observation fixed, vary belief — does action change appropriately? Hold belief fixed, vary observation — does action change appropriately?
+
+### Evaluation Scale
+
+Toy visual POMDP (LightDark 3D) where information gathering is necessary due to occlusions, ambiguous observations, or unknown agent position.
+Dataset reference: [arxiv.org/pdf/1702.01105](https://arxiv.org/pdf/1702.01105).
+
+---
+
+## Part II — Architecture Lab 1 Peer Audit
+
+*Source: PR [#54](https://github.com/arpg/vla-foundations/pull/54) (Zaaler). Group D — Planning & Safety Lab session.*
+
+### Aritra: Uncertainty as a Near-Failure Indicator
+
+**Pitch / Initial Dissolve:**
+Are token-level uncertainty signals (entropy, perplexity) from a VLA's action distribution *sufficient* indicators that the agent is near an irreversible/critical state?
+The technical delta: provide an inference-time "near-failure" indicator for VLAs without retraining the model.
+
+**Constraints / Scope:**
+No large-scale training; primarily inference-time analysis.
+Target: irreversibility in state space (unsafe/absorbing states), not just "bad actions."
+
+**Approach:**
+Generate action distributions from the VLA and test whether uncertainty predicts future failure via next-action entropy, limited lookahead tree search (depth $d$), and Monte Carlo rollouts.
+
+**Signals / Metrics:**
+Action distribution entropy.
+Action/token perplexity (or NLL of selected action).
+Optional: disagreement/variance across sampled action sequences.
+
+**Extension:**
+Learn an explicit safe/unsafe boundary from rollouts (e.g., constraint model / CBF-style classifier) if signals are weak.
+
+**Load-Bearing Walls / Risks:**
+Inference cost (many samples/rollouts per state).
+Weak signal: entropy/perplexity may not correlate with proximity to irreversible states.
+
+### Zakariya: VLA-as-Reference POMDP Planner
+
+**Pitch / Initial Dissolve:**
+The core robotic bottleneck is autoregressive error accumulation.
+VLA models typically operate in an open-loop, token-by-token manner; a single quantization error in an action token leads to compounding trajectory drift.
+The proposed delta transitions the VLA from a deterministic controller to a Stochastic Reference Policy ($\overline{\pi}$) within a formal planning framework.
+
+**Technical Delta:**
+VLA-as-Reference ($\overline{\pi}$): the VLA provides the prior distribution for action sampling, allowing the solver to maximize rewards while minimizing KL-divergence from the VLA's policy.
+VOI-Guided Branching: using a meta-level decision space (the VOI-POMDP), the planner selectively disregards observations when the Value of Information is low.
+
+**Information Decay:**
+Reference Adherence (KL Bottleneck): if the KL-divergence penalty is too high, the solver remains overly coupled to $\overline{\pi}$, suppressing corrective deviations.
+Observation Gating (VOI Bottleneck): the criterion parameter $\kappa$ governs when the planner branches on observations; aggressive gating may ignore critical observations.
+
+**Physicality Gap:**
+Still subject to dynamics mismatch from learning on noisy data, action tokenization resolution, and world model assumptions clashing with real-world transitions.
+
+### Jimmy: Safety-Aware VLA for High-Latency Sensing
+
+**Pitch / Initial Dissolve:**
+Safety alignment of VLAs for resource-constrained platforms with high latency that cannot continually re-sense.
+Take a snapshot, query a VLM for scene understanding including trajectory estimates for each detected feature, then send that information to a diffusion model to project forward in time.
+Pre-emptively move around regions that could be occluded in the future; assume worst case.
+
+**Technical Delta:**
+Safety alignment with a diffusion-based rollout of scene development to add safety bounding overhead for robot navigation.
+
+**Load-Bearing Walls:**
+Where to find training data for this type of training.
+Generalization limited by understanding of hazard types in the environment.
+
+### Himanshu: VLA with Particle Filter Belief Encoding
+
+**Pitch / Initial Dissolve:**
+If a VLA is given explicit structured access to a belief state represented as a particle set, can it learn a belief-aware policy that chooses actions for both task progress and information gathering, without explicit online tree search?
+
+**Technical Delta:**
+Build a VLA-style policy whose "state" is:
+- a visual embedding $z_t^{\text{vision}}$, and
+- a learned, permutation-invariant encoding of the particle filter set $z_t^{\text{belief}} = \text{SetTransformer}(\{(x_t^i, w_t^i)\})$,
+
+trained end-to-end with the action decoder.
+
+**Core Hypothesis:**
+If a VLA is given structured access to belief uncertainty (via a particle set encoding), it can learn policies that move toward the goal when belief is confident and move toward informative observations when belief is uncertain, without explicit search or reward shaping at inference time.
+
+**Approach at Each Timestep $t$:**
+1. Belief Update (Particle Filter): maintain a belief over the latent state using particle set $\{(x_t^i, w_t^i)\}_{i=1}^N$.
+2. Vision Encoding: $o_t \to z_t^{\text{vision}}$.
+3. Belief Encoding (SetTransformer): $z_t^{\text{belief}} = \text{ST}(\{(x_t^i, w_t^i)\}_{i=1}^N)$.
+4. Fusion and Action Decoding: $a_t \sim \pi_\theta(a | z_t^{\text{vision}}, z_t^{\text{belief}})$.
+
+**Training Options:**
+Imitation learning from an oracle policy (e.g., particle filter + limited lookahead, MCTS, or hand-designed information-gain heuristic).
+Offline RL from logged rollouts.
+Hybrid: initialize with imitation learning, then perform limited policy improvement via short-horizon online rollouts.
+
+**Ablations:**
+Vision-only vs. belief-only vs. vision + belief.
+DeepSets vs. SetTransformer vs. mean/covariance encoding.
+
+**Load-Bearing Walls / Risks:**
+Oracle problem: if the supervisor is a planner, the model may simply distill tree-search behavior, making the contribution amortized planning rather than planning removal.
+Belief encoder leakage: if particles are too close to ground truth, the task becomes trivial; if too noisy, the policy may fail to learn.
+Generalization: the learned mapping may overfit to specific PF statistics (number of particles, resampling scheme, noise model).
+Long-horizon planning: direct belief-to-action mapping may fail on problems requiring explicit multi-step contingency reasoning.
+
+**Why This Might Work:**
+A particle set explicitly captures multimodality (multiple hypotheses), uncertainty (spread/entropy), and structured belief geometry.
+A SetTransformer can preserve these properties more effectively than collapsing the belief to a mean or covariance.
+
+### Zack: Failure-Triggered VLA Recovery Overviewer
+
+**Pitch / Initial Dissolve:**
+Behavior Tree–based autonomy collapses rich execution outcomes into a binary success/failure signal, discarding the cause of failure.
+This information decay occurs precisely where structured autonomy meets the physical world, making minor, recoverable failures indistinguishable from logical task failure.
+
+**Technical Delta:**
+A failure-triggered VLA overviewer that activates only when a BT action fails.
+The overviewer semantically interprets the failure and proposes a constrained recovery action compiled into a temporary parameterized BT subtree.
+
+**Load-Bearing Walls:**
+Failure modes must map to distinct, actionable recoveries.
+Recovery primitives must be expressive yet safety-constrained.
+Physics must dominate semantics when priors and reality disagree.
+
+---
+
+## Part III — Instructor Feedback
+
+> **@crheckman** — *To be completed during finals week.*
+
+### Score
+
+| Student | GitHub | Proposal | Chapter | Code | Presentation | Total |
+|---------|--------|----------|---------|------|--------------|-------|
+| Himanshu Gupta | @himanshugupta1009 | — | — | — | — | — |
+
+### Commentary
+
+*Placeholder for instructor notes.*
